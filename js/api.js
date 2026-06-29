@@ -65,9 +65,10 @@ const API = (() => {
 
   const WEEKDAY_PRIORITY = ['심야 자율학습', '야간 자율학습', '오후 자율학습'];
 
-  // 날짜 문자열 → 요일명 ('mon'~'sat')
+  // 날짜 문자열 → 요일명 ('mon'~'sat') — 로컬 파싱으로 타임존 오류 방지
   function _dayKey(dateStr) {
-    return ['sun','mon','tue','wed','thu','fri','sat'][new Date(dateStr).getDay()];
+    const p = dateStr.split('-');
+    return ['sun','mon','tue','wed','thu','fri','sat'][new Date(+p[0], +p[1]-1, +p[2]).getDay()];
   }
 
   // session + date → schedule [dayKey, idx]
@@ -342,12 +343,20 @@ const API = (() => {
    * GAS: saveHolidays([{date, am, pm}])
    */
   async function saveHolidays(holidays) {
-    const rows = holidays.map(h => ({
-      hol_date: h.date,
-      has_am:   h.am ?? true,
-      has_pm:   h.pm ?? true,
-    }));
-    await _upsert('holidays', rows);
+    const newDates = new Set(holidays.map(h => h.date));
+    // 삭제된 공휴일 제거
+    const existing = await _get('holidays?select=hol_date');
+    await Promise.all(
+      existing.filter(e => !newDates.has(e.hol_date)).map(e => _del(`holidays?hol_date=eq.${e.hol_date}`))
+    );
+    // 신규·변경 공휴일 upsert (hol_date PK 기준 merge)
+    if (holidays.length) {
+      await _req('POST', 'holidays', holidays.map(h => ({
+        hol_date: h.date,
+        has_am:   h.am ?? true,
+        has_pm:   h.pm ?? true,
+      })), { Prefer: 'resolution=merge-duplicates,return=minimal' });
+    }
     return '저장되었습니다.';
   }
 
@@ -453,7 +462,9 @@ const API = (() => {
     if (updates.status  !== undefined) patch.status   = updates.status;
     if (updates.reason  !== undefined) patch.reason   = updates.reason;
     if (updates.noCount !== undefined) patch.no_count = updates.noCount;
-    await _patch(`attendance?id=eq.${recordId}`, patch);
+    // return=representation 으로 실제 반영 여부 확인 (return=minimal은 0행 매칭도 204 반환)
+    const rows = await _req('PATCH', `attendance?id=eq.${recordId}`, patch, { Prefer: 'return=representation' });
+    if (!rows || rows.length === 0) throw new Error('업데이트 실패: 기록을 찾을 수 없습니다');
   }
 
   async function deleteAttendanceRecord(recordId) {
@@ -492,7 +503,8 @@ const API = (() => {
   }
 
   async function updateStudentSchedule(studentId, schedule) {
-    await _patch(`students?id=eq.${studentId}`, { schedule });
+    const rows = await _req('PATCH', `students?id=eq.${studentId}`, { schedule }, { Prefer: 'return=representation' });
+    if (!rows || rows.length === 0) throw new Error('업데이트 실패: 학생을 찾을 수 없습니다');
   }
 
   async function exportAttendanceData() {

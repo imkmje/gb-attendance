@@ -421,7 +421,12 @@ function toggleStatus(idx,card,clientX,clientY) {
   const s=currentStudents[idx];
   s.status=s.status==='출석'?'결석':'출석';
   hasUnsavedChanges=true;
-  if(s.status==='출석'){s.reasonType='';s.reasonText='';s.noCount=false;}
+  if(s.status==='출석'){
+    s.reasonType='';s.reasonText='';s.noCount=false;s.reason='';
+    // DOM에서 ⚠ 사유 경고 텍스트 즉시 제거
+    const rt=card.querySelector('.reason-text');
+    if(rt)rt.remove();
+  }
   const isNowAbsent=(s.status==='결석');
   const rect=card.getBoundingClientRect();
   const x=clientX-rect.left, y=clientY-rect.top;
@@ -1488,7 +1493,16 @@ function _renderAttEditor(student, records) {
   document.body.appendChild(backdrop);
   requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
 
-  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
+  let _aeChanged = false;
+  const close = () => {
+    backdrop.classList.remove('show');
+    setTimeout(() => backdrop.remove(), 350);
+    if (_aeChanged) {
+      _cache.stats = null;
+      _rosterLoaded = false;
+      loadStudents(false, true);
+    }
+  };
   backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
   sheet.querySelector('#_aeClose').addEventListener('click', close);
 
@@ -1536,8 +1550,9 @@ function _renderAttEditor(student, records) {
         const updates = { status: rec.status };
         if (!isAbs) { updates.reason = ''; updates.noCount = false; }
         await API.updateAttendanceRecord(rid, updates);
+        _aeChanged = true;
         showSuccessToast('상태 변경됨', rec.status);
-      } catch { _cdToast({ type:'red', title:'저장 실패' }); }
+      } catch (err) { _cdToast({ type:'red', title:'저장 실패', sub: err?.message }); }
     }
 
     if (ncBtn) {
@@ -1549,8 +1564,9 @@ function _renderAttEditor(student, records) {
       ncBtn.style.color      = rec.noCount ? 'var(--green)'     : 'var(--ink-3)';
       try {
         await API.updateAttendanceRecord(rid, { noCount: rec.noCount });
+        _aeChanged = true;
         showSuccessToast(rec.noCount ? '노카운트 설정됨' : '노카운트 해제됨');
-      } catch { _cdToast({ type:'red', title:'저장 실패' }); }
+      } catch (err) { _cdToast({ type:'red', title:'저장 실패', sub: err?.message }); }
     }
 
     if (delBtn) {
@@ -1566,6 +1582,7 @@ function _renderAttEditor(student, records) {
         await API.deleteAttendanceRecord(rid);
         records = records.filter(r => r.id !== rid);
         row.remove();
+        _aeChanged = true;
         showSuccessToast('기록 삭제됨');
       } catch { _cdToast({ type:'red', title:'삭제 실패' }); }
     }
@@ -1704,9 +1721,12 @@ function _renderScheduleEditor(student, rawSchedule) {
       showSuccessToast('세션 편성 저장됨', student.name);
       _cache.stats = null;
       _rosterLoaded = false;
-      if (loadedGroup) loadStudents(false, true);
-    } catch {
-      Swal.fire('오류', '저장하지 못했습니다.', 'error');
+      // 출석체크 탭 갱신
+      loadStudents(false, true);
+      // 시간표 탭 갱신 (이미 탭이 열려 있어도 반영)
+      updateGroupScheduleView();
+    } catch (err) {
+      Swal.fire('오류', err?.message || '저장하지 못했습니다.', 'error');
       saveBtn.disabled = false;
       saveBtn.textContent = '저장';
     }
