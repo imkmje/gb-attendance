@@ -1246,6 +1246,445 @@ function _submitViolation() {
 }
 
 /* ════════════════════════════════
+   교사 메뉴
+════════════════════════════════ */
+
+function handleTeacherMenuClick() {
+  Swal.fire({
+    title: '교사 메뉴',
+    input: 'password',
+    inputPlaceholder: '비밀번호를 입력하세요',
+    inputAttributes: { autocomplete: 'off' },
+    showCancelButton: true,
+    confirmButtonText: '확인',
+    cancelButtonText: '취소',
+  }).then(result => {
+    if (result.isConfirmed && result.value === '2821') {
+      _openTeacherMenu();
+    } else if (result.isConfirmed) {
+      Swal.fire({ title: '비밀번호가 틀렸습니다', icon: 'error', confirmButtonText: '확인' });
+    }
+  });
+}
+
+function _openTeacherMenu() {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'custom-sheet-backdrop';
+  backdrop.style.zIndex = '3000';
+  const sheet = document.createElement('div');
+  sheet.className = 'custom-sheet';
+  sheet.style.paddingBottom = '40px';
+  sheet.style.maxHeight = '88vh';
+  sheet.style.overflowY = 'auto';
+
+  const items = [
+    { emoji: '📋', title: '출석 수정 / 결석 카운트 조작', sub: '학생별 출석 기록을 직접 수정합니다',         fn: _teacherEditAttendance },
+    { emoji: '📅', title: '공휴일 설정',                   sub: '자율학습 공휴일을 관리합니다',              fn: _teacherHolidays },
+    { emoji: '➕', title: '학생 추가',                     sub: '새 학생을 자습반에 등록합니다',             fn: _teacherAddStudent },
+    { emoji: '✏️', title: '학생 삭제 / 자습반 변경',       sub: '학생 정보를 수정하거나 삭제합니다',        fn: _teacherManageStudent },
+    { emoji: '📥', title: '출석 데이터 내보내기',          sub: '전체 출석 현황을 CSV로 다운로드합니다',    fn: _teacherExportCSV },
+  ];
+
+  sheet.innerHTML = `
+    <div class="custom-sheet-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+      <div style="font-size:16px;font-weight:800;color:var(--ink);letter-spacing:-0.4px;">⚙️ 교사 메뉴</div>
+      <button id="_tmClose" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;box-shadow:var(--sh-xs);">✕</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      ${items.map((item, i) => `
+        <button id="_tmBtn${i}" style="all:unset;box-sizing:border-box;display:flex;align-items:center;gap:14px;background:var(--surface);border-radius:var(--radius);box-shadow:var(--sh-md);padding:14px 16px;cursor:pointer;width:100%;text-align:left;">
+          <span style="font-size:22px;flex-shrink:0;">${item.emoji}</span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:14px;font-weight:700;color:var(--ink);letter-spacing:-0.2px;">${item.title}</div>
+            <div style="font-size:12px;color:var(--ink-3);margin-top:3px;">${item.sub}</div>
+          </div>
+          <svg style="flex-shrink:0;" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink-4)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>`).join('')}
+    </div>`;
+
+  backdrop.appendChild(sheet);
+  document.body.appendChild(backdrop);
+  requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
+
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+  sheet.querySelector('#_tmClose').addEventListener('click', close);
+  items.forEach((item, i) => {
+    sheet.querySelector(`#_tmBtn${i}`).addEventListener('click', () => {
+      close();
+      setTimeout(() => item.fn(), 370);
+    });
+  });
+}
+
+// ── 공통: 학생 선택 시트 (콜백 버전) ──────────────────
+function _openStudentPickerSheetEx(students, callback) {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'custom-sheet-backdrop';
+  backdrop.style.zIndex = '3100';
+  const sheet = document.createElement('div');
+  sheet.className = 'custom-sheet';
+  sheet.style.maxHeight = '82vh';
+  sheet.style.display = 'flex';
+  sheet.style.flexDirection = 'column';
+
+  const groups = {};
+  students.forEach(s => { if (!groups[s.group]) groups[s.group] = []; groups[s.group].push(s); });
+
+  let listHtml = '';
+  for (const [group, studs] of Object.entries(groups)) {
+    listHtml += `<div style="font-size:11px;font-weight:700;letter-spacing:0.5px;color:var(--ink-3);padding:12px 0 6px;">${group}</div>`;
+    listHtml += studs.map(s => `
+      <div class="_spx-item" data-id="${s.id}" data-ban="${s.ban}" data-num="${s.num}" data-name="${encodeURIComponent(s.name)}" data-group="${encodeURIComponent(s.group)}"
+        style="display:flex;align-items:center;padding:10px 0;border-bottom:1px solid var(--bg-deep);cursor:pointer;gap:12px;">
+        <div style="width:32px;height:32px;border-radius:var(--radius-sm);background:var(--blue-dim);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;font-weight:800;color:var(--blue);">${s.ban}</div>
+        <div>
+          <div style="font-size:14px;font-weight:700;color:var(--ink);">${s.name}</div>
+          <div style="font-size:11px;color:var(--ink-3);">${s.ban}반 ${s.num}번</div>
+        </div>
+      </div>`).join('');
+  }
+
+  sheet.innerHTML = `
+    <div class="custom-sheet-handle"></div>
+    <div style="font-size:15px;font-weight:800;color:var(--ink);margin-bottom:12px;letter-spacing:-0.4px;">학생 선택</div>
+    <div style="overflow-y:auto;flex:1;margin:0 -16px;padding:0 16px;">${listHtml}</div>`;
+
+  backdrop.appendChild(sheet);
+  document.body.appendChild(backdrop);
+  requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
+
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+
+  sheet.querySelectorAll('._spx-item').forEach(el => {
+    el.addEventListener('click', () => {
+      close();
+      setTimeout(() => callback({
+        id:    el.dataset.id,
+        ban:   el.dataset.ban,
+        num:   el.dataset.num,
+        name:  decodeURIComponent(el.dataset.name),
+        group: decodeURIComponent(el.dataset.group),
+      }), 370);
+    });
+  });
+}
+
+// ── 1. 출석 수정 / 결석 카운트 조작 ───────────────────
+function _teacherEditAttendance() {
+  showLoading('학생 목록 불러오는 중...');
+  API.getAllMemberList()
+    .then(students => {
+      hideLoading();
+      _openStudentPickerSheetEx(students, student => _teacherShowAttEditor(student));
+    })
+    .catch(() => { hideLoading(); Swal.fire('오류', '학생 목록을 불러오지 못했습니다.', 'error'); });
+}
+
+function _teacherShowAttEditor(student) {
+  showLoading('출석 기록 불러오는 중...');
+  API.getStudentAttendanceFull(student.id)
+    .then(records => { hideLoading(); _renderAttEditor(student, records); })
+    .catch(() => { hideLoading(); Swal.fire('오류', '출석 기록을 불러오지 못했습니다.', 'error'); });
+}
+
+function _renderAttEditor(student, records) {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'custom-sheet-backdrop';
+  backdrop.style.zIndex = '3200';
+  const sheet = document.createElement('div');
+  sheet.className = 'custom-sheet';
+  sheet.style.maxHeight = '90vh';
+  sheet.style.display = 'flex';
+  sheet.style.flexDirection = 'column';
+  sheet.style.paddingBottom = '20px';
+
+  const SESSION_ABBR = {
+    '오후 자율학습':'오후', '야간 자율학습':'야간', '심야 자율학습':'심야',
+    '오전 자율학습(토)':'토오전', '오후 자율학습(토)':'토오후',
+  };
+
+  const makeRow = r => {
+    const isAbsent = r.status === '결석';
+    return `<div style="background:var(--surface);border-radius:var(--radius-sm);box-shadow:var(--sh-sm);padding:12px 14px;display:flex;flex-direction:column;gap:8px;" data-rid="${r.id}">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:13px;font-weight:700;color:var(--ink-2);">${r.date}</span>
+        <span style="font-size:11px;font-weight:600;color:var(--ink-3);background:var(--bg-deep);border-radius:var(--radius-pill);padding:2px 8px;">${SESSION_ABBR[r.session]||r.session}</span>
+        <span class="_ate-status" style="margin-left:auto;cursor:pointer;font-size:12px;font-weight:700;border-radius:var(--radius-pill);padding:4px 12px;transition:background .15s,color .15s;background:${isAbsent?'var(--red-dim)':'var(--green-dim)'};color:${isAbsent?'var(--red)':'var(--green)'};">${r.status}</span>
+        <button class="_ate-del" style="background:none;border:none;color:var(--ink-4);cursor:pointer;padding:2px 4px;font-size:14px;flex-shrink:0;line-height:1;">✕</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <button class="_ate-nc" style="display:flex;align-items:center;gap:4px;border:none;border-radius:var(--radius-pill);padding:4px 10px;cursor:pointer;font-family:var(--font);font-size:11px;font-weight:700;transition:background .15s,color .15s;background:${r.noCount?'var(--green-dim)':'var(--bg-deep)'};color:${r.noCount?'var(--green)':'var(--ink-3)'};">노카운트</button>
+        ${isAbsent?`<input class="_ate-reason" type="text" value="${r.reason||''}" placeholder="결석 사유" style="flex:1;background:var(--bg-deep);border:none;border-radius:var(--radius-pill);padding:5px 12px;font-family:var(--font);font-size:12px;font-weight:600;color:var(--ink-2);outline:none;">`:``}
+      </div>
+    </div>`;
+  };
+
+  const absentCnt = records.filter(r => r.status==='결석'&&!r.noCount).length;
+
+  sheet.innerHTML = `
+    <div class="custom-sheet-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <div>
+        <div style="font-size:15px;font-weight:800;color:var(--ink);">${student.name}</div>
+        <div style="font-size:12px;color:var(--ink-3);margin-top:2px;">${student.ban}반 ${student.num}번 · ${student.group}</div>
+      </div>
+      <button id="_aeClose" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;box-shadow:var(--sh-xs);">✕</button>
+    </div>
+    <div style="display:flex;gap:12px;margin-bottom:12px;padding:10px 12px;background:var(--bg-deep);border-radius:var(--radius-sm);">
+      <span style="font-size:12px;font-weight:600;color:var(--ink-3);">기록 <b style="color:var(--ink);">${records.length}회</b></span>
+      <span style="color:var(--ink-4);">·</span>
+      <span style="font-size:12px;font-weight:600;color:var(--red);">결석 카운트 <b>${absentCnt}회</b></span>
+    </div>
+    <div id="_aeList" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:8px;">
+      ${records.length ? records.map(makeRow).join('') : '<div style="text-align:center;padding:28px;color:var(--ink-3);font-size:13px;font-weight:600;">출석 기록이 없습니다.</div>'}
+    </div>`;
+
+  backdrop.appendChild(sheet);
+  document.body.appendChild(backdrop);
+  requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
+
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+  sheet.querySelector('#_aeClose').addEventListener('click', close);
+
+  let _reasonTimer = null;
+
+  sheet.querySelector('#_aeList').addEventListener('click', async e => {
+    const statusBtn = e.target.closest('._ate-status');
+    const ncBtn     = e.target.closest('._ate-nc');
+    const delBtn    = e.target.closest('._ate-del');
+
+    if (statusBtn) {
+      const row = statusBtn.closest('[data-rid]');
+      const rid = row.dataset.rid;
+      const rec = records.find(r => r.id === rid); if (!rec) return;
+      rec.status = rec.status === '출석' ? '결석' : '출석';
+      statusBtn.textContent = rec.status;
+      const isAbs = rec.status === '결석';
+      statusBtn.style.background = isAbs ? 'var(--red-dim)' : 'var(--green-dim)';
+      statusBtn.style.color      = isAbs ? 'var(--red)'     : 'var(--green)';
+      const row2nd = row.children[1];
+      if (row2nd) {
+        const exist = row2nd.querySelector('._ate-reason');
+        if (isAbs && !exist) {
+          const inp = document.createElement('input');
+          inp.className = '_ate-reason';
+          inp.type = 'text'; inp.value = rec.reason || '';
+          inp.placeholder = '결석 사유';
+          inp.style.cssText = 'flex:1;background:var(--bg-deep);border:none;border-radius:var(--radius-pill);padding:5px 12px;font-family:var(--font);font-size:12px;font-weight:600;color:var(--ink-2);outline:none;';
+          row2nd.appendChild(inp);
+          inp.addEventListener('input', () => {
+            rec.reason = inp.value;
+            clearTimeout(_reasonTimer);
+            _reasonTimer = setTimeout(() => API.updateAttendanceRecord(rid, { reason: inp.value }).catch(() => {}), 600);
+          });
+        } else if (!isAbs && exist) { exist.remove(); }
+      }
+      try { await API.updateAttendanceRecord(rid, { status: rec.status }); }
+      catch { _cdToast({ type:'red', title:'저장 실패' }); }
+    }
+
+    if (ncBtn) {
+      const row = ncBtn.closest('[data-rid]');
+      const rid = row.dataset.rid;
+      const rec = records.find(r => r.id === rid); if (!rec) return;
+      rec.noCount = !rec.noCount;
+      ncBtn.style.background = rec.noCount ? 'var(--green-dim)' : 'var(--bg-deep)';
+      ncBtn.style.color      = rec.noCount ? 'var(--green)'     : 'var(--ink-3)';
+      try { await API.updateAttendanceRecord(rid, { noCount: rec.noCount }); }
+      catch { _cdToast({ type:'red', title:'저장 실패' }); }
+    }
+
+    if (delBtn) {
+      const row = delBtn.closest('[data-rid]');
+      const rid = row.dataset.rid;
+      const confirmed = await Swal.fire({
+        title: '기록 삭제', text: '이 출석 기록을 삭제할까요?',
+        icon: 'warning', showCancelButton: true,
+        confirmButtonText: '삭제', cancelButtonText: '취소',
+      });
+      if (!confirmed.isConfirmed) return;
+      try {
+        await API.deleteAttendanceRecord(rid);
+        records = records.filter(r => r.id !== rid);
+        row.remove();
+        showSuccessToast('기록 삭제됨');
+      } catch { _cdToast({ type:'red', title:'삭제 실패' }); }
+    }
+  });
+
+  sheet.querySelectorAll('._ate-reason').forEach(inp => {
+    const rid = inp.closest('[data-rid]').dataset.rid;
+    const rec = records.find(r => r.id === rid);
+    inp.addEventListener('input', () => {
+      if (rec) rec.reason = inp.value;
+      clearTimeout(_reasonTimer);
+      _reasonTimer = setTimeout(() => API.updateAttendanceRecord(rid, { reason: inp.value }).catch(() => {}), 600);
+    });
+  });
+}
+
+// ── 2. 공휴일 설정 (개발자 메뉴 재사용) ───────────────
+function _teacherHolidays() { _openDevMenu(); }
+
+// ── 3. 학생 추가 ───────────────────────────────────────
+function _teacherAddStudent() {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'custom-sheet-backdrop';
+  backdrop.style.zIndex = '3100';
+  const sheet = document.createElement('div');
+  sheet.className = 'custom-sheet';
+  sheet.style.paddingBottom = '40px';
+
+  sheet.innerHTML = `
+    <div class="custom-sheet-handle"></div>
+    <div style="font-size:15px;font-weight:800;color:var(--ink);margin-bottom:18px;letter-spacing:-0.4px;">➕ 학생 추가</div>
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      <div>
+        <div style="font-size:12px;font-weight:700;color:var(--ink-3);margin-bottom:6px;">반 (숫자)</div>
+        <input id="_asClass" type="number" class="cd-input" placeholder="예: 3" min="1" max="9">
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:700;color:var(--ink-3);margin-bottom:6px;">번호</div>
+        <input id="_asNum" type="number" class="cd-input" placeholder="예: 15" min="1" max="50">
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:700;color:var(--ink-3);margin-bottom:6px;">이름</div>
+        <input id="_asName" type="text" class="cd-input" placeholder="이름 입력">
+      </div>
+      <div>
+        <div style="font-size:12px;font-weight:700;color:var(--ink-3);margin-bottom:6px;">자습반</div>
+        <select id="_asRoom" class="cd-select">${GROUPS.map(g=>`<option value="${g}">${g}</option>`).join('')}</select>
+      </div>
+      <button id="_asSubmit" style="margin-top:8px;padding:14px;border-radius:var(--radius);border:none;background:var(--blue);color:#fff;font-family:var(--font);font-size:14px;font-weight:700;cursor:pointer;box-shadow:var(--sh-blue);">추가하기</button>
+    </div>`;
+
+  backdrop.appendChild(sheet);
+  document.body.appendChild(backdrop);
+  requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
+
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+
+  sheet.querySelector('#_asSubmit').addEventListener('click', async () => {
+    const classNum   = parseInt(sheet.querySelector('#_asClass').value);
+    const studentNum = parseInt(sheet.querySelector('#_asNum').value);
+    const name       = sheet.querySelector('#_asName').value.trim();
+    const studyRoom  = sheet.querySelector('#_asRoom').value;
+    if (!classNum || !studentNum || !name) { Swal.fire('알림', '모든 항목을 입력해 주세요.', 'warning'); return; }
+    try {
+      await API.addStudent({ classNum, studentNum, name, studyRoom });
+      close();
+      showSuccessToast('학생 추가됨', `${classNum}반 ${studentNum}번 ${name}`);
+      _rosterLoaded = false;
+    } catch { Swal.fire('오류', '추가하지 못했습니다.', 'error'); }
+  });
+}
+
+// ── 4. 학생 삭제 / 자습반 변경 ────────────────────────
+function _teacherManageStudent() {
+  showLoading('학생 목록 불러오는 중...');
+  API.getAllMemberList()
+    .then(students => {
+      hideLoading();
+      _openStudentPickerSheetEx(students, student => _teacherStudentActions(student));
+    })
+    .catch(() => { hideLoading(); Swal.fire('오류', '학생 목록을 불러오지 못했습니다.', 'error'); });
+}
+
+function _teacherStudentActions(student) {
+  showSheet({
+    title: `${student.name} (${student.ban}반 ${student.num}번)`,
+    text:  `현재 자습반: ${student.group}`,
+    buttons: [
+      { label: '자습반 변경', cls: 'csb-save',   cb: () => _teacherChangeRoom(student) },
+      { label: '학생 삭제',   cls: 'csb-ignore', cb: () => _teacherDeleteStudent(student) },
+      { label: '취소',        cls: 'csb-cancel', cb: null },
+    ],
+  });
+}
+
+function _teacherChangeRoom(student) {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'custom-sheet-backdrop';
+  backdrop.style.zIndex = '3200';
+  const sheet = document.createElement('div');
+  sheet.className = 'custom-sheet';
+  sheet.style.paddingBottom = '40px';
+
+  sheet.innerHTML = `
+    <div class="custom-sheet-handle"></div>
+    <div style="font-size:15px;font-weight:800;color:var(--ink);margin-bottom:4px;">${student.name}</div>
+    <div style="font-size:12px;color:var(--ink-3);margin-bottom:18px;">현재 자습반: <b style="color:var(--blue);">${student.group}</b></div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      ${GROUPS.map(g => `
+        <button class="_crBtn" data-room="${g}" style="all:unset;box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-radius:var(--radius);box-shadow:var(--sh-md);cursor:pointer;font-size:14px;font-weight:700;background:${g===student.group?'var(--blue-dim)':'var(--surface)'};color:${g===student.group?'var(--blue)':'var(--ink)'};">
+          ${g}
+          ${g===student.group?`<span style="font-size:11px;background:var(--blue);color:#fff;border-radius:var(--radius-pill);padding:2px 10px;">현재</span>`:''}
+        </button>`).join('')}
+    </div>`;
+
+  backdrop.appendChild(sheet);
+  document.body.appendChild(backdrop);
+  requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
+
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+
+  sheet.querySelectorAll('._crBtn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const newRoom = btn.dataset.room;
+      if (newRoom === student.group) { close(); return; }
+      try {
+        await API.updateStudentRoom(student.id, newRoom);
+        close();
+        showSuccessToast('자습반 변경됨', `${student.name} → ${newRoom}`);
+        _rosterLoaded = false; _cache.stats = null;
+      } catch { Swal.fire('오류', '변경하지 못했습니다.', 'error'); }
+    });
+  });
+}
+
+async function _teacherDeleteStudent(student) {
+  const result = await Swal.fire({
+    title: `${student.name} 삭제`,
+    html:  `<b style="color:var(--red);">${student.ban}반 ${student.num}번 ${student.name}</b>의 출석 기록과 위반 이력이 모두 삭제됩니다.<br><br>정말 삭제할까요?`,
+    icon:  'warning', showCancelButton: true,
+    confirmButtonText: '삭제', cancelButtonText: '취소',
+  });
+  if (!result.isConfirmed) return;
+  try {
+    await API.deleteStudent(student.id);
+    showSuccessToast('삭제됨', student.name);
+    _rosterLoaded = false; _cache.stats = null;
+  } catch { Swal.fire('오류', '삭제하지 못했습니다.', 'error'); }
+}
+
+// ── 5. 출석 데이터 내보내기 (CSV) ─────────────────────
+function _teacherExportCSV() {
+  showLoading('데이터 불러오는 중...');
+  API.exportAttendanceData()
+    .then(rows => {
+      hideLoading();
+      if (!rows.length) { Swal.fire('알림', '출석 기록이 없습니다.', 'info'); return; }
+      const headers = Object.keys(rows[0]);
+      const csv = '﻿' +
+        headers.join(',') + '\n' +
+        rows.map(r => headers.map(h => `"${String(r[h]).replace(/"/g,'""')}"`).join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url; a.download = `청백운반_출석현황_${new Date().toISOString().slice(0,10)}.csv`;
+      a.click(); URL.revokeObjectURL(url);
+      showSuccessToast('CSV 다운로드 완료', `${rows.length}개 기록`);
+    })
+    .catch(() => { hideLoading(); Swal.fire('오류', '데이터를 불러오지 못했습니다.', 'error'); });
+}
+
+/* ════════════════════════════════
    개발자 메뉴
 ════════════════════════════════ */
 function handleHeaderClick() {

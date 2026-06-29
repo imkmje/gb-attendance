@@ -165,7 +165,7 @@ const API = (() => {
           num:         String(s.student_num),
           name:        s.name,
           isTarget:    val === 'O' || val === '방과후',
-          status:      att?.status ?? null,
+          status:      att?.status ?? '출석',
           reason:      att?.reason ?? '',
           noCount:     att?.no_count ?? false,
           absentCount: absentCountMap[s.id] ?? 0,
@@ -417,6 +417,82 @@ const API = (() => {
     return report;
   }
 
+  // ─── 교사 메뉴용 추가 API ─────────────────────────────
+
+  async function getStudentAttendanceFull(studentId) {
+    const rows = await _get(`attendance?student_id=eq.${studentId}&order=record_date.desc,session.desc`);
+    return rows.map(r => ({
+      id:      r.id,
+      date:    r.record_date,
+      session: r.session,
+      status:  r.status,
+      reason:  r.reason || '',
+      noCount: r.no_count,
+      checker: r.checker || '',
+    }));
+  }
+
+  async function updateAttendanceRecord(recordId, updates) {
+    const patch = {};
+    if (updates.status  !== undefined) patch.status   = updates.status;
+    if (updates.reason  !== undefined) patch.reason   = updates.reason;
+    if (updates.noCount !== undefined) patch.no_count = updates.noCount;
+    await _patch(`attendance?id=eq.${recordId}`, patch);
+  }
+
+  async function deleteAttendanceRecord(recordId) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/attendance?id=eq.${recordId}`, {
+      method: 'DELETE',
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+    });
+    if (!res.ok) throw new Error(`DELETE attendance: ${res.status}`);
+  }
+
+  async function addStudent(data) {
+    await _post('students', {
+      class_num:   data.classNum,
+      student_num: data.studentNum,
+      name:        data.name,
+      study_room:  data.studyRoom,
+      schedule:    {},
+    });
+  }
+
+  async function deleteStudent(studentId) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/students?id=eq.${studentId}`, {
+      method: 'DELETE',
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+    });
+    if (!res.ok) throw new Error(`DELETE student: ${res.status}`);
+  }
+
+  async function updateStudentRoom(studentId, newRoom) {
+    await _patch(`students?id=eq.${studentId}`, { study_room: newRoom });
+  }
+
+  async function exportAttendanceData() {
+    const [students, attendance] = await Promise.all([
+      _get('students?order=study_room,class_num,student_num'),
+      _get('attendance?order=record_date.asc,session.asc&select=student_id,record_date,session,status,reason,no_count,checker'),
+    ]);
+    const sMap = Object.fromEntries(students.map(s => [s.id, s]));
+    return attendance.map(a => {
+      const s = sMap[a.student_id] || {};
+      return {
+        반:       s.class_num    || '',
+        번호:     s.student_num  || '',
+        이름:     s.name         || '',
+        자습반:   s.study_room   || '',
+        날짜:     a.record_date,
+        세션:     a.session,
+        상태:     a.status,
+        사유:     a.reason       || '',
+        노카운트: a.no_count ? 'Y' : 'N',
+        확인자:   a.checker      || '',
+      };
+    });
+  }
+
   return {
     getGroupList,
     getStudentList,
@@ -431,5 +507,12 @@ const API = (() => {
     calculateStats,
     getGroupSchedule,
     buildAbsentReport,
+    getStudentAttendanceFull,
+    updateAttendanceRecord,
+    deleteAttendanceRecord,
+    addStudent,
+    deleteStudent,
+    updateStudentRoom,
+    exportAttendanceData,
   };
 })();
