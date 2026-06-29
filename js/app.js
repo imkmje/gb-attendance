@@ -1934,22 +1934,32 @@ async function _teacherDeleteStudent(student) {
 }
 
 // ── 6. 출석 데이터 내보내기 (CSV) ─────────────────────
+function _csvBlob(rows) {
+  if (!rows.length) return null;
+  const h = Object.keys(rows[0]);
+  const body = '﻿' + h.join(',') + '\n' +
+    rows.map(r => h.map(k => `"${String(r[k]).replace(/"/g,'""')}"`).join(',')).join('\n');
+  return new Blob([body], { type: 'text/csv;charset=utf-8;' });
+}
+function _dlBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name; a.click();
+  URL.revokeObjectURL(url);
+}
+
 function _teacherExportCSV() {
   showLoading('데이터 불러오는 중...');
-  API.exportAttendanceData()
-    .then(rows => {
+  Promise.all([API.exportAttendanceData(), API.exportViolationsData()])
+    .then(([attRows, violRows]) => {
       hideLoading();
-      if (!rows.length) { Swal.fire('알림', '출석 기록이 없습니다.', 'info'); return; }
-      const headers = Object.keys(rows[0]);
-      const csv = '﻿' +
-        headers.join(',') + '\n' +
-        rows.map(r => headers.map(h => `"${String(r[h]).replace(/"/g,'""')}"`).join(',')).join('\n');
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      a.href = url; a.download = `청백운반_출석현황_${new Date().toISOString().slice(0,10)}.csv`;
-      a.click(); URL.revokeObjectURL(url);
-      showSuccessToast('CSV 다운로드 완료', `${rows.length}개 기록`);
+      if (!attRows.length && !violRows.length) { Swal.fire('알림', '내보낼 데이터가 없습니다.', 'info'); return; }
+      const today = new Date().toISOString().slice(0, 10);
+      const attBlob = _csvBlob(attRows);
+      if (attBlob) _dlBlob(attBlob, `청백운반_출석현황_${today}.csv`);
+      const violBlob = _csvBlob(violRows);
+      if (violBlob) setTimeout(() => _dlBlob(violBlob, `청백운반_벌금현황_${today}.csv`), 300);
+      showSuccessToast('CSV 다운로드 완료', `출석 ${attRows.length}건 · 벌금 ${violRows.length}건`);
     })
     .catch(() => { hideLoading(); Swal.fire('오류', '데이터를 불러오지 못했습니다.', 'error'); });
 }
@@ -2061,6 +2071,9 @@ function _renderFineSheet(fines) {
           <div style="font-size:11px;color:var(--ink-3);margin-bottom:8px;">${v.violType}${v.detail ? ' · ' + v.detail : ''}</div>
           <div style="display:flex;align-items:center;gap:8px;">
             <span class="_fsh-amt" style="font-size:14px;font-weight:800;color:${isPaid ? 'var(--ink-3)' : 'var(--red)'};">${fmt(fine)}</span>
+            <button class="_fsh-e" title="수정" style="width:26px;height:26px;border-radius:6px;border:1.5px solid var(--bg-deep);background:var(--surface);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;flex-shrink:0;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>
             <div style="margin-left:auto;display:flex;border-radius:var(--radius-pill);overflow:hidden;border:1.5px solid var(--bg-deep);">
               <button class="_fsh-u" style="padding:4px 14px;border:none;font-family:var(--font);font-size:11px;font-weight:700;cursor:pointer;background:${!isPaid ? 'var(--red)' : 'var(--surface)'};color:${!isPaid ? '#fff' : 'var(--ink-3)'};">미납</button>
               <button class="_fsh-p" style="padding:4px 14px;border:none;font-family:var(--font);font-size:11px;font-weight:700;cursor:pointer;background:${isPaid ? 'var(--green)' : 'var(--surface)'};color:${isPaid ? '#fff' : 'var(--ink-3)'};">납부</button>
@@ -2086,6 +2099,9 @@ function _renderFineSheet(fines) {
         refreshSummary();
       };
 
+      row.querySelector('._fsh-e').addEventListener('click', () => {
+        _editFineRecord(viol, () => { renderList(); refreshSummary(); });
+      });
       row.querySelector('._fsh-u').addEventListener('click', () => {
         if (!viol.paid) return;
         viol.paid = false; applyState();
@@ -2116,6 +2132,106 @@ function _renderFineSheet(fines) {
 
   refreshSummary();
   renderList();
+}
+
+// ── 벌금 기록 수정 시트 ─────────────────────────────
+function _editFineRecord(viol, onSaved) {
+  const origFine = _parseFine(viol.action);
+  const isCustomType = !VIOLATION_TYPES.slice(0, -1).includes(viol.violType);
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'custom-sheet-backdrop';
+  backdrop.style.zIndex = '3200';
+  const sheet = document.createElement('div');
+  sheet.className = 'custom-sheet';
+  sheet.style.paddingBottom = '32px';
+
+  const violOpts = VIOLATION_TYPES.map(v => {
+    const sel = (v === viol.violType) || (v === '직접 입력' && isCustomType);
+    return `<option value="${v}"${sel ? ' selected' : ''}>${v}</option>`;
+  }).join('');
+
+  sheet.innerHTML = `
+    <div class="custom-sheet-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <div style="font-size:15px;font-weight:800;color:var(--ink);">벌금 기록 수정</div>
+      <button id="_feClose" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--sh-xs);">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div style="font-size:12px;color:var(--ink-3);margin-bottom:14px;font-weight:600;">${viol.student.name} (${viol.student.ban}반 ${viol.student.num}번)</div>
+    <div class="viol-field">
+      <label class="viol-label">날짜</label>
+      <input type="date" class="viol-input" id="_feDate" value="${viol.date}">
+    </div>
+    <div class="viol-field">
+      <label class="viol-label">위반 유형</label>
+      <select class="viol-select" id="_feType">
+        ${violOpts}
+      </select>
+      <div id="_feTypeCustomWrap" style="margin-top:8px;display:${isCustomType ? 'block' : 'none'};">
+        <input type="text" class="viol-input" id="_feTypeCustom" value="${isCustomType ? viol.violType : ''}" placeholder="위반 유형을 직접 입력하세요">
+      </div>
+    </div>
+    <div class="viol-field">
+      <label class="viol-label">벌금 금액</label>
+      <div style="position:relative;">
+        <input type="text" inputmode="numeric" class="viol-input" id="_feFine" value="${origFine.toLocaleString('ko-KR')}" style="padding-right:40px!important;">
+        <span style="position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:13px;font-weight:600;color:var(--ink-3);pointer-events:none;">원</span>
+      </div>
+    </div>
+    <div class="viol-field">
+      <label class="viol-label">상세 내용 <span style="font-size:10px;color:var(--ink-4);font-weight:500;">(선택)</span></label>
+      <textarea class="viol-textarea" id="_feDetail" placeholder="추가 메모를 입력하세요.">${viol.detail}</textarea>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:16px;">
+      <button id="_feCancel" class="csb-cancel" style="flex:1;padding:13px;border:none;border-radius:var(--radius-pill);font-family:var(--font);font-size:14px;font-weight:700;cursor:pointer;">취소</button>
+      <button id="_feSave" style="flex:2;padding:13px;border:none;border-radius:var(--radius-pill);background:var(--blue);color:#fff;font-family:var(--font);font-size:14px;font-weight:700;cursor:pointer;box-shadow:var(--sh-blue);">저장</button>
+    </div>`;
+
+  backdrop.appendChild(sheet);
+  document.body.appendChild(backdrop);
+  requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
+
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+  sheet.querySelector('#_feClose').addEventListener('click', close);
+  sheet.querySelector('#_feCancel').addEventListener('click', close);
+
+  sheet.querySelector('#_feType').addEventListener('change', function () {
+    const wrap = sheet.querySelector('#_feTypeCustomWrap');
+    if (wrap) wrap.style.display = this.value === '직접 입력' ? 'block' : 'none';
+  });
+  sheet.querySelector('#_feFine').addEventListener('input', function () {
+    const raw = this.value.replace(/[^0-9]/g, '');
+    this.value = raw ? Number(raw).toLocaleString('ko-KR') : '';
+  });
+
+  sheet.querySelector('#_feSave').addEventListener('click', async () => {
+    const saveBtn = sheet.querySelector('#_feSave');
+    const dateVal = sheet.querySelector('#_feDate').value.trim();
+    let violType = sheet.querySelector('#_feType').value;
+    if (violType === '직접 입력') {
+      violType = (sheet.querySelector('#_feTypeCustom').value || '').trim();
+      if (!violType) { Swal.fire('알림', '위반 유형을 입력해 주세요.', 'warning'); return; }
+    }
+    const fineRaw = (sheet.querySelector('#_feFine').value || '').replace(/[^0-9]/g, '');
+    if (!fineRaw || Number(fineRaw) <= 0) { Swal.fire('알림', '벌금 금액을 입력해 주세요.', 'warning'); return; }
+    const action = `벌금 ${Number(fineRaw).toLocaleString('ko-KR')}원`;
+    const detail = (sheet.querySelector('#_feDetail').value || '').trim();
+
+    saveBtn.disabled = true; saveBtn.textContent = '저장 중...';
+    try {
+      await API.updateViolationRecord(viol.id, { viol_date: dateVal, viol_type: violType, action, detail });
+      viol.date = dateVal; viol.violType = violType; viol.action = action; viol.detail = detail;
+      close();
+      if (onSaved) onSaved();
+      _cdToast({ type:'green', title:'수정 완료', sub: `${viol.student.name} 벌금 기록` });
+    } catch (err) {
+      saveBtn.disabled = false; saveBtn.textContent = '저장';
+      Swal.fire('오류', err?.message || '저장하지 못했습니다.', 'error');
+    }
+  });
 }
 
 /* ════════════════════════════════

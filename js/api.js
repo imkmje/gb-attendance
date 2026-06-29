@@ -503,8 +503,33 @@ const API = (() => {
   }
 
   async function updateStudentSchedule(studentId, schedule) {
-    const rows = await _req('PATCH', `students?id=eq.${studentId}`, { schedule }, { Prefer: 'return=representation' });
-    if (!rows || rows.length === 0) throw new Error('업데이트 실패: 학생을 찾을 수 없습니다');
+    await _patch(`students?id=eq.${studentId}`, { schedule });
+  }
+
+  async function updateViolationRecord(violationId, updates) {
+    await _patch(`violations?id=eq.${violationId}`, updates);
+  }
+
+  async function exportViolationsData() {
+    const [violations, students] = await Promise.all([
+      _get('violations?order=viol_date.asc'),
+      _get('students?select=id,class_num,student_num,name,study_room'),
+    ]);
+    const sMap = Object.fromEntries(students.map(s => [s.id, s]));
+    return violations.map(v => {
+      const s = sMap[v.student_id] || {};
+      return {
+        반:       String(s.class_num    || ''),
+        번호:     String(s.student_num  || ''),
+        이름:     s.name         || '',
+        자습반:   s.study_room   || '',
+        날짜:     v.viol_date,
+        위반유형: v.viol_type,
+        조치:     v.action,
+        상세:     v.detail       || '',
+        납부여부: v.paid ? 'Y' : 'N',
+      };
+    });
   }
 
   async function getAllViolationsWithStudents() {
@@ -578,7 +603,9 @@ const API = (() => {
     exportAttendanceData,
     getStudentSchedule,
     updateStudentSchedule,
+    updateViolationRecord,
     resetAttendanceByDate,
     getAllViolationsWithStudents,
+    exportViolationsData,
   };
 })();

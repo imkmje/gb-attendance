@@ -294,7 +294,7 @@ html[data-theme="dark"] .custom-sheet::after { background:linear-gradient(155deg
 
 .modal { z-index:1070 !important; }
 .modal-backdrop { z-index:1065 !important; backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); background-color:rgba(20,15,8,0.46) !important; }
-.swal2-container { z-index:1080 !important; }
+.swal2-container { z-index:9999 !important; }
 @keyframes sheetSlideUp { from { transform:translateY(100%); } to { transform:translateY(0); } }
 .modal-glass.show .modal-content { animation:sheetSlideUp var(--dur-slow) var(--ease); }
 .modal-glass .modal-dialog { margin:0 !important; position:fixed !important; bottom:0 !important; left:0 !important; right:0 !important; max-width:100% !important; width:100% !important; }
