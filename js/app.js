@@ -1308,6 +1308,8 @@ function _openTeacherMenu() {
     {
       label: '데이터',
       items: [
+        { bg:'var(--green-dim)', fg:'var(--green)', svg:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
+          title:'학생 일괄 등록', sub:'Excel 양식으로 학생 목록을 한번에 등록합니다', fn:_teacherImportStudents },
         { bg:'var(--bg-deep)',   fg:'var(--ink-3)', svg:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
           title:'데이터 내보내기', sub:'원하는 데이터를 선택해 Excel 파일로 내보냅니다', fn:_teacherExportData },
       ],
@@ -1944,7 +1946,162 @@ async function _teacherDeleteStudent(student) {
   } catch { Swal.fire('오류', '삭제하지 못했습니다.', 'error'); }
 }
 
-// ── 6. 데이터 내보내기 (Excel 다중 시트) ──────────────
+// ── 6. 학생 일괄 등록 ──────────────────────────────────
+function _downloadStudentTemplate() {
+  const HDR = ['반','번호','이름','자습반','월오후','월야간','월심야','화오후','화야간','화심야','수오후','수야간','수심야','목오후','목야간','목심야','금오후','금야간','금심야','토오전','토오후'];
+  const ex = [
+    [1,1,'홍길동','청운반','O','-','-','O','-','-','O','-','-','O','-','-','O','-','-','-','-'],
+    [1,2,'김철수','청운반','O','O','-','O','O','-','O','O','-','O','O','-','O','O','-','-','-'],
+    [2,1,'이영희','백운 A반','O','-','-','O','-','-','O','-','-','O','-','-','O','-','-','O','-'],
+  ];
+  const ws = XLSX.utils.aoa_to_sheet([HDR, ...ex]);
+  ws['!cols'] = [4,4,8,12,...Array(17).fill(5)].map(wch => ({wch}));
+  const info = XLSX.utils.aoa_to_sheet([
+    ['필드','설명','허용값'],
+    ['반','학급 번호','숫자 (1, 2, 3 …)'],
+    ['번호','출석 번호','숫자 (1, 2, 3 …)'],
+    ['이름','학생 이름','텍스트'],
+    ['자습반','소속 자습반','청운반 / 백운 A반 / 백운 B반 / 백운 C반 / 백운 D반'],
+    ['세션 컬럼','자습 참가 여부','O = 자습대상  /  방과후 = 방과후  /  - 또는 빈칸 = 미해당'],
+    ['','월~금: 오후·야간·심야  /  토: 오전·오후',''],
+  ]);
+  info['!cols'] = [{wch:18},{wch:18},{wch:48}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '학생목록');
+  XLSX.utils.book_append_sheet(wb, info, '작성요령');
+  XLSX.writeFile(wb, '청백운반_학생목록_양식.xlsx');
+}
+
+function _teacherImportStudents() {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'custom-sheet-backdrop';
+  backdrop.style.zIndex = '3100';
+  const sheet = document.createElement('div');
+  sheet.className = 'custom-sheet';
+  sheet.style.paddingBottom = '32px';
+
+  sheet.innerHTML = `
+    <div class="custom-sheet-handle"></div>
+    <div style="font-size:15px;font-weight:800;color:var(--ink);margin-bottom:6px;">학생 일괄 등록</div>
+    <div style="font-size:12px;color:var(--ink-3);margin-bottom:16px;">양식을 다운받아 작성한 뒤 업로드하세요.</div>
+    <button id="_impTmpl" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;border-radius:var(--radius);border:1.5px solid var(--blue);background:var(--blue-dim);color:var(--blue);font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;width:100%;margin-bottom:14px;">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      양식 다운로드 (.xlsx)
+    </button>
+    <div id="_impUploadArea" style="position:relative;border:2px dashed var(--bg-deep);border-radius:var(--radius);padding:28px 16px;text-align:center;cursor:pointer;margin-bottom:14px;transition:border-color .2s;">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--ink-4)" stroke-width="1.5" stroke-linecap="round" style="margin-bottom:8px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <div style="font-size:13px;font-weight:700;color:var(--ink-3);">파일을 탭해서 선택</div>
+      <div style="font-size:11px;color:var(--ink-4);margin-top:4px;">.xlsx / .xls / .csv</div>
+      <input type="file" id="_impFile" accept=".xlsx,.xls,.csv" style="position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;">
+    </div>
+    <div id="_impPreview"></div>`;
+
+  backdrop.appendChild(sheet);
+  document.body.appendChild(backdrop);
+  requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
+
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+  sheet.querySelector('#_impTmpl').addEventListener('click', _downloadStudentTemplate);
+
+  sheet.querySelector('#_impFile').addEventListener('change', function() {
+    const file = this.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const wb = XLSX.read(ev.target.result, { type: 'array' });
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+        if (!rows.length) { Swal.fire('알림', '파일에 데이터가 없습니다.', 'info'); return; }
+        _renderImportPreview(sheet, rows, close);
+      } catch { Swal.fire('오류', '파일을 읽을 수 없습니다. Excel 또는 CSV인지 확인하세요.', 'error'); }
+    };
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function _renderImportPreview(sheet, rawRows, close) {
+  const DAY_KEYS = {'월':'mon','화':'tue','수':'wed','목':'thu','금':'fri'};
+  const SESS_IDX = {'오후':0,'야간':1,'심야':2};
+  const SESSION_COLS = ['월오후','월야간','월심야','화오후','화야간','화심야','수오후','수야간','수심야','목오후','목야간','목심야','금오후','금야간','금심야','토오전','토오후'];
+
+  const parseVal = v => { const s = String(v||'').trim(); return (s==='O'||s==='방과후') ? s : '-'; };
+
+  const parsed = rawRows.map(r => {
+    const sched = {mon:['-','-','-'],tue:['-','-','-'],wed:['-','-','-'],thu:['-','-','-'],fri:['-','-','-'],sat:['-','-']};
+    for (const col of SESSION_COLS) {
+      const v = parseVal(r[col]);
+      if (col==='토오전') { sched.sat[0]=v; continue; }
+      if (col==='토오후') { sched.sat[1]=v; continue; }
+      const day=col[0]; const sess=col.slice(1);
+      if (DAY_KEYS[day] && SESS_IDX[sess]!==undefined) sched[DAY_KEYS[day]][SESS_IDX[sess]]=v;
+    }
+    return { ban:Number(r['반']||0), num:Number(r['번호']||0), name:String(r['이름']||'').trim(), group:String(r['자습반']||'').trim(), schedule:sched };
+  }).filter(r => r.name && r.group);
+
+  const skipped = rawRows.length - parsed.length;
+  const preview = sheet.querySelector('#_impPreview');
+  preview.innerHTML = `
+    <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:12px;">
+      <div style="font-size:13px;font-weight:700;color:var(--ink);margin-bottom:8px;">미리보기 · 총 ${parsed.length}명${skipped ? ` (${skipped}행 무시됨)` : ''}</div>
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+          <thead><tr style="border-bottom:1.5px solid var(--ink-4,#bdb7b0);">
+            <th style="padding:4px 6px;text-align:left;color:var(--ink-3);font-weight:700;">반</th>
+            <th style="padding:4px 6px;text-align:left;color:var(--ink-3);font-weight:700;">번호</th>
+            <th style="padding:4px 6px;text-align:left;color:var(--ink-3);font-weight:700;">이름</th>
+            <th style="padding:4px 6px;text-align:left;color:var(--ink-3);font-weight:700;">자습반</th>
+            <th style="padding:4px 6px;text-align:right;color:var(--ink-3);font-weight:700;">O 세션</th>
+          </tr></thead>
+          <tbody>
+            ${parsed.slice(0,10).map(r=>{
+              const cnt=Object.values(r.schedule).flat().filter(v=>v==='O').length;
+              return `<tr style="border-bottom:1px solid var(--bg-deep);">
+                <td style="padding:5px 6px;color:var(--ink);">${r.ban}</td>
+                <td style="padding:5px 6px;color:var(--ink);">${r.num}</td>
+                <td style="padding:5px 6px;font-weight:700;color:var(--ink);">${r.name}</td>
+                <td style="padding:5px 6px;color:var(--ink-3);font-size:11px;">${r.group}</td>
+                <td style="padding:5px 6px;text-align:right;color:var(--blue);font-weight:700;">${cnt||'-'}</td>
+              </tr>`;
+            }).join('')}
+            ${parsed.length>10?`<tr><td colspan="5" style="padding:6px;text-align:center;color:var(--ink-4);font-size:11px;">… 외 ${parsed.length-10}명</td></tr>`:''}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button id="_impAdd" style="flex:1;padding:12px;border:none;border-radius:var(--radius-pill);background:var(--blue);color:#fff;font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;">추가/갱신</button>
+      <button id="_impReplace" style="flex:1;padding:12px;border:none;border-radius:var(--radius-pill);background:var(--red-dim);color:var(--red);font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;">전체 교체 ⚠</button>
+    </div>`;
+
+  sheet.querySelector('#_impAdd').addEventListener('click', () => _doImport(parsed, false, close));
+  sheet.querySelector('#_impReplace').addEventListener('click', () => {
+    Swal.fire({
+      title: '전체 교체',
+      html: `기존 학생 데이터 전체를 삭제하고<br>새로운 <b>${parsed.length}명</b>으로 교체합니다.<br><small style="color:#d4959a;">⚠ 출석·위반 기록도 함께 삭제됩니다.</small>`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: '교체',
+      cancelButtonText: '취소',
+    }).then(r => { if (r.isConfirmed) _doImport(parsed, true, close); });
+  });
+}
+
+async function _doImport(students, replaceAll, close) {
+  showLoading(replaceAll ? '전체 교체 중…' : '등록 중…');
+  try {
+    await API.importStudents(students, replaceAll);
+    hideLoading();
+    close();
+    _cache.stats = null;
+    _rosterLoaded = false;
+    showSuccessToast('등록 완료', `${students.length}명 등록됨`);
+  } catch(err) {
+    hideLoading();
+    Swal.fire('오류', err?.message || '등록에 실패했습니다.', 'error');
+  }
+}
+
+// ── 7. 데이터 내보내기 (Excel 다중 시트) ──────────────
 function _teacherExportData() {
   const backdrop = document.createElement('div');
   backdrop.className = 'custom-sheet-backdrop';

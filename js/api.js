@@ -524,6 +524,23 @@ const API = (() => {
     await _del(`violations?id=eq.${violationId}`);
   }
 
+  async function importStudents(rows, replaceAll) {
+    if (replaceAll) {
+      await _del('students?id=not.is.null');
+    }
+    const payload = rows.map(r => ({
+      class_num:   r.ban,
+      student_num: r.num,
+      name:        r.name,
+      study_room:  r.group,
+      schedule:    r.schedule,
+    }));
+    const BATCH = 100;
+    for (let i = 0; i < payload.length; i += BATCH) {
+      await _req('POST', 'students', payload.slice(i, i + BATCH), { Prefer: 'resolution=merge-duplicates,return=minimal' });
+    }
+  }
+
   async function updateViolationRecord(violationId, updates) {
     await _patch(`violations?id=eq.${violationId}`, updates);
   }
@@ -643,6 +660,7 @@ const API = (() => {
     updateStudentSchedule,
     updateViolationRecord,
     deleteViolation,
+    importStudents,
     resetAttendanceByDate,
     getAllViolationsWithStudents,
     exportViolationsData,
