@@ -50,19 +50,21 @@ const API = (() => {
   ];
 
   const SESSION_TO_SCHED = {
-    '오후 자율학습':     ['mon','tue','wed','thu','fri'].map(d=>[d,0]),
-    '야간 자율학습':     ['mon','tue','wed','thu','fri'].map(d=>[d,1]),
-    '심야 자율학습':     ['mon','tue','wed','thu','fri'].map(d=>[d,2]),
-    '오전 자율학습(토)': [['sat',0]],
-    '오후 자율학습(토)': [['sat',1]],
+    '오후 자율학습':      ['mon','tue','wed','thu','fri'].map(d=>[d,0]),
+    '야간 자율학습':      ['mon','tue','wed','thu','fri'].map(d=>[d,1]),
+    '심야 자율학습':      ['mon','tue','wed','thu','fri'].map(d=>[d,2]),
+    '오전 자율학습(토)':  [['sat',0]],
+    '오후1 자율학습(토)': [['sat',1]],
+    '오후2 자율학습(토)': [['sat',1]],
   };
 
   const SESSION_WEIGHTS = {
-    '오후 자율학습':     1.5,
-    '야간 자율학습':     2.0,
-    '심야 자율학습':     1.5,
-    '오전 자율학습(토)': 3.0,
-    '오후 자율학습(토)': 4.0,
+    '오후 자율학습':      1.5,
+    '야간 자율학습':      2.0,
+    '심야 자율학습':      1.5,
+    '오전 자율학습(토)':  3.0,
+    '오후1 자율학습(토)': 2.0,
+    '오후2 자율학습(토)': 2.0,
   };
 
   const WEEKDAY_PRIORITY = ['심야 자율학습', '야간 자율학습', '오후 자율학습'];
@@ -78,7 +80,7 @@ const API = (() => {
     const day = _dayKey(dateStr);
     const map = { '오후':0, '야간':1, '심야':2 };
     if (sessionName === '오전 자율학습(토)') return ['sat', 0];
-    if (sessionName === '오후 자율학습(토)') return ['sat', 1];
+    if (sessionName === '오후1 자율학습(토)' || sessionName === '오후2 자율학습(토)') return ['sat', 1];
     const idx = { '오후 자율학습':0, '야간 자율학습':1, '심야 자율학습':2 }[sessionName];
     return [day, idx];
   }
@@ -416,6 +418,7 @@ const API = (() => {
         for (const v of (sched[d] ?? ['-','-','-'])) flat.push(v);
       for (const v of (sched['sat'] ?? ['-','-']))    flat.push(v);
       return {
+        id:       s.id,
         ban:      String(s.class_num),
         num:      String(s.student_num),
         name:     s.name,
@@ -637,6 +640,19 @@ const API = (() => {
     });
   }
 
+  async function getReasonTypes() {
+    try {
+      const rows = await _get('settings?key=eq.reason_types&select=value');
+      if (rows.length && Array.isArray(rows[0].value)) return rows[0].value;
+    } catch (_) {}
+    return ['학원 보강', '병결', '개인 사정'];
+  }
+
+  async function saveReasonTypes(types) {
+    await _req('POST', 'settings', { key: 'reason_types', value: types },
+      { Prefer: 'resolution=merge-duplicates,return=minimal' });
+  }
+
   return {
     getGroupList,
     getStudentList,
@@ -667,5 +683,7 @@ const API = (() => {
     getAllViolationsWithStudents,
     exportViolationsData,
     exportScheduleData,
+    getReasonTypes,
+    saveReasonTypes,
   };
 })();

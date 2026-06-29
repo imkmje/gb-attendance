@@ -37,6 +37,9 @@ let _rosterActivePill  = 0;
 let _violTarget        = null;
 let _includeAfterSchool = false;
 let _holidays = [];
+let _reasonTypes = ['학원 보강', '병결', '개인 사정'];
+let _scheduleEditMode = false;
+let _scheduleEditAuthed = false;
 let _headerClickCount = 0, _headerClickTimer = null;
 
 const _cache = {
@@ -182,7 +185,7 @@ function handleDateChange(forceLoad=false) {
       document.getElementById('dashboardWidget').classList.remove('visible'); return;
     }
   } else if (day===6) {
-    sessionOptions=[{text:"오전 자율학습(토)",value:"19"},{text:"오후 자율학습(토)",value:"20"}];
+    sessionOptions=[{text:"오전 자율학습(토)",value:"19"},{text:"오후1 자율학습(토)",value:"20"},{text:"오후2 자율학습(토)",value:"21"}];
   } else {
     const base=4+(day-1)*3;
     sessionOptions=[{text:"오후 자율학습",value:String(base)},{text:"야간 자율학습",value:String(base+1)},{text:"심야 자율학습",value:String(base+2)}];
@@ -220,7 +223,7 @@ function renderSessionPills() {
 
 function _isAfternoonSession() {
   const opt = sessionOptions[selectedSessionIdx];
-  return opt && (opt.text === '오후 자율학습' || opt.text === '오후 자율학습(토)');
+  return opt && (opt.text === '오후 자율학습' || opt.text === '오후1 자율학습(토)' || opt.text === '오후2 자율학습(토)');
 }
 
 function _updateAfterSchoolRow() {
@@ -362,9 +365,7 @@ function renderStudents() {
           <div class="reason-drop-overflow"><div class="reason-drop-inner">
             <select class="cd-reason-select" onchange="changeReasonType(${idx},this.value,this)">
               <option value="" ${!s.reasonType?'selected':''}>결석 사유 선택</option>
-              <option value="학원 보강" ${s.reasonType==='학원 보강'?'selected':''}>학원 보강</option>
-              <option value="병결"      ${s.reasonType==='병결'?'selected':''}>병결</option>
-              <option value="개인 사정" ${s.reasonType==='개인 사정'?'selected':''}>개인 사정</option>
+              ${_reasonTypes.map(r=>`<option value="${r}" ${s.reasonType===r?'selected':''}>${r}</option>`).join('')}
               <option value="직접 입력" ${s.reasonType==='직접 입력'?'selected':''}>직접 입력</option>
             </select>
             <div style="position:relative;display:${s.reasonType==='직접 입력'?'block':'none'}">
@@ -672,7 +673,7 @@ function updateGroupScheduleView() {
       _schData=data||[];
       if(!listEl)return;
       if(!_schData.length){listEl.innerHTML='<div class="text-center py-5" style="color:var(--ink-3);font-weight:600;">데이터가 없습니다.</div>'; if(dayContent)dayContent.innerHTML=''; return;}
-      listEl.innerHTML=_schData.map(s=>{
+      listEl.innerHTML=_schData.map((s, sidx)=>{
         let dgh='';
         for(let d=0;d<5;d++){
           let cells='';
@@ -682,7 +683,9 @@ function updateGroupScheduleView() {
         let satCells='';
         for(let j=0;j<2;j++){const val=s.schedule[15+j]; satCells+=`<div class="sch-cell ${val==='O'?'sch-cell-on':'sch-cell-off'}">${val==='O'?satLabels[j]:''}</div>`;}
         dgh+=`<div class="sch-sep"></div><div class="sch-day-wrap sch-sat"><div class="sch-day-lbl">토</div><div class="sch-day-group">${satCells}</div></div>`;
-        return `<div class="sch-card-row"><div class="sch-top-row"><span class="sch-num-cell">${s.ban}반 ${s.num}번</span><span class="sch-name-cell">${s.name}</span><span class="sch-group-cell">${group}</span></div><div class="sch-days">${dgh}</div></div>`;
+        const editAttr = _scheduleEditMode ? `onclick="_openScheduleCardEditor(${sidx})" style="cursor:pointer;"` : '';
+        const editBadge = _scheduleEditMode ? `<span style="font-size:10px;font-weight:700;color:var(--blue);background:var(--blue-dim);border-radius:var(--radius-pill);padding:2px 8px;white-space:nowrap;flex-shrink:0;">세션 편집</span>` : '';
+        return `<div class="sch-card-row" ${editAttr}><div class="sch-top-row"><span class="sch-num-cell">${s.ban}반 ${s.num}번</span><span class="sch-name-cell">${s.name}</span><span class="sch-group-cell">${group}</span>${editBadge}</div><div class="sch-days">${dgh}</div></div>`;
       }).join('');
       _schSessFilter.clear(); buildSessFilterChips(_schDayIdx); renderSchDay(_schDayIdx);
       requestAnimationFrame(()=>requestAnimationFrame(()=>{
@@ -693,6 +696,64 @@ function updateGroupScheduleView() {
     })
     .catch(()=>{if(listEl)listEl.innerHTML='<div class="text-center py-5" style="color:var(--red);font-weight:600;">오류가 발생했습니다.</div>';});
 }
+function toggleScheduleEditMode() {
+  if (_scheduleEditMode) {
+    _scheduleEditMode = false;
+    _updateScheduleEditBtn();
+    updateGroupScheduleView();
+    return;
+  }
+  if (_scheduleEditAuthed || localStorage.getItem('teacherPwEnabled') === 'false') {
+    _enterScheduleEditMode(); return;
+  }
+  Swal.fire({
+    title: '시간표 편집',
+    input: 'password',
+    inputPlaceholder: '교사 비밀번호를 입력하세요',
+    inputAttributes: { autocomplete: 'off' },
+    showCancelButton: true,
+    confirmButtonText: '확인',
+    cancelButtonText: '취소',
+  }).then(result => {
+    if (result.isConfirmed && result.value === '2821') {
+      _scheduleEditAuthed = true;
+      _enterScheduleEditMode();
+    } else if (result.isConfirmed) {
+      Swal.fire({ title: '비밀번호가 틀렸습니다', icon: 'error', confirmButtonText: '확인' });
+    }
+  });
+}
+
+function _enterScheduleEditMode() {
+  _scheduleEditMode = true;
+  _updateScheduleEditBtn();
+  updateGroupScheduleView();
+  const el = _cdToast({ type:'blue', title:'편집 모드', sub:'학생 카드를 탭해서 세션을 편집하세요' });
+  setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 280); }, 2400);
+}
+
+function _updateScheduleEditBtn() {
+  const btn = document.getElementById('schedEditBtn');
+  if (!btn) return;
+  if (_scheduleEditMode) {
+    btn.style.background = 'var(--blue)';
+    btn.style.color = '#fff';
+    btn.style.borderColor = 'var(--blue)';
+    btn.style.boxShadow = 'var(--sh-blue)';
+  } else {
+    btn.style.background = 'var(--surface)';
+    btn.style.color = 'var(--ink-3)';
+    btn.style.borderColor = 'var(--bg-deep)';
+    btn.style.boxShadow = 'var(--sh-xs)';
+  }
+}
+
+function _openScheduleCardEditor(sidx) {
+  const s = _schData[sidx];
+  if (!s || !s.id) return;
+  _teacherLoadSchedule(s);
+}
+
 function _moveSchPillSlider(activeBtn){
   const ind=document.getElementById('schPillIndicator');
   if(!ind||!activeBtn)return;
@@ -1464,7 +1525,7 @@ function _renderAttEditor(student, records) {
 
   const SESSION_ABBR = {
     '오후 자율학습':'오후', '야간 자율학습':'야간', '심야 자율학습':'심야',
-    '오전 자율학습(토)':'토오전', '오후 자율학습(토)':'토오후',
+    '오전 자율학습(토)':'토오전', '오후1 자율학습(토)':'토오후1', '오후2 자율학습(토)':'토오후2',
   };
 
   const makeRow = r => {
@@ -2549,11 +2610,20 @@ function _renderDevMenuSheet() {
     </div>
 
     <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;">🗑️ 출석 기록 초기화</div>
-    <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px;box-shadow:var(--sh-pressed);">
+    <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px;box-shadow:var(--sh-pressed);margin-bottom:24px;">
       <div style="font-size:11px;color:var(--red,#ef4444);font-weight:600;margin-bottom:8px;">지정한 날짜의 모든 출석 기록이 삭제됩니다.</div>
       <div style="display:flex;gap:8px;align-items:center;">
         <input type="date" id="_resetDateInput" class="cd-input" style="flex:1;">
         <button onclick="_devResetAttendance()" style="padding:8px 16px;border-radius:var(--radius-pill);border:none;background:var(--red,#ef4444);color:#fff;font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">초기화</button>
+      </div>
+    </div>
+
+    <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;">📝 결석 사유 관리</div>
+    <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px;box-shadow:var(--sh-pressed);">
+      <div id="_reasonList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;"></div>
+      <div style="display:flex;gap:8px;">
+        <input type="text" id="_reasonInput" class="cd-input" placeholder="새 사유 입력" style="flex:1;" onkeydown="if(event.key==='Enter')_addReasonType()">
+        <button onclick="_addReasonType()" style="padding:8px 16px;border-radius:var(--radius-pill);border:none;background:var(--blue);color:#fff;font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;box-shadow:var(--sh-blue);">+ 추가</button>
       </div>
     </div>`;
 
@@ -2568,6 +2638,7 @@ function _renderDevMenuSheet() {
   sheet.querySelector('#_holDateInput').valueAsDate = new Date();
   sheet.querySelector('#_resetDateInput').valueAsDate = new Date();
   _renderHolidayList(sheet);
+  _renderReasonList(sheet);
   const pwBtn = sheet.querySelector('#_devPwToggle');
   if (pwBtn) _applyTeacherPwBtn(pwBtn);
 }
@@ -2585,6 +2656,53 @@ function _toggleTeacherPw() {
   const btn = document.getElementById('_devPwToggle');
   if (btn) _applyTeacherPwBtn(btn);
   showSuccessToast('교사 메뉴 잠금 ' + (!on ? 'ON' : 'OFF'));
+}
+
+function _renderReasonList(sheet) {
+  const list = sheet ? sheet.querySelector('#_reasonList') : document.getElementById('_reasonList');
+  if (!list) return;
+  if (!_reasonTypes.length) {
+    list.innerHTML = '<div style="text-align:center;padding:12px;color:var(--ink-3);font-size:13px;font-weight:600;">등록된 사유가 없습니다.</div>';
+    return;
+  }
+  list.innerHTML = _reasonTypes.map((r, i) => `
+    <div style="display:flex;align-items:center;gap:6px;padding:8px 10px;background:var(--surface);border-radius:var(--radius-sm);box-shadow:var(--sh-sm);">
+      <span style="flex:1;font-size:13px;font-weight:600;color:var(--ink);">${r}</span>
+      <button onclick="_moveReasonType(${i},-1)" title="위로" style="width:28px;height:28px;border:none;border-radius:6px;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;font-size:13px;line-height:1;">↑</button>
+      <button onclick="_moveReasonType(${i},1)"  title="아래로" style="width:28px;height:28px;border:none;border-radius:6px;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;font-size:13px;line-height:1;">↓</button>
+      <button onclick="_deleteReasonType(${i})" title="삭제" style="width:28px;height:28px;border:none;border-radius:6px;background:var(--red-dim);color:var(--red,#ef4444);cursor:pointer;font-size:16px;font-weight:900;line-height:1;">×</button>
+    </div>`).join('');
+}
+
+async function _addReasonType() {
+  const input = document.getElementById('_reasonInput');
+  const val = (input?.value || '').trim();
+  if (!val) return;
+  if (_reasonTypes.includes(val)) { showSuccessToast('이미 있는 사유입니다'); return; }
+  _reasonTypes = [..._reasonTypes, val];
+  input.value = '';
+  _renderReasonList(null);
+  try { await API.saveReasonTypes(_reasonTypes); showSuccessToast('저장 완료'); }
+  catch (e) { showSuccessToast('저장 실패: ' + e.message); }
+}
+
+async function _deleteReasonType(idx) {
+  const removed = _reasonTypes[idx];
+  _reasonTypes = _reasonTypes.filter((_, i) => i !== idx);
+  _renderReasonList(null);
+  try { await API.saveReasonTypes(_reasonTypes); showSuccessToast(`"${removed}" 삭제됨`); }
+  catch (e) { showSuccessToast('저장 실패: ' + e.message); }
+}
+
+async function _moveReasonType(idx, dir) {
+  const next = idx + dir;
+  if (next < 0 || next >= _reasonTypes.length) return;
+  const arr = [..._reasonTypes];
+  [arr[idx], arr[next]] = [arr[next], arr[idx]];
+  _reasonTypes = arr;
+  _renderReasonList(null);
+  try { await API.saveReasonTypes(_reasonTypes); }
+  catch (e) { showSuccessToast('저장 실패: ' + e.message); }
 }
 
 function _renderHolidayList(sheet) {
@@ -2699,6 +2817,9 @@ window.onload = () => {
       setTimeout(() => {
         API.getHolidays()
           .then(h => { _holidays = h || []; handleDateChange(true); })
+          .catch(() => {});
+        API.getReasonTypes()
+          .then(types => { _reasonTypes = types; })
           .catch(() => {});
         if (!_rosterLoaded) {
           API.getAllMemberList()
