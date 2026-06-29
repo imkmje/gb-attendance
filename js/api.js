@@ -24,7 +24,9 @@ const API = (() => {
       const msg = await res.text();
       throw new Error(`[API] ${method} ${path} → ${res.status}: ${msg}`);
     }
-    return res.status === 204 ? null : res.json();
+    if (res.status === 204) return null;
+    const text = await res.text();
+    return text ? JSON.parse(text) : null;
   }
 
   const _get  = p       => _req('GET',   p);
