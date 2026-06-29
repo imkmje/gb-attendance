@@ -1273,36 +1273,74 @@ function _openTeacherMenu() {
   backdrop.style.zIndex = '3000';
   const sheet = document.createElement('div');
   sheet.className = 'custom-sheet';
-  sheet.style.paddingBottom = '40px';
-  sheet.style.maxHeight = '88vh';
-  sheet.style.overflowY = 'auto';
+  sheet.style.cssText = 'padding-bottom:48px;max-height:90dvh;overflow-y:auto;';
 
-  const items = [
-    { emoji: '📋', title: '출석 수정 / 결석 카운트 조작', sub: '학생별 출석 기록을 직접 수정합니다',              fn: _teacherEditAttendance },
-    { emoji: '🗓️', title: '자습 세션 변경',               sub: '학생별 자습 참가 세션(O/방과후/-)을 수정합니다', fn: _teacherEditSchedule },
-    { emoji: '🗑️', title: '출석 기록 초기화',             sub: '지정한 날짜의 모든 출석 기록을 삭제합니다',      fn: _teacherResetAttendance },
-    { emoji: '➕', title: '학생 추가',                     sub: '새 학생을 자습반에 등록합니다',                fn: _teacherAddStudent },
-    { emoji: '✏️', title: '학생 삭제 / 자습반 변경',       sub: '학생 정보를 수정하거나 삭제합니다',             fn: _teacherManageStudent },
-    { emoji: '📥', title: '출석 데이터 내보내기',          sub: '전체 출석 현황을 CSV로 다운로드합니다',         fn: _teacherExportCSV },
+  const sections = [
+    {
+      label: '출결 관리',
+      items: [
+        { bg:'var(--blue-dim)',   fg:'var(--blue)',  svg:'<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
+          title:'결석 카운트 수정', sub:'출석 기록 수정 및 결석 카운트를 조정합니다', fn:_teacherEditAttendance },
+        { bg:'var(--green-dim)',  fg:'var(--green)', svg:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
+          title:'자습 세션 변경',  sub:'학생별 자습 참가 세션(O/방과후/-)을 편집합니다', fn:_teacherEditSchedule },
+      ],
+    },
+    {
+      label: '학생 관리',
+      items: [
+        { bg:'#e0fdf4',          fg:'#059669',      svg:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/>',
+          title:'학생 추가',      sub:'새 학생을 자습반에 등록합니다', fn:_teacherAddStudent },
+        { bg:'#fff7ed',          fg:'#ea580c',      svg:'<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/><line x1="18" y1="8" x2="23" y2="13"/><line x1="23" y1="8" x2="18" y2="13"/>',
+          title:'학생 삭제 / 자습반 변경', sub:'학생을 삭제하거나 소속 자습반을 변경합니다', fn:_teacherManageStudent },
+      ],
+    },
+    {
+      label: '데이터',
+      items: [
+        { bg:'var(--bg-deep)',   fg:'var(--ink-3)', svg:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+          title:'출석 데이터 내보내기', sub:'전체 출석 현황을 CSV 파일로 다운로드합니다', fn:_teacherExportCSV },
+      ],
+    },
   ];
+
+  const allItems = sections.flatMap(s => s.items);
+  let idx = 0;
+
+  const sectionHtml = sections.map(sec => {
+    const itemsHtml = sec.items.map(item => {
+      const i = idx++;
+      return `<button id="_tmBtn${i}" style="all:unset;box-sizing:border-box;display:flex;align-items:center;gap:12px;background:var(--surface);border-radius:var(--radius);box-shadow:var(--sh-sm);padding:13px 14px;cursor:pointer;width:100%;-webkit-tap-highlight-color:transparent;">
+        <div style="width:38px;height:38px;border-radius:var(--radius-sm);background:${item.bg};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${item.fg}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${item.svg}</svg>
+        </div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:700;color:var(--ink);letter-spacing:-0.2px;">${item.title}</div>
+          <div style="font-size:11px;color:var(--ink-3);margin-top:2px;line-height:1.4;">${item.sub}</div>
+        </div>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ink-4)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>`;
+    }).join('');
+    return `<div style="margin-bottom:18px;">
+      <div style="font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--ink-4);margin-bottom:8px;padding:0 2px;">${sec.label}</div>
+      <div style="display:flex;flex-direction:column;gap:6px;">${itemsHtml}</div>
+    </div>`;
+  }).join('');
 
   sheet.innerHTML = `
     <div class="custom-sheet-handle"></div>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
-      <div style="font-size:16px;font-weight:800;color:var(--ink);letter-spacing:-0.4px;">⚙️ 교사 메뉴</div>
-      <button id="_tmClose" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;box-shadow:var(--sh-xs);">✕</button>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:22px;">
+      <div style="width:42px;height:42px;border-radius:var(--radius-sm);background:var(--blue-dim);display:flex;align-items:center;justify-content:center;box-shadow:var(--sh-sm);flex-shrink:0;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </div>
+      <div style="flex:1;">
+        <div style="font-size:16px;font-weight:800;color:var(--ink);letter-spacing:-0.4px;">교사 메뉴</div>
+        <div style="font-size:11px;color:var(--ink-3);margin-top:1px;">관리자 전용 기능</div>
+      </div>
+      <button id="_tmClose" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--sh-xs);">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
     </div>
-    <div style="display:flex;flex-direction:column;gap:10px;">
-      ${items.map((item, i) => `
-        <button id="_tmBtn${i}" style="all:unset;box-sizing:border-box;display:flex;align-items:center;gap:14px;background:var(--surface);border-radius:var(--radius);box-shadow:var(--sh-md);padding:14px 16px;cursor:pointer;width:100%;text-align:left;">
-          <span style="font-size:22px;flex-shrink:0;">${item.emoji}</span>
-          <div style="flex:1;min-width:0;">
-            <div style="font-size:14px;font-weight:700;color:var(--ink);letter-spacing:-0.2px;">${item.title}</div>
-            <div style="font-size:12px;color:var(--ink-3);margin-top:3px;">${item.sub}</div>
-          </div>
-          <svg style="flex-shrink:0;" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink-4)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </button>`).join('')}
-    </div>`;
+    ${sectionHtml}`;
 
   backdrop.appendChild(sheet);
   document.body.appendChild(backdrop);
@@ -1311,11 +1349,9 @@ function _openTeacherMenu() {
   const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
   backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
   sheet.querySelector('#_tmClose').addEventListener('click', close);
-  items.forEach((item, i) => {
-    sheet.querySelector(`#_tmBtn${i}`).addEventListener('click', () => {
-      close();
-      setTimeout(() => item.fn(), 370);
-    });
+  allItems.forEach((item, i) => {
+    const btn = sheet.querySelector(`#_tmBtn${i}`);
+    if (btn) btn.addEventListener('click', () => { close(); setTimeout(() => item.fn(), 370); });
   });
 }
 
@@ -1409,17 +1445,18 @@ function _renderAttEditor(student, records) {
 
   const makeRow = r => {
     const isAbsent = r.status === '결석';
-    return `<div style="background:var(--surface);border-radius:var(--radius-sm);box-shadow:var(--sh-sm);padding:12px 14px;display:flex;flex-direction:column;gap:8px;" data-rid="${r.id}">
+    const nc = r.noCount;
+    return `<div class="_ate-row" data-rid="${r.id}" style="background:var(--surface);border-radius:var(--radius-sm);box-shadow:var(--sh-sm);padding:12px 14px;display:flex;flex-direction:column;gap:8px;">
       <div style="display:flex;align-items:center;gap:8px;">
         <span style="font-size:13px;font-weight:700;color:var(--ink-2);">${r.date}</span>
         <span style="font-size:11px;font-weight:600;color:var(--ink-3);background:var(--bg-deep);border-radius:var(--radius-pill);padding:2px 8px;">${SESSION_ABBR[r.session]||r.session}</span>
         <span class="_ate-status" style="margin-left:auto;cursor:pointer;font-size:12px;font-weight:700;border-radius:var(--radius-pill);padding:4px 12px;transition:background .15s,color .15s;background:${isAbsent?'var(--red-dim)':'var(--green-dim)'};color:${isAbsent?'var(--red)':'var(--green)'};">${r.status}</span>
         <button class="_ate-del" style="background:none;border:none;color:var(--ink-4);cursor:pointer;padding:2px 4px;font-size:14px;flex-shrink:0;line-height:1;">✕</button>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;">
-        <button class="_ate-nc" style="display:flex;align-items:center;gap:4px;border:none;border-radius:var(--radius-pill);padding:4px 10px;cursor:pointer;font-family:var(--font);font-size:11px;font-weight:700;transition:background .15s,color .15s;background:${r.noCount?'var(--green-dim)':'var(--bg-deep)'};color:${r.noCount?'var(--green)':'var(--ink-3)'};">노카운트</button>
-        ${isAbsent?`<input class="_ate-reason" type="text" value="${r.reason||''}" placeholder="결석 사유" style="flex:1;background:var(--bg-deep);border:none;border-radius:var(--radius-pill);padding:5px 12px;font-family:var(--font);font-size:12px;font-weight:600;color:var(--ink-2);outline:none;">`:``}
-      </div>
+      ${isAbsent ? `<div class="_ate-extra" style="display:flex;align-items:center;gap:8px;">
+        <button class="_ate-nc" style="flex-shrink:0;border:none;border-radius:var(--radius-pill);padding:4px 10px;cursor:pointer;font-family:var(--font);font-size:11px;font-weight:700;transition:background .15s,color .15s;background:${nc?'var(--green-dim)':'var(--bg-deep)'};color:${nc?'var(--green)':'var(--ink-3)'};">노카운트</button>
+        <input class="_ate-reason" type="text" value="${r.reason||''}" placeholder="결석 사유" style="flex:1;background:var(--bg-deep);border:none;border-radius:var(--radius-pill);padding:5px 12px;font-family:var(--font);font-size:12px;font-weight:600;color:var(--ink-2);outline:none;">
+      </div>` : ''}
     </div>`;
   };
 
@@ -1453,54 +1490,65 @@ function _renderAttEditor(student, records) {
 
   let _reasonTimer = null;
 
+  const bindReasonInput = (inp, rid, rec) => {
+    inp.addEventListener('input', () => {
+      rec.reason = inp.value;
+      clearTimeout(_reasonTimer);
+      _reasonTimer = setTimeout(() => API.updateAttendanceRecord(rid, { reason: inp.value }).catch(() => {}), 600);
+    });
+  };
+
   sheet.querySelector('#_aeList').addEventListener('click', async e => {
     const statusBtn = e.target.closest('._ate-status');
     const ncBtn     = e.target.closest('._ate-nc');
     const delBtn    = e.target.closest('._ate-del');
 
     if (statusBtn) {
-      const row = statusBtn.closest('[data-rid]');
+      const row = statusBtn.closest('._ate-row');
       const rid = row.dataset.rid;
       const rec = records.find(r => r.id === rid); if (!rec) return;
       rec.status = rec.status === '출석' ? '결석' : '출석';
-      statusBtn.textContent = rec.status;
       const isAbs = rec.status === '결석';
+      statusBtn.textContent = rec.status;
       statusBtn.style.background = isAbs ? 'var(--red-dim)' : 'var(--green-dim)';
       statusBtn.style.color      = isAbs ? 'var(--red)'     : 'var(--green)';
-      const row2nd = row.children[1];
-      if (row2nd) {
-        const exist = row2nd.querySelector('._ate-reason');
-        if (isAbs && !exist) {
-          const inp = document.createElement('input');
-          inp.className = '_ate-reason';
-          inp.type = 'text'; inp.value = rec.reason || '';
-          inp.placeholder = '결석 사유';
-          inp.style.cssText = 'flex:1;background:var(--bg-deep);border:none;border-radius:var(--radius-pill);padding:5px 12px;font-family:var(--font);font-size:12px;font-weight:600;color:var(--ink-2);outline:none;';
-          row2nd.appendChild(inp);
-          inp.addEventListener('input', () => {
-            rec.reason = inp.value;
-            clearTimeout(_reasonTimer);
-            _reasonTimer = setTimeout(() => API.updateAttendanceRecord(rid, { reason: inp.value }).catch(() => {}), 600);
-          });
-        } else if (!isAbs && exist) { exist.remove(); }
+
+      const existExtra = row.querySelector('._ate-extra');
+      if (isAbs && !existExtra) {
+        const extra = document.createElement('div');
+        extra.className = '_ate-extra';
+        extra.style.cssText = 'display:flex;align-items:center;gap:8px;';
+        extra.innerHTML = `<button class="_ate-nc" style="flex-shrink:0;border:none;border-radius:var(--radius-pill);padding:4px 10px;cursor:pointer;font-family:var(--font);font-size:11px;font-weight:700;background:var(--bg-deep);color:var(--ink-3);">노카운트</button>
+          <input class="_ate-reason" type="text" value="" placeholder="결석 사유" style="flex:1;background:var(--bg-deep);border:none;border-radius:var(--radius-pill);padding:5px 12px;font-family:var(--font);font-size:12px;font-weight:600;color:var(--ink-2);outline:none;">`;
+        row.appendChild(extra);
+        bindReasonInput(extra.querySelector('._ate-reason'), rid, rec);
+        rec.reason = ''; rec.noCount = false;
+      } else if (!isAbs && existExtra) {
+        existExtra.remove();
+        rec.reason = ''; rec.noCount = false;
       }
-      try { await API.updateAttendanceRecord(rid, { status: rec.status }); }
-      catch { _cdToast({ type:'red', title:'저장 실패' }); }
+
+      try {
+        await API.updateAttendanceRecord(rid, { status: rec.status });
+        showSuccessToast('상태 변경됨', rec.status);
+      } catch { _cdToast({ type:'red', title:'저장 실패' }); }
     }
 
     if (ncBtn) {
-      const row = ncBtn.closest('[data-rid]');
+      const row = ncBtn.closest('._ate-row');
       const rid = row.dataset.rid;
       const rec = records.find(r => r.id === rid); if (!rec) return;
       rec.noCount = !rec.noCount;
       ncBtn.style.background = rec.noCount ? 'var(--green-dim)' : 'var(--bg-deep)';
       ncBtn.style.color      = rec.noCount ? 'var(--green)'     : 'var(--ink-3)';
-      try { await API.updateAttendanceRecord(rid, { noCount: rec.noCount }); }
-      catch { _cdToast({ type:'red', title:'저장 실패' }); }
+      try {
+        await API.updateAttendanceRecord(rid, { noCount: rec.noCount });
+        showSuccessToast(rec.noCount ? '노카운트 설정됨' : '노카운트 해제됨');
+      } catch { _cdToast({ type:'red', title:'저장 실패' }); }
     }
 
     if (delBtn) {
-      const row = delBtn.closest('[data-rid]');
+      const row = delBtn.closest('._ate-row');
       const rid = row.dataset.rid;
       const confirmed = await Swal.fire({
         title: '기록 삭제', text: '이 출석 기록을 삭제할까요?',
@@ -1518,13 +1566,9 @@ function _renderAttEditor(student, records) {
   });
 
   sheet.querySelectorAll('._ate-reason').forEach(inp => {
-    const rid = inp.closest('[data-rid]').dataset.rid;
+    const rid = inp.closest('._ate-row').dataset.rid;
     const rec = records.find(r => r.id === rid);
-    inp.addEventListener('input', () => {
-      if (rec) rec.reason = inp.value;
-      clearTimeout(_reasonTimer);
-      _reasonTimer = setTimeout(() => API.updateAttendanceRecord(rid, { reason: inp.value }).catch(() => {}), 600);
-    });
+    if (rec) bindReasonInput(inp, rid, rec);
   });
 }
 
@@ -1950,7 +1994,16 @@ function _renderDevMenuSheet() {
       </div>
     </div>
 
-    <div id="_holList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;"></div>`;
+    <div id="_holList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:24px;"></div>
+
+    <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;">🗑️ 출석 기록 초기화</div>
+    <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px;box-shadow:var(--sh-pressed);">
+      <div style="font-size:11px;color:var(--red,#ef4444);font-weight:600;margin-bottom:8px;">지정한 날짜의 모든 출석 기록이 삭제됩니다.</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input type="date" id="_resetDateInput" class="cd-input" style="flex:1;">
+        <button onclick="_devResetAttendance()" style="padding:8px 16px;border-radius:var(--radius-pill);border:none;background:var(--red,#ef4444);color:#fff;font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">초기화</button>
+      </div>
+    </div>`;
 
   backdrop.appendChild(sheet);
   document.body.appendChild(backdrop);
@@ -1961,6 +2014,7 @@ function _renderDevMenuSheet() {
   sheet.querySelector('#_devClose').addEventListener('click', close);
 
   sheet.querySelector('#_holDateInput').valueAsDate = new Date();
+  sheet.querySelector('#_resetDateInput').valueAsDate = new Date();
   _renderHolidayList(sheet);
 }
 
@@ -2013,6 +2067,31 @@ function _saveHolidays() {
       handleDateChange(true);
     })
     .catch(() => { hideLoading(); Swal.fire('오류','저장하지 못했습니다.','error'); });
+}
+
+function _devResetAttendance() {
+  const date = document.getElementById('_resetDateInput')?.value;
+  if (!date) { Swal.fire('알림','날짜를 선택해 주세요.','warning'); return; }
+  Swal.fire({
+    title: `${date} 출석 기록 삭제`,
+    text: '해당 날짜의 모든 출석 기록이 삭제됩니다. 되돌릴 수 없습니다.',
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: '삭제',
+    cancelButtonText: '취소',
+    confirmButtonColor: '#ef4444',
+  }).then(r => {
+    if (!r.isConfirmed) return;
+    showLoading('출석 기록 삭제 중...');
+    API.resetAttendanceByDate(date)
+      .then(() => {
+        hideLoading();
+        showSuccessToast('출석 기록 삭제됨', date);
+        _cache.stats = null;
+        if (loadedDate === date) loadStudents(false, true);
+      })
+      .catch(() => { hideLoading(); Swal.fire('오류','삭제하지 못했습니다.','error'); });
+  });
 }
 
 /* ════════════════════════════════
