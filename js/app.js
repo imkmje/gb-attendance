@@ -1278,11 +1278,11 @@ function _openTeacherMenu() {
   sheet.style.overflowY = 'auto';
 
   const items = [
-    { emoji: '📋', title: '출석 수정 / 결석 카운트 조작', sub: '학생별 출석 기록을 직접 수정합니다',         fn: _teacherEditAttendance },
-    { emoji: '📅', title: '공휴일 설정',                   sub: '자율학습 공휴일을 관리합니다',              fn: _teacherHolidays },
-    { emoji: '➕', title: '학생 추가',                     sub: '새 학생을 자습반에 등록합니다',             fn: _teacherAddStudent },
-    { emoji: '✏️', title: '학생 삭제 / 자습반 변경',       sub: '학생 정보를 수정하거나 삭제합니다',        fn: _teacherManageStudent },
-    { emoji: '📥', title: '출석 데이터 내보내기',          sub: '전체 출석 현황을 CSV로 다운로드합니다',    fn: _teacherExportCSV },
+    { emoji: '📋', title: '출석 수정 / 결석 카운트 조작', sub: '학생별 출석 기록을 직접 수정합니다',              fn: _teacherEditAttendance },
+    { emoji: '🗓️', title: '자습 세션 변경',               sub: '학생별 자습 참가 세션(O/방과후/-)을 수정합니다', fn: _teacherEditSchedule },
+    { emoji: '➕', title: '학생 추가',                     sub: '새 학생을 자습반에 등록합니다',                fn: _teacherAddStudent },
+    { emoji: '✏️', title: '학생 삭제 / 자습반 변경',       sub: '학생 정보를 수정하거나 삭제합니다',             fn: _teacherManageStudent },
+    { emoji: '📥', title: '출석 데이터 내보내기',          sub: '전체 출석 현황을 CSV로 다운로드합니다',         fn: _teacherExportCSV },
   ];
 
   sheet.innerHTML = `
@@ -1527,8 +1527,137 @@ function _renderAttEditor(student, records) {
   });
 }
 
-// ── 2. 공휴일 설정 (개발자 메뉴 재사용) ───────────────
-function _teacherHolidays() { _openDevMenu(); }
+// ── 2. 자습 세션 변경 ──────────────────────────────────
+function _teacherEditSchedule() {
+  showLoading('학생 목록 불러오는 중...');
+  API.getAllMemberList()
+    .then(students => {
+      hideLoading();
+      _openStudentPickerSheetEx(students, student => {
+        _teacherLoadSchedule(student);
+      });
+    })
+    .catch(() => { hideLoading(); Swal.fire('오류', '학생 목록을 불러오지 못했습니다.', 'error'); });
+}
+
+function _teacherLoadSchedule(student) {
+  showLoading('시간표 불러오는 중...');
+  API.getStudentSchedule(student.id)
+    .then(schedule => { hideLoading(); _renderScheduleEditor(student, schedule); })
+    .catch(() => { hideLoading(); Swal.fire('오류', '시간표를 불러오지 못했습니다.', 'error'); });
+}
+
+function _renderScheduleEditor(student, rawSchedule) {
+  const sched = JSON.parse(JSON.stringify(rawSchedule || {}));
+  ['mon','tue','wed','thu','fri'].forEach(d => { if (!Array.isArray(sched[d])) sched[d] = ['-','-','-']; });
+  if (!Array.isArray(sched.sat)) sched.sat = ['-','-'];
+
+  const DAYS_KR = { mon:'월', tue:'화', wed:'수', thu:'목', fri:'금' };
+  const SESS_WD = ['오후','야간','심야'];
+  const SESS_SAT = ['오전','오후'];
+
+  const cellStyle = v => {
+    if (v === 'O')    return 'background:var(--clay-indigo-light,#e0e7ff);color:var(--blue,#4f46e5);border:1.5px solid var(--blue,#4f46e5);';
+    if (v === '방과후') return 'background:#fef9c3;color:#b45309;border:1.5px solid #d97706;';
+    return 'background:var(--bg-deep);color:var(--ink-4);border:1.5px solid transparent;';
+  };
+  const cellText = v => v === '방과후' ? '방과후' : v;
+
+  const makeRow = (dayKey, dayKr, vals) => vals.map((v, i) => `
+    <button class="_sce-cell" data-day="${dayKey}" data-idx="${i}"
+      style="flex:1;min-width:0;height:38px;border-radius:var(--radius-sm,8px);cursor:pointer;font-size:12px;font-weight:700;font-family:var(--font);transition:all .15s;${cellStyle(v)}">
+      ${cellText(v)}
+    </button>`).join('');
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'custom-sheet-backdrop';
+  backdrop.style.zIndex = '3200';
+  const sheet = document.createElement('div');
+  sheet.className = 'custom-sheet';
+  sheet.style.cssText = 'padding-bottom:48px;overflow-y:auto;max-height:92dvh;';
+
+  sheet.innerHTML = `
+    <div class="custom-sheet-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <div>
+        <div style="font-size:15px;font-weight:800;color:var(--ink);">${student.name}</div>
+        <div style="font-size:12px;color:var(--ink-3);margin-top:2px;">${student.ban}반 ${student.num}번 · ${student.group}</div>
+      </div>
+      <button id="_sceClose" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;font-size:12px;box-shadow:var(--sh-xs);">✕</button>
+    </div>
+    <div style="font-size:11px;color:var(--ink-4);margin-bottom:10px;">셀을 눌러 O / 방과후 / - 를 전환하세요</div>
+    <!-- 평일 헤더 -->
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+      <span style="width:22px;flex-shrink:0;"></span>
+      ${SESS_WD.map(s => `<span style="flex:1;text-align:center;font-size:11px;font-weight:700;color:var(--ink-3);">${s}</span>`).join('')}
+    </div>
+    <!-- 평일 행 -->
+    <div style="display:flex;flex-direction:column;gap:7px;">
+      ${['mon','tue','wed','thu','fri'].map(d => `
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="width:22px;flex-shrink:0;text-align:center;font-size:13px;font-weight:700;color:var(--ink-3);">${DAYS_KR[d]}</span>
+          ${makeRow(d, DAYS_KR[d], sched[d])}
+        </div>`).join('')}
+    </div>
+    <!-- 토요일 구분 -->
+    <div style="margin:14px 0 10px;display:flex;align-items:center;gap:8px;">
+      <div style="flex:1;height:1px;background:var(--bg-deep);"></div>
+      <span style="font-size:11px;font-weight:700;color:var(--ink-4);">토요일</span>
+      <div style="flex:1;height:1px;background:var(--bg-deep);"></div>
+    </div>
+    <!-- 토요일 헤더 -->
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+      <span style="width:22px;flex-shrink:0;"></span>
+      ${SESS_SAT.map(s => `<span style="flex:1;text-align:center;font-size:11px;font-weight:700;color:var(--ink-3);">${s}</span>`).join('')}
+    </div>
+    <!-- 토요일 행 -->
+    <div style="display:flex;align-items:center;gap:6px;">
+      <span style="width:22px;flex-shrink:0;text-align:center;font-size:13px;font-weight:700;color:var(--ink-3);">토</span>
+      ${makeRow('sat', '토', sched.sat)}
+    </div>
+    <!-- 저장 -->
+    <button id="_sceSave" style="margin-top:20px;padding:14px;border-radius:var(--radius);border:none;background:var(--blue,#4f46e5);color:#fff;font-family:var(--font);font-size:14px;font-weight:700;cursor:pointer;width:100%;box-shadow:var(--sh-blue);">저장</button>`;
+
+  backdrop.appendChild(sheet);
+  document.body.appendChild(backdrop);
+  requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
+
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+  sheet.querySelector('#_sceClose').addEventListener('click', close);
+
+  sheet.querySelectorAll('._sce-cell').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const day = btn.dataset.day;
+      const idx = parseInt(btn.dataset.idx);
+      const cur = sched[day][idx];
+      let next;
+      if (day !== 'sat' && idx === 0) {
+        next = cur === '-' ? 'O' : cur === 'O' ? '방과후' : '-';
+      } else {
+        next = cur === '-' ? 'O' : '-';
+      }
+      sched[day][idx] = next;
+      btn.textContent = cellText(next);
+      btn.setAttribute('style', `flex:1;min-width:0;height:38px;border-radius:var(--radius-sm,8px);cursor:pointer;font-size:12px;font-weight:700;font-family:var(--font);transition:all .15s;${cellStyle(next)}`);
+    });
+  });
+
+  sheet.querySelector('#_sceSave').addEventListener('click', async () => {
+    const saveBtn = sheet.querySelector('#_sceSave');
+    saveBtn.disabled = true;
+    saveBtn.textContent = '저장 중...';
+    try {
+      await API.updateStudentSchedule(student.id, sched);
+      close();
+      showSuccessToast('세션 편성 저장됨', student.name);
+    } catch {
+      Swal.fire('오류', '저장하지 못했습니다.', 'error');
+      saveBtn.disabled = false;
+      saveBtn.textContent = '저장';
+    }
+  });
+}
 
 // ── 3. 학생 추가 ───────────────────────────────────────
 function _teacherAddStudent() {

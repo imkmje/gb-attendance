@@ -470,6 +470,15 @@ const API = (() => {
     await _patch(`students?id=eq.${studentId}`, { study_room: newRoom });
   }
 
+  async function getStudentSchedule(studentId) {
+    const rows = await _get(`students?id=eq.${studentId}&select=schedule`);
+    return rows[0]?.schedule || {};
+  }
+
+  async function updateStudentSchedule(studentId, schedule) {
+    await _patch(`students?id=eq.${studentId}`, { schedule });
+  }
+
   async function exportAttendanceData() {
     const [students, attendance] = await Promise.all([
       _get('students?order=study_room,class_num,student_num'),
@@ -514,5 +523,7 @@ const API = (() => {
     deleteStudent,
     updateStudentRoom,
     exportAttendanceData,
+    getStudentSchedule,
+    updateStudentSchedule,
   };
 })();
