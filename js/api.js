@@ -528,6 +528,26 @@ const API = (() => {
     await _patch(`violations?id=eq.${violationId}`, updates);
   }
 
+  async function exportScheduleData() {
+    const students = await _get('students?order=study_room,class_num,student_num');
+    const DAYS = ['mon','tue','wed','thu','fri'];
+    const DAY_KR = {mon:'월',tue:'화',wed:'수',thu:'목',fri:'금'};
+    return students.map(s => {
+      const sched = s.schedule ?? {};
+      const row = { 반: String(s.class_num||''), 번호: String(s.student_num||''), 이름: s.name||'', 자습반: s.study_room||'' };
+      for (const d of DAYS) {
+        const a = sched[d] ?? ['-','-','-'];
+        row[`${DAY_KR[d]}오후`] = a[0] ?? '-';
+        row[`${DAY_KR[d]}야간`] = a[1] ?? '-';
+        row[`${DAY_KR[d]}심야`] = a[2] ?? '-';
+      }
+      const sat = sched.sat ?? ['-','-'];
+      row['토오전'] = sat[0] ?? '-';
+      row['토오후'] = sat[1] ?? '-';
+      return row;
+    });
+  }
+
   async function exportViolationsData() {
     const [violations, students] = await Promise.all([
       _get('violations?order=viol_date.asc'),
@@ -626,5 +646,6 @@ const API = (() => {
     resetAttendanceByDate,
     getAllViolationsWithStudents,
     exportViolationsData,
+    exportScheduleData,
   };
 })();

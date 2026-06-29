@@ -1309,7 +1309,7 @@ function _openTeacherMenu() {
       label: '데이터',
       items: [
         { bg:'var(--bg-deep)',   fg:'var(--ink-3)', svg:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
-          title:'출석 데이터 내보내기', sub:'전체 출석 현황을 CSV 파일로 다운로드합니다', fn:_teacherExportCSV },
+          title:'데이터 내보내기', sub:'원하는 데이터를 선택해 Excel 파일로 내보냅니다', fn:_teacherExportData },
       ],
     },
   ];
@@ -1366,24 +1366,40 @@ function _openTeacherMenu() {
   });
 }
 
-// ── 공통: 학생 선택 시트 (콜백 버전) ──────────────────
+// ── 공통: 학생 선택 시트 (콜백 버전) — 반 드롭다운 → 학생 목록 ──
 function _openStudentPickerSheetEx(students, callback) {
   const backdrop = document.createElement('div');
   backdrop.className = 'custom-sheet-backdrop';
   backdrop.style.zIndex = '3100';
   const sheet = document.createElement('div');
   sheet.className = 'custom-sheet';
-  sheet.style.maxHeight = '82vh';
-  sheet.style.display = 'flex';
-  sheet.style.flexDirection = 'column';
+  sheet.style.cssText = 'max-height:82vh;display:flex;flex-direction:column;';
 
-  const groups = {};
-  students.forEach(s => { if (!groups[s.group]) groups[s.group] = []; groups[s.group].push(s); });
+  const groups = [...new Set(students.map(s => s.group))];
+  const groupOpts = [
+    '<option value="" disabled selected>자습반을 선택하세요</option>',
+    ...groups.map(g => `<option value="${g}">${g}</option>`),
+  ].join('');
 
-  let listHtml = '';
-  for (const [group, studs] of Object.entries(groups)) {
-    listHtml += `<div style="font-size:11px;font-weight:700;letter-spacing:0.5px;color:var(--ink-3);padding:12px 0 6px;">${group}</div>`;
-    listHtml += studs.map(s => `
+  sheet.innerHTML = `
+    <div class="custom-sheet-handle"></div>
+    <div style="font-size:15px;font-weight:800;color:var(--ink);margin-bottom:12px;letter-spacing:-0.4px;">학생 선택</div>
+    <div style="position:relative;margin-bottom:12px;">
+      <select id="_spxGroup" style="width:100%;padding:11px 40px 11px 14px;border-radius:var(--radius);border:1.5px solid var(--bg-deep);background:var(--surface);font-family:var(--font);font-size:14px;font-weight:600;color:var(--ink);appearance:none;-webkit-appearance:none;outline:none;">
+        ${groupOpts}
+      </select>
+      <svg style="position:absolute;right:12px;top:50%;transform:translateY(-50%);pointer-events:none;" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--ink-3)" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </div>
+    <div id="_spxList" style="overflow-y:auto;flex:1;margin:0 -16px;padding:0 16px;">
+      <div style="text-align:center;padding:36px;color:var(--ink-4);font-size:13px;font-weight:600;">자습반을 선택하면<br>학생 목록이 나타납니다</div>
+    </div>`;
+
+  const listEl = sheet.querySelector('#_spxList');
+
+  const renderStudents = (group) => {
+    const studs = students.filter(s => s.group === group);
+    if (!studs.length) { listEl.innerHTML = '<div style="text-align:center;padding:32px;color:var(--ink-3);font-size:13px;">해당 반 학생이 없습니다</div>'; return; }
+    listEl.innerHTML = studs.map(s => `
       <div class="_spx-item" data-id="${s.id}" data-ban="${s.ban}" data-num="${s.num}" data-name="${encodeURIComponent(s.name)}" data-group="${encodeURIComponent(s.group)}"
         style="display:flex;align-items:center;padding:10px 0;border-bottom:1px solid var(--bg-deep);cursor:pointer;gap:12px;">
         <div style="width:32px;height:32px;border-radius:var(--radius-sm);background:var(--blue-dim);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;font-weight:800;color:var(--blue);">${s.ban}</div>
@@ -1392,12 +1408,19 @@ function _openStudentPickerSheetEx(students, callback) {
           <div style="font-size:11px;color:var(--ink-3);">${s.ban}반 ${s.num}번</div>
         </div>
       </div>`).join('');
-  }
-
-  sheet.innerHTML = `
-    <div class="custom-sheet-handle"></div>
-    <div style="font-size:15px;font-weight:800;color:var(--ink);margin-bottom:12px;letter-spacing:-0.4px;">학생 선택</div>
-    <div style="overflow-y:auto;flex:1;margin:0 -16px;padding:0 16px;">${listHtml}</div>`;
+    listEl.querySelectorAll('._spx-item').forEach(el => {
+      el.addEventListener('click', () => {
+        close();
+        setTimeout(() => callback({
+          id:    el.dataset.id,
+          ban:   el.dataset.ban,
+          num:   el.dataset.num,
+          name:  decodeURIComponent(el.dataset.name),
+          group: decodeURIComponent(el.dataset.group),
+        }), 370);
+      });
+    });
+  };
 
   backdrop.appendChild(sheet);
   document.body.appendChild(backdrop);
@@ -1405,19 +1428,7 @@ function _openStudentPickerSheetEx(students, callback) {
 
   const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
   backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
-
-  sheet.querySelectorAll('._spx-item').forEach(el => {
-    el.addEventListener('click', () => {
-      close();
-      setTimeout(() => callback({
-        id:    el.dataset.id,
-        ban:   el.dataset.ban,
-        num:   el.dataset.num,
-        name:  decodeURIComponent(el.dataset.name),
-        group: decodeURIComponent(el.dataset.group),
-      }), 370);
-    });
-  });
+  sheet.querySelector('#_spxGroup').addEventListener('change', function() { renderStudents(this.value); });
 }
 
 // ── 1. 출석 수정 / 결석 카운트 조작 ───────────────────
@@ -1933,35 +1944,68 @@ async function _teacherDeleteStudent(student) {
   } catch { Swal.fire('오류', '삭제하지 못했습니다.', 'error'); }
 }
 
-// ── 6. 출석 데이터 내보내기 (CSV) ─────────────────────
-function _csvBlob(rows) {
-  if (!rows.length) return null;
-  const h = Object.keys(rows[0]);
-  const body = '﻿' + h.join(',') + '\n' +
-    rows.map(r => h.map(k => `"${String(r[k]).replace(/"/g,'""')}"`).join(',')).join('\n');
-  return new Blob([body], { type: 'text/csv;charset=utf-8;' });
-}
-function _dlBlob(blob, name) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = name; a.click();
-  URL.revokeObjectURL(url);
-}
+// ── 6. 데이터 내보내기 (Excel 다중 시트) ──────────────
+function _teacherExportData() {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'custom-sheet-backdrop';
+  backdrop.style.zIndex = '3100';
+  const sheet = document.createElement('div');
+  sheet.className = 'custom-sheet';
+  sheet.style.paddingBottom = '32px';
 
-function _teacherExportCSV() {
-  showLoading('데이터 불러오는 중...');
-  Promise.all([API.exportAttendanceData(), API.exportViolationsData()])
-    .then(([attRows, violRows]) => {
-      hideLoading();
-      if (!attRows.length && !violRows.length) { Swal.fire('알림', '내보낼 데이터가 없습니다.', 'info'); return; }
+  const mkCheck = (id, label, sub) => `
+    <label style="display:flex;align-items:center;gap:14px;padding:14px;background:var(--bg-deep);border-radius:var(--radius-sm);cursor:pointer;">
+      <input type="checkbox" id="${id}" checked style="width:18px;height:18px;cursor:pointer;accent-color:var(--blue);flex-shrink:0;">
+      <div>
+        <div style="font-size:14px;font-weight:700;color:var(--ink);">${label}</div>
+        <div style="font-size:11px;color:var(--ink-3);margin-top:2px;">${sub}</div>
+      </div>
+    </label>`;
+
+  sheet.innerHTML = `
+    <div class="custom-sheet-handle"></div>
+    <div style="font-size:15px;font-weight:800;color:var(--ink);margin-bottom:16px;letter-spacing:-0.4px;">데이터 내보내기</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">
+      ${mkCheck('_expAtt',   '출석 현황',     '날짜별 출결 기록 전체')}
+      ${mkCheck('_expViol',  '벌금 현황',     '규정 위반 및 벌금 기록 전체')}
+      ${mkCheck('_expSched', '자습 세션 편성', '학생별 요일·세션 편성 현황')}
+    </div>
+    <button id="_expBtn" style="padding:14px;border-radius:var(--radius-pill);border:none;background:var(--blue);color:#fff;font-family:var(--font);font-size:14px;font-weight:700;cursor:pointer;width:100%;box-shadow:var(--sh-blue);">Excel로 내보내기</button>`;
+
+  backdrop.appendChild(sheet);
+  document.body.appendChild(backdrop);
+  requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
+
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+
+  sheet.querySelector('#_expBtn').addEventListener('click', async () => {
+    const wantAtt   = sheet.querySelector('#_expAtt').checked;
+    const wantViol  = sheet.querySelector('#_expViol').checked;
+    const wantSched = sheet.querySelector('#_expSched').checked;
+    if (!wantAtt && !wantViol && !wantSched) { Swal.fire('알림', '내보낼 항목을 하나 이상 선택하세요.', 'info'); return; }
+    const btn = sheet.querySelector('#_expBtn');
+    btn.disabled = true; btn.textContent = '불러오는 중...';
+    try {
+      const [attRows, violRows, schedRows] = await Promise.all([
+        wantAtt   ? API.exportAttendanceData() : [],
+        wantViol  ? API.exportViolationsData() : [],
+        wantSched ? API.exportScheduleData()   : [],
+      ]);
+      const wb = XLSX.utils.book_new();
+      if (wantAtt   && attRows.length)   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(attRows),   '출석현황');
+      if (wantViol  && violRows.length)  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(violRows),  '벌금현황');
+      if (wantSched && schedRows.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(schedRows), '세션편성');
+      if (!wb.SheetNames.length) { Swal.fire('알림', '내보낼 데이터가 없습니다.', 'info'); btn.disabled=false; btn.textContent='Excel로 내보내기'; return; }
       const today = new Date().toISOString().slice(0, 10);
-      const attBlob = _csvBlob(attRows);
-      if (attBlob) _dlBlob(attBlob, `청백운반_출석현황_${today}.csv`);
-      const violBlob = _csvBlob(violRows);
-      if (violBlob) setTimeout(() => _dlBlob(violBlob, `청백운반_벌금현황_${today}.csv`), 300);
-      showSuccessToast('CSV 다운로드 완료', `출석 ${attRows.length}건 · 벌금 ${violRows.length}건`);
-    })
-    .catch(() => { hideLoading(); Swal.fire('오류', '데이터를 불러오지 못했습니다.', 'error'); });
+      XLSX.writeFile(wb, `청백운반_${today}.xlsx`);
+      close();
+      showSuccessToast('내보내기 완료', `시트 ${wb.SheetNames.length}개`);
+    } catch(err) {
+      Swal.fire('오류', err?.message || '내보내기 실패', 'error');
+      btn.disabled = false; btn.textContent = '내보내기';
+    }
+  });
 }
 
 // ── 7. 전체 벌금 현황 ─────────────────────────────────
