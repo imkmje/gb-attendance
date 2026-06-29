@@ -1280,6 +1280,7 @@ function _openTeacherMenu() {
   const items = [
     { emoji: '📋', title: '출석 수정 / 결석 카운트 조작', sub: '학생별 출석 기록을 직접 수정합니다',              fn: _teacherEditAttendance },
     { emoji: '🗓️', title: '자습 세션 변경',               sub: '학생별 자습 참가 세션(O/방과후/-)을 수정합니다', fn: _teacherEditSchedule },
+    { emoji: '🗑️', title: '출석 기록 초기화',             sub: '지정한 날짜의 모든 출석 기록을 삭제합니다',      fn: _teacherResetAttendance },
     { emoji: '➕', title: '학생 추가',                     sub: '새 학생을 자습반에 등록합니다',                fn: _teacherAddStudent },
     { emoji: '✏️', title: '학생 삭제 / 자습반 변경',       sub: '학생 정보를 수정하거나 삭제합니다',             fn: _teacherManageStudent },
     { emoji: '📥', title: '출석 데이터 내보내기',          sub: '전체 출석 현황을 CSV로 다운로드합니다',         fn: _teacherExportCSV },
@@ -1659,7 +1660,67 @@ function _renderScheduleEditor(student, rawSchedule) {
   });
 }
 
-// ── 3. 학생 추가 ───────────────────────────────────────
+// ── 3. 출석 기록 초기화 ────────────────────────────────
+function _teacherResetAttendance() {
+  const today = new Date().toISOString().slice(0, 10);
+  const backdrop = document.createElement('div');
+  backdrop.className = 'custom-sheet-backdrop';
+  backdrop.style.zIndex = '3100';
+  const sheet = document.createElement('div');
+  sheet.className = 'custom-sheet';
+  sheet.style.paddingBottom = '40px';
+
+  sheet.innerHTML = `
+    <div class="custom-sheet-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <div style="font-size:15px;font-weight:800;color:var(--ink);">🗑️ 출석 기록 초기화</div>
+      <button id="_traClose" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;font-size:12px;box-shadow:var(--sh-xs);">✕</button>
+    </div>
+    <div style="background:var(--bg-deep);border-radius:var(--radius);padding:12px 14px;margin-bottom:16px;">
+      <div style="font-size:12px;font-weight:700;color:var(--red,#ef4444);margin-bottom:4px;">⚠ 주의</div>
+      <div style="font-size:12px;color:var(--ink-3);line-height:1.6;">지정한 날짜의 <b>모든 반 출석 기록</b>이 삭제됩니다.<br>삭제 후에는 복구할 수 없습니다.</div>
+    </div>
+    <div style="font-size:13px;font-weight:700;color:var(--ink-2);margin-bottom:8px;">날짜 선택</div>
+    <input type="date" id="_traDate" value="${today}"
+      style="width:100%;padding:12px 14px;border-radius:var(--radius);border:1.5px solid var(--bg-deep);background:var(--surface);color:var(--ink);font-family:var(--font);font-size:14px;box-sizing:border-box;outline:none;">
+    <button id="_traConfirm" style="margin-top:16px;padding:14px;border-radius:var(--radius);border:none;background:var(--red,#ef4444);color:#fff;font-family:var(--font);font-size:14px;font-weight:700;cursor:pointer;width:100%;">선택한 날짜 출석 기록 삭제</button>`;
+
+  backdrop.appendChild(sheet);
+  document.body.appendChild(backdrop);
+  requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
+
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+  sheet.querySelector('#_traClose').addEventListener('click', close);
+
+  sheet.querySelector('#_traConfirm').addEventListener('click', () => {
+    const date = sheet.querySelector('#_traDate').value;
+    if (!date) { Swal.fire('알림', '날짜를 선택해 주세요.', 'warning'); return; }
+    close();
+    Swal.fire({
+      title: `${date} 출석 기록을 삭제할까요?`,
+      text: '이 작업은 되돌릴 수 없습니다.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: '삭제',
+      cancelButtonText: '취소',
+      confirmButtonColor: '#ef4444',
+    }).then(r => {
+      if (!r.isConfirmed) return;
+      showLoading('출석 기록 삭제 중...');
+      API.resetAttendanceByDate(date)
+        .then(() => {
+          hideLoading();
+          showSuccessToast('출석 기록 삭제됨', date);
+          _cache.stats = null;
+          if (loadedDate === date) loadStudents(false, true);
+        })
+        .catch(() => { hideLoading(); Swal.fire('오류', '삭제하지 못했습니다.', 'error'); });
+    });
+  });
+}
+
+// ── 4. 학생 추가 ──────────────────────────────────────
 function _teacherAddStudent() {
   const backdrop = document.createElement('div');
   backdrop.className = 'custom-sheet-backdrop';
@@ -1713,7 +1774,7 @@ function _teacherAddStudent() {
   });
 }
 
-// ── 4. 학생 삭제 / 자습반 변경 ────────────────────────
+// ── 5. 학생 삭제 / 자습반 변경 ────────────────────────
 function _teacherManageStudent() {
   showLoading('학생 목록 불러오는 중...');
   API.getAllMemberList()
@@ -1792,7 +1853,7 @@ async function _teacherDeleteStudent(student) {
   } catch { Swal.fire('오류', '삭제하지 못했습니다.', 'error'); }
 }
 
-// ── 5. 출석 데이터 내보내기 (CSV) ─────────────────────
+// ── 6. 출석 데이터 내보내기 (CSV) ─────────────────────
 function _teacherExportCSV() {
   showLoading('데이터 불러오는 중...');
   API.exportAttendanceData()

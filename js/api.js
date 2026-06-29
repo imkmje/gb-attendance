@@ -30,7 +30,7 @@ const API = (() => {
   const _get  = p       => _req('GET',   p);
   const _post = (p, b)  => _req('POST',  p, b);
   const _patch = (p, b) => _req('PATCH', p, b, { Prefer: 'return=minimal' });
-  const _upsert = (p, b) => _req('POST', p, b, { Prefer: 'resolution=merge-duplicates,return=minimal' });
+  const _del  = p       => _req('DELETE', p, null, { Prefer: 'return=minimal' });
 
   // ─── 세션 관련 상수 ───────────────────────────────────────
   // GAS colIdx → schedule JSON 키·배열 인덱스 매핑
@@ -215,8 +215,15 @@ const API = (() => {
   async function saveAttendance(payload) {
     const { group, sessionName, students, date, checkerName } = payload;
 
+    const studentIds = students.map(s => s.student_id).filter(Boolean);
+    if (studentIds.length > 0) {
+      await _del(
+        `attendance?record_date=eq.${date}&session=eq.${encodeURIComponent(sessionName)}&student_id=in.(${studentIds.join(',')})`
+      );
+    }
+
     const rows = students.map(s => ({
-      student_id:  s.student_id,   // UUID (getStudentList 반환값의 id)
+      student_id:  s.student_id,
       record_date: date,
       session:     sessionName,
       status:      s.type,
@@ -225,8 +232,12 @@ const API = (() => {
       checker:     checkerName || '',
     }));
 
-    await _upsert('attendance', rows);
+    await _post('attendance', rows);
     return '출결 현황이 정상적으로 저장되었습니다.';
+  }
+
+  async function resetAttendanceByDate(date) {
+    await _del(`attendance?record_date=eq.${date}`);
   }
 
   /**
@@ -525,5 +536,6 @@ const API = (() => {
     exportAttendanceData,
     getStudentSchedule,
     updateStudentSchedule,
+    resetAttendanceByDate,
   };
 })();
