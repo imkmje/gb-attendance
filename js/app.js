@@ -27,6 +27,7 @@ let longPressTimer, isLongPress = false, isScrolling = false, startY = 0, startX
 let pressedCard = null, pressedIdx = -1;
 let _loadingEl  = null;
 let _schData    = [];
+let _schSearchQuery = '';
 let _schDayIdx  = 0;
 let _schSessFilter = new Set();
 let _lockChipTimer = null;
@@ -660,33 +661,56 @@ function filterStats(){
 /* ════════════════════════════════
    시간표
 ════════════════════════════════ */
+function _schDataFiltered() {
+  if (!_schSearchQuery) return _schData;
+  return _schData.filter(s => s.name.includes(_schSearchQuery));
+}
+function filterSchByName(val) {
+  _schSearchQuery = val.trim();
+  _renderSchCards();
+  renderSchDay(_schDayIdx);
+}
+function _renderSchCards() {
+  const listEl = document.getElementById('scheduleCardList');
+  if (!listEl) return;
+  const dayLabels=['월','화','수','목','금'], sessLabels=['오','야','심'], satLabels=['전','후'];
+  const filtered = _schDataFiltered();
+  if (!filtered.length) {
+    listEl.innerHTML = _schSearchQuery
+      ? '<div class="text-center py-5" style="color:var(--ink-3);font-weight:600;">검색 결과가 없습니다.</div>'
+      : '<div class="text-center py-5" style="color:var(--ink-3);font-weight:600;">데이터가 없습니다.</div>';
+    return;
+  }
+  listEl.innerHTML = filtered.map(s => {
+    let dgh='';
+    for(let d=0;d<5;d++){
+      let cells='';
+      for(let j=0;j<3;j++){const val=s.schedule[d*3+j]; const cls=val==='O'?'sch-cell-on':(val==='방과후'?'sch-cell-after':'sch-cell-off'); const lbl=val==='O'?sessLabels[j]:(val==='방과후'?'방':''); cells+=`<div class="sch-cell ${cls}">${lbl}</div>`;}
+      dgh+=`<div class="sch-day-wrap"><div class="sch-day-lbl">${dayLabels[d]}</div><div class="sch-day-group">${cells}</div></div>`;
+    }
+    let satCells='';
+    for(let j=0;j<2;j++){const val=s.schedule[15+j]; satCells+=`<div class="sch-cell ${val==='O'?'sch-cell-on':'sch-cell-off'}">${val==='O'?satLabels[j]:''}</div>`;}
+    dgh+=`<div class="sch-sep"></div><div class="sch-day-wrap sch-sat"><div class="sch-day-lbl">토</div><div class="sch-day-group">${satCells}</div></div>`;
+    const editAttr = _scheduleEditMode ? `onclick="_openScheduleCardEditorById('${s.id}')" style="cursor:pointer;"` : '';
+    const editBadge = _scheduleEditMode ? `<span style="font-size:10px;font-weight:700;color:var(--blue);background:var(--blue-dim);border-radius:var(--radius-pill);padding:2px 8px;white-space:nowrap;flex-shrink:0;">세션 편집</span>` : '';
+    return `<div class="sch-card-row" ${editAttr}><div class="sch-top-row"><span class="sch-num-cell">${s.ban}반 ${s.num}번</span><span class="sch-name-cell">${s.name}</span><span class="sch-group-cell">${s.group}</span>${editBadge}</div><div class="sch-days">${dgh}</div></div>`;
+  }).join('');
+}
 function updateGroupScheduleView() {
   const group=document.getElementById('scheduleGroupSelect').value;
   const title=document.getElementById('schTitle');
   if(title){const nodes=Array.from(title.childNodes); const tn=nodes.reverse().find(n=>n.nodeType===3); if(tn)tn.textContent=' '+group+' 주간 자습 편성표';}
+  _schSearchQuery = '';
+  const searchEl = document.getElementById('schSearchInput');
+  if (searchEl) searchEl.value = '';
   const listEl=document.getElementById('scheduleCardList'), dayContent=document.getElementById('schDayContent');
   if(listEl)listEl.innerHTML='<div class="text-center py-5" style="color:var(--ink-3);font-weight:600;">불러오는 중...</div>';
-  const dayLabels=['월','화','수','목','금'], sessLabels=['오','야','심'], satLabels=['전','후'];
 
   API.getGroupSchedule(group)
     .then(data=>{
       _schData=data||[];
       if(!listEl)return;
-      if(!_schData.length){listEl.innerHTML='<div class="text-center py-5" style="color:var(--ink-3);font-weight:600;">데이터가 없습니다.</div>'; if(dayContent)dayContent.innerHTML=''; return;}
-      listEl.innerHTML=_schData.map((s, sidx)=>{
-        let dgh='';
-        for(let d=0;d<5;d++){
-          let cells='';
-          for(let j=0;j<3;j++){const val=s.schedule[d*3+j]; const cls=val==='O'?'sch-cell-on':(val==='방과후'?'sch-cell-after':'sch-cell-off'); const lbl=val==='O'?sessLabels[j]:(val==='방과후'?'방':''); cells+=`<div class="sch-cell ${cls}">${lbl}</div>`;}
-          dgh+=`<div class="sch-day-wrap"><div class="sch-day-lbl">${dayLabels[d]}</div><div class="sch-day-group">${cells}</div></div>`;
-        }
-        let satCells='';
-        for(let j=0;j<2;j++){const val=s.schedule[15+j]; satCells+=`<div class="sch-cell ${val==='O'?'sch-cell-on':'sch-cell-off'}">${val==='O'?satLabels[j]:''}</div>`;}
-        dgh+=`<div class="sch-sep"></div><div class="sch-day-wrap sch-sat"><div class="sch-day-lbl">토</div><div class="sch-day-group">${satCells}</div></div>`;
-        const editAttr = _scheduleEditMode ? `onclick="_openScheduleCardEditor(${sidx})" style="cursor:pointer;"` : '';
-        const editBadge = _scheduleEditMode ? `<span style="font-size:10px;font-weight:700;color:var(--blue);background:var(--blue-dim);border-radius:var(--radius-pill);padding:2px 8px;white-space:nowrap;flex-shrink:0;">세션 편집</span>` : '';
-        return `<div class="sch-card-row" ${editAttr}><div class="sch-top-row"><span class="sch-num-cell">${s.ban}반 ${s.num}번</span><span class="sch-name-cell">${s.name}</span><span class="sch-group-cell">${group}</span>${editBadge}</div><div class="sch-days">${dgh}</div></div>`;
-      }).join('');
+      _renderSchCards();
       _schSessFilter.clear(); buildSessFilterChips(_schDayIdx); renderSchDay(_schDayIdx);
       requestAnimationFrame(()=>requestAnimationFrame(()=>{
         const ind=document.getElementById('schPillIndicator'); if(ind)ind.style.transition='none';
@@ -700,7 +724,7 @@ function toggleScheduleEditMode() {
   if (_scheduleEditMode) {
     _scheduleEditMode = false;
     _updateScheduleEditBtn();
-    updateGroupScheduleView();
+    _renderSchCards();
     return;
   }
   if (_scheduleEditAuthed || localStorage.getItem('teacherPwEnabled') === 'false') {
@@ -727,7 +751,7 @@ function toggleScheduleEditMode() {
 function _enterScheduleEditMode() {
   _scheduleEditMode = true;
   _updateScheduleEditBtn();
-  updateGroupScheduleView();
+  _renderSchCards();
   const el = _cdToast({ type:'blue', title:'편집 모드', sub:'학생 카드를 탭해서 세션을 편집하세요' });
   setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 280); }, 2400);
 }
@@ -748,9 +772,9 @@ function _updateScheduleEditBtn() {
   }
 }
 
-function _openScheduleCardEditor(sidx) {
-  const s = _schData[sidx];
-  if (!s || !s.id) return;
+function _openScheduleCardEditorById(id) {
+  const s = _schData.find(s => s.id === id);
+  if (!s) return;
   _teacherLoadSchedule(s);
 }
 
@@ -781,15 +805,15 @@ function renderSchDay(d){
   const content=document.getElementById('schDayContent'); if(!content)return;
   if(!_schData.length){content.innerHTML='<div style="text-align:center;padding:28px;font-size:13px;font-weight:600;color:var(--ink-3);">자습반을 먼저 선택하세요</div>'; return;}
   const isSat=(d===5), sessLabels=isSat?['오전','오후']:['오자','야자','심자'], offset=isSat?15:d*3, count=isSat?2:3;
-  const group=document.getElementById('scheduleGroupSelect').value;
-  let filtered=_schData;
-  if(_schSessFilter.size>0){ filtered=_schData.filter(s=>{const sess=(s.schedule||[]).slice(offset,offset+count); return[..._schSessFilter].every(j=>sess[j]==='O'||sess[j]==='방과후');}); }
-  else{ filtered=_schData.filter(s=>{const sess=(s.schedule||[]).slice(offset,offset+count); return sess.some(v=>v==='O'||v==='방과후');}); }
+  const base=_schDataFiltered();
+  let filtered=base;
+  if(_schSessFilter.size>0){ filtered=base.filter(s=>{const sess=(s.schedule||[]).slice(offset,offset+count); return[..._schSessFilter].every(j=>sess[j]==='O'||sess[j]==='방과후');}); }
+  else{ filtered=base.filter(s=>{const sess=(s.schedule||[]).slice(offset,offset+count); return sess.some(v=>v==='O'||v==='방과후');}); }
   if(!filtered.length){content.innerHTML='<div style="text-align:center;padding:28px;font-size:13px;font-weight:600;color:var(--ink-3);">조건에 맞는 학생이 없어요</div>'; return;}
   content.innerHTML=filtered.map(s=>{
     const sess=(s.schedule||[]).slice(offset,offset+count);
     const sessCells=sess.map((val,j)=>{ const cls=val==='O'?'sds-on':(val==='방과후'?'sds-aft':'sds-off'); const label=val==='방과후'?'방과후':sessLabels[j]; return`<span class="sch-dr-s ${cls}">${label}</span>`; }).join('');
-    return`<div class="sch-day-row"><div class="sch-dr-num">${s.num}번</div><div style="flex:1;min-width:0;"><div class="sch-dr-name">${s.name}</div><span class="sch-dr-grp" style="display:inline-block;margin-top:2px;">${group}</span></div><div class="sch-dr-sess">${sessCells}</div></div>`;
+    return`<div class="sch-day-row"><div class="sch-dr-num">${s.num}번</div><div style="flex:1;min-width:0;"><div class="sch-dr-name">${s.name}</div><span class="sch-dr-grp" style="display:inline-block;margin-top:2px;">${s.group}</span></div><div class="sch-dr-sess">${sessCells}</div></div>`;
   }).join('');
 }
 
@@ -1797,9 +1821,7 @@ function _renderScheduleEditor(student, rawSchedule) {
       showSuccessToast('세션 편성 저장됨', student.name);
       _cache.stats = null;
       _rosterLoaded = false;
-      // 시간표 탭: 편집한 학생 그룹으로 선택 전환 후 즉시 갱신
-      const schedSel = document.getElementById('scheduleGroupSelect');
-      if (schedSel) schedSel.value = student.group;
+      // 시간표 탭: 현재 선택 유지하고 즉시 갱신
       updateGroupScheduleView();
       // 출석체크 탭: 현재 선택 그룹이 같으면 갱신
       const homeSel = document.getElementById('groupSelect');
@@ -2807,6 +2829,7 @@ window.onload = () => {
       const sel  = document.getElementById('groupSelect');
       const gSel = document.getElementById('scheduleGroupSelect');
       sel.innerHTML=''; gSel.innerHTML='';
+      gSel.add(new Option('전체','전체'));
       (groups||[]).forEach(g=>{ sel.add(new Option(g,g)); gSel.add(new Option(g,g)); });
       const lastGroup = localStorage.getItem('lastGroup');
       if (lastGroup && [...sel.options].some(o => o.value === lastGroup)) {

@@ -407,9 +407,10 @@ const API = (() => {
    * schedule 배열 순서: 월오/야/심, 화오/야/심, 수오/야/심, 목오/야/심, 금오/야/심, 토오전/오후
    */
   async function getGroupSchedule(groupName) {
-    const students = await _get(
-      `students?study_room=eq.${encodeURIComponent(groupName)}&order=class_num,student_num`
-    );
+    const query = groupName === '전체'
+      ? 'students?order=study_room,class_num,student_num'
+      : `students?study_room=eq.${encodeURIComponent(groupName)}&order=class_num,student_num`;
+    const students = await _get(query);
     const DAYS  = ['mon','tue','wed','thu','fri'];
     return students.map(s => {
       const sched = s.schedule ?? {};
