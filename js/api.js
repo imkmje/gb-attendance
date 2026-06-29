@@ -503,7 +503,25 @@ const API = (() => {
   }
 
   async function updateStudentSchedule(studentId, schedule) {
-    await _patch(`students?id=eq.${studentId}`, { schedule });
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/students?id=eq.${studentId}`, {
+      method: 'PATCH',
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=representation',
+      },
+      body: JSON.stringify({ schedule }),
+    });
+    if (!res.ok) { const msg = await res.text(); throw new Error(`저장 실패: ${msg}`); }
+    if (res.status !== 204) {
+      const rows = await res.json();
+      if (rows.length === 0) throw new Error('세션 저장 실패: Supabase students 테이블에 UPDATE 정책이 없습니다.\nSupabase 대시보드 → Table Editor → students → RLS 에서 anon UPDATE 정책을 추가하세요.');
+    }
+  }
+
+  async function deleteViolation(violationId) {
+    await _del(`violations?id=eq.${violationId}`);
   }
 
   async function updateViolationRecord(violationId, updates) {
@@ -604,6 +622,7 @@ const API = (() => {
     getStudentSchedule,
     updateStudentSchedule,
     updateViolationRecord,
+    deleteViolation,
     resetAttendanceByDate,
     getAllViolationsWithStudents,
     exportViolationsData,
