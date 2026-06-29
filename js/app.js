@@ -1250,6 +1250,10 @@ function _submitViolation() {
 ════════════════════════════════ */
 
 function handleTeacherMenuClick() {
+  if (localStorage.getItem('teacherPwEnabled') === 'false') {
+    _openTeacherMenu();
+    return;
+  }
   Swal.fire({
     title: '교사 메뉴',
     input: 'password',
@@ -1529,7 +1533,9 @@ function _renderAttEditor(student, records) {
       }
 
       try {
-        await API.updateAttendanceRecord(rid, { status: rec.status });
+        const updates = { status: rec.status };
+        if (!isAbs) { updates.reason = ''; updates.noCount = false; }
+        await API.updateAttendanceRecord(rid, updates);
         showSuccessToast('상태 변경됨', rec.status);
       } catch { _cdToast({ type:'red', title:'저장 실패' }); }
     }
@@ -1696,6 +1702,9 @@ function _renderScheduleEditor(student, rawSchedule) {
       await API.updateStudentSchedule(student.id, sched);
       close();
       showSuccessToast('세션 편성 저장됨', student.name);
+      _cache.stats = null;
+      _rosterLoaded = false;
+      if (loadedGroup) loadStudents(false, true);
     } catch {
       Swal.fire('오류', '저장하지 못했습니다.', 'error');
       saveBtn.disabled = false;
@@ -1996,6 +2005,17 @@ function _renderDevMenuSheet() {
 
     <div id="_holList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:24px;"></div>
 
+    <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;">🔐 교사 메뉴 보안</div>
+    <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px 14px;box-shadow:var(--sh-pressed);margin-bottom:24px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:700;color:var(--ink-2);">비밀번호 잠금</div>
+          <div style="font-size:11px;color:var(--ink-3);margin-top:2px;">OFF 시 기어 아이콘 탭으로 바로 진입</div>
+        </div>
+        <button id="_devPwToggle" onclick="_toggleTeacherPw()" style="padding:6px 16px;border-radius:var(--radius-pill);border:none;font-family:var(--font);font-size:13px;font-weight:800;cursor:pointer;min-width:52px;transition:background .2s,color .2s;"></button>
+      </div>
+    </div>
+
     <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;">🗑️ 출석 기록 초기화</div>
     <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px;box-shadow:var(--sh-pressed);">
       <div style="font-size:11px;color:var(--red,#ef4444);font-weight:600;margin-bottom:8px;">지정한 날짜의 모든 출석 기록이 삭제됩니다.</div>
@@ -2016,6 +2036,23 @@ function _renderDevMenuSheet() {
   sheet.querySelector('#_holDateInput').valueAsDate = new Date();
   sheet.querySelector('#_resetDateInput').valueAsDate = new Date();
   _renderHolidayList(sheet);
+  const pwBtn = sheet.querySelector('#_devPwToggle');
+  if (pwBtn) _applyTeacherPwBtn(pwBtn);
+}
+
+function _applyTeacherPwBtn(btn) {
+  const on = localStorage.getItem('teacherPwEnabled') !== 'false';
+  btn.textContent = on ? 'ON' : 'OFF';
+  btn.style.background = on ? 'var(--green,#22c55e)' : 'var(--red,#ef4444)';
+  btn.style.color = '#fff';
+}
+
+function _toggleTeacherPw() {
+  const on = localStorage.getItem('teacherPwEnabled') !== 'false';
+  localStorage.setItem('teacherPwEnabled', on ? 'false' : 'true');
+  const btn = document.getElementById('_devPwToggle');
+  if (btn) _applyTeacherPwBtn(btn);
+  showSuccessToast('교사 메뉴 잠금 ' + (!on ? 'ON' : 'OFF'));
 }
 
 function _renderHolidayList(sheet) {

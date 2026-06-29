@@ -83,13 +83,18 @@ const API = (() => {
   // ─── 결석 카운트 (GAS _calcAbsentCounts 동일 로직) ────────
   // records: [{record_date, session, status, no_count}]
   function _calcAbsentCounts(records) {
+    if (!records?.length) return 0;
     const byDate = {};
     for (const r of records) {
-      (byDate[r.record_date] ??= []).push(r);
+      const dateKey = String(r.record_date).slice(0, 10); // 'YYYY-MM-DD' 보장
+      (byDate[dateKey] ??= []).push(r);
     }
     let count = 0;
     for (const [date, recs] of Object.entries(byDate)) {
-      const isSat = new Date(date).getDay() === 6;
+      // 타임존 오류 방지: 날짜 문자열에서 직접 파싱
+      const parts = date.split('-');
+      const dayOfWeek = new Date(+parts[0], +parts[1] - 1, +parts[2]).getDay();
+      const isSat = dayOfWeek === 6;
       if (isSat) {
         for (const r of recs)
           if (r.status === '결석' && !r.no_count) count++;
