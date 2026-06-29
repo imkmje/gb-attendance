@@ -507,6 +507,31 @@ const API = (() => {
     if (!rows || rows.length === 0) throw new Error('업데이트 실패: 학생을 찾을 수 없습니다');
   }
 
+  async function getAllViolationsWithStudents() {
+    const [violations, students] = await Promise.all([
+      _get('violations?order=viol_date.desc'),
+      _get('students?select=id,class_num,student_num,name,study_room'),
+    ]);
+    const sMap = Object.fromEntries(students.map(s => [s.id, s]));
+    return violations.map(v => {
+      const s = sMap[v.student_id] || {};
+      return {
+        id:       v.id,
+        date:     v.viol_date,
+        violType: v.viol_type,
+        action:   v.action,
+        detail:   v.detail || '',
+        paid:     v.paid,
+        student: {
+          ban:   String(s.class_num  || ''),
+          num:   String(s.student_num || ''),
+          name:  s.name       || '알 수 없음',
+          group: s.study_room || '',
+        },
+      };
+    });
+  }
+
   async function exportAttendanceData() {
     const [students, attendance] = await Promise.all([
       _get('students?order=study_room,class_num,student_num'),
@@ -554,5 +579,6 @@ const API = (() => {
     getStudentSchedule,
     updateStudentSchedule,
     resetAttendanceByDate,
+    getAllViolationsWithStudents,
   };
 })();

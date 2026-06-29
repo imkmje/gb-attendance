@@ -1292,6 +1292,8 @@ function _openTeacherMenu() {
           title:'결석 카운트 수정', sub:'출석 기록 수정 및 결석 카운트를 조정합니다', fn:_teacherEditAttendance },
         { bg:'var(--green-dim)',  fg:'var(--green)', svg:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
           title:'자습 세션 변경',  sub:'학생별 자습 참가 세션(O/방과후/-)을 편집합니다', fn:_teacherEditSchedule },
+        { bg:'#fef3c7',          fg:'#d97706',      svg:'<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
+          title:'전체 벌금 현황',  sub:'전체 벌금 목록 조회 및 납부 상태를 수정합니다', fn:_teacherViewFines },
       ],
     },
     {
@@ -1721,10 +1723,15 @@ function _renderScheduleEditor(student, rawSchedule) {
       showSuccessToast('세션 편성 저장됨', student.name);
       _cache.stats = null;
       _rosterLoaded = false;
-      // 출석체크 탭 갱신
-      loadStudents(false, true);
-      // 시간표 탭 갱신 (이미 탭이 열려 있어도 반영)
+      // 시간표 탭: 편집한 학생 그룹으로 선택 전환 후 즉시 갱신
+      const schedSel = document.getElementById('scheduleGroupSelect');
+      if (schedSel) schedSel.value = student.group;
       updateGroupScheduleView();
+      // 출석체크 탭: 현재 선택 그룹이 같으면 갱신
+      const homeSel = document.getElementById('groupSelect');
+      if (homeSel && homeSel.value === student.group) {
+        loadStudents(false, true);
+      }
     } catch (err) {
       Swal.fire('오류', err?.message || '저장하지 못했습니다.', 'error');
       saveBtn.disabled = false;
@@ -1945,6 +1952,170 @@ function _teacherExportCSV() {
       showSuccessToast('CSV 다운로드 완료', `${rows.length}개 기록`);
     })
     .catch(() => { hideLoading(); Swal.fire('오류', '데이터를 불러오지 못했습니다.', 'error'); });
+}
+
+// ── 7. 전체 벌금 현황 ─────────────────────────────────
+function _teacherViewFines() {
+  showLoading('벌금 현황 불러오는 중...');
+  API.getAllViolationsWithStudents()
+    .then(all => {
+      hideLoading();
+      const fines = all.filter(v => _parseFine(v.action) > 0);
+      _renderFineSheet(fines);
+    })
+    .catch(() => { hideLoading(); Swal.fire('오류', '벌금 현황을 불러오지 못했습니다.', 'error'); });
+}
+
+function _renderFineSheet(fines) {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'custom-sheet-backdrop';
+  backdrop.style.zIndex = '3100';
+  const sheet = document.createElement('div');
+  sheet.className = 'custom-sheet';
+  sheet.style.cssText = 'max-height:92dvh;display:flex;flex-direction:column;padding-bottom:20px;';
+
+  const fmt = n => n.toLocaleString('ko-KR') + '원';
+  let filterState = 'all';
+
+  const calcSummary = () => {
+    const total  = fines.reduce((s, v) => s + _parseFine(v.action), 0);
+    const paid   = fines.filter(v => v.paid).reduce((s, v) => s + _parseFine(v.action), 0);
+    return { total, paid, unpaid: total - paid };
+  };
+
+  sheet.innerHTML = `
+    <div class="custom-sheet-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <div style="font-size:15px;font-weight:800;color:var(--ink);letter-spacing:-0.4px;">전체 벌금 현황</div>
+      <button id="_fshClose" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--sh-xs);">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <!-- 요약 바 -->
+    <div style="display:flex;gap:6px;margin-bottom:12px;">
+      <div style="flex:1;background:var(--bg-deep);border-radius:var(--radius-sm);padding:10px 8px;text-align:center;">
+        <div style="font-size:10px;font-weight:700;color:var(--ink-3);margin-bottom:3px;">총 부과</div>
+        <div id="_fshTotal" style="font-size:13px;font-weight:800;color:var(--ink);"></div>
+      </div>
+      <div style="flex:1;background:var(--green-dim);border-radius:var(--radius-sm);padding:10px 8px;text-align:center;">
+        <div style="font-size:10px;font-weight:700;color:var(--ink-3);margin-bottom:3px;">납부</div>
+        <div id="_fshPaid" style="font-size:13px;font-weight:800;color:var(--green);"></div>
+      </div>
+      <div style="flex:1;background:var(--red-dim);border-radius:var(--radius-sm);padding:10px 8px;text-align:center;">
+        <div style="font-size:10px;font-weight:700;color:var(--ink-3);margin-bottom:3px;">미납</div>
+        <div id="_fshUnpaid" style="font-size:13px;font-weight:800;color:var(--red);"></div>
+      </div>
+    </div>
+    <!-- 필터 탭 -->
+    <div style="display:flex;gap:6px;margin-bottom:12px;">
+      <button id="_fshTabAll"    style="flex:1;padding:7px;border-radius:var(--radius-pill);border:none;font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer;background:var(--blue);color:#fff;">전체</button>
+      <button id="_fshTabUnpaid" style="flex:1;padding:7px;border-radius:var(--radius-pill);border:none;font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer;background:var(--bg-deep);color:var(--ink-3);">미납만</button>
+    </div>
+    <!-- 목록 -->
+    <div id="_fshList" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:8px;"></div>`;
+
+  backdrop.appendChild(sheet);
+  document.body.appendChild(backdrop);
+  requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
+
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+  sheet.querySelector('#_fshClose').addEventListener('click', close);
+
+  const refreshSummary = () => {
+    const { total, paid, unpaid } = calcSummary();
+    sheet.querySelector('#_fshTotal').textContent  = fmt(total);
+    sheet.querySelector('#_fshPaid').textContent   = fmt(paid);
+    sheet.querySelector('#_fshUnpaid').textContent = fmt(unpaid);
+  };
+
+  const renderList = () => {
+    const list = sheet.querySelector('#_fshList');
+    const visible = filterState === 'unpaid' ? fines.filter(v => !v.paid) : fines;
+
+    if (!visible.length) {
+      list.innerHTML = `<div style="text-align:center;padding:32px;color:var(--ink-3);font-size:13px;font-weight:600;">${filterState === 'unpaid' ? '미납 벌금이 없습니다 🎉' : '벌금 기록이 없습니다.'}</div>`;
+      return;
+    }
+
+    // 자습반별 그룹
+    const byGroup = {};
+    for (const v of visible) {
+      const g = v.student.group || '기타';
+      (byGroup[g] ??= []).push(v);
+    }
+
+    let html = '';
+    for (const [group, vs] of Object.entries(byGroup)) {
+      html += `<div style="font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--ink-4);padding:6px 2px 4px;">${group}</div>`;
+      for (const v of vs) {
+        const fine = _parseFine(v.action);
+        const isPaid = v.paid;
+        html += `<div class="_fsh-row" data-vid="${v.id}"
+          style="background:var(--surface);border-radius:var(--radius-sm);box-shadow:var(--sh-sm);padding:12px 14px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
+            <span style="font-size:13px;font-weight:700;color:var(--ink);">${v.student.name}</span>
+            <span style="font-size:11px;color:var(--ink-3);">${v.student.ban}반 ${v.student.num}번</span>
+            <span style="margin-left:auto;font-size:11px;color:var(--ink-4);">${v.date}</span>
+          </div>
+          <div style="font-size:11px;color:var(--ink-3);margin-bottom:8px;">${v.violType}${v.detail ? ' · ' + v.detail : ''}</div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span class="_fsh-amt" style="font-size:14px;font-weight:800;color:${isPaid ? 'var(--ink-3)' : 'var(--red)'};">${fmt(fine)}</span>
+            <div style="margin-left:auto;display:flex;border-radius:var(--radius-pill);overflow:hidden;border:1.5px solid var(--bg-deep);">
+              <button class="_fsh-u" style="padding:4px 14px;border:none;font-family:var(--font);font-size:11px;font-weight:700;cursor:pointer;background:${!isPaid ? 'var(--red)' : 'var(--surface)'};color:${!isPaid ? '#fff' : 'var(--ink-3)'};">미납</button>
+              <button class="_fsh-p" style="padding:4px 14px;border:none;font-family:var(--font);font-size:11px;font-weight:700;cursor:pointer;background:${isPaid ? 'var(--green)' : 'var(--surface)'};color:${isPaid ? '#fff' : 'var(--ink-3)'};">납부</button>
+            </div>
+          </div>
+        </div>`;
+      }
+    }
+    list.innerHTML = html;
+
+    list.querySelectorAll('._fsh-row').forEach(row => {
+      const vid  = row.dataset.vid;
+      const viol = fines.find(v => v.id === vid);
+      if (!viol) return;
+
+      const applyState = () => {
+        const uBtn = row.querySelector('._fsh-u');
+        const pBtn = row.querySelector('._fsh-p');
+        const amtEl = row.querySelector('._fsh-amt');
+        if (uBtn) { uBtn.style.background = !viol.paid ? 'var(--red)' : 'var(--surface)'; uBtn.style.color = !viol.paid ? '#fff' : 'var(--ink-3)'; }
+        if (pBtn) { pBtn.style.background = viol.paid  ? 'var(--green)' : 'var(--surface)'; pBtn.style.color = viol.paid  ? '#fff' : 'var(--ink-3)'; }
+        if (amtEl) amtEl.style.color = viol.paid ? 'var(--ink-3)' : 'var(--red)';
+        refreshSummary();
+      };
+
+      row.querySelector('._fsh-u').addEventListener('click', () => {
+        if (!viol.paid) return;
+        viol.paid = false; applyState();
+        API.updateViolationPayment(vid, false).catch(() => _cdToast({ type:'red', title:'저장 실패' }));
+      });
+      row.querySelector('._fsh-p').addEventListener('click', () => {
+        if (viol.paid) return;
+        viol.paid = true; applyState();
+        API.updateViolationPayment(vid, true).catch(() => _cdToast({ type:'red', title:'저장 실패' }));
+        if (filterState === 'unpaid') {
+          row.style.transition = 'opacity .3s';
+          row.style.opacity = '0.3';
+          setTimeout(() => row.remove(), 320);
+        }
+      });
+    });
+  };
+
+  // 필터 버튼
+  const switchFilter = (state) => {
+    filterState = state;
+    sheet.querySelector('#_fshTabAll').style.cssText    += `;background:${state==='all'    ? 'var(--blue)' : 'var(--bg-deep)'};color:${state==='all'    ? '#fff' : 'var(--ink-3)'}`;
+    sheet.querySelector('#_fshTabUnpaid').style.cssText += `;background:${state==='unpaid' ? 'var(--red)'  : 'var(--bg-deep)'};color:${state==='unpaid' ? '#fff' : 'var(--ink-3)'}`;
+    renderList();
+  };
+  sheet.querySelector('#_fshTabAll').addEventListener('click',    () => switchFilter('all'));
+  sheet.querySelector('#_fshTabUnpaid').addEventListener('click', () => switchFilter('unpaid'));
+
+  refreshSummary();
+  renderList();
 }
 
 /* ════════════════════════════════
