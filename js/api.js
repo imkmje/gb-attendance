@@ -142,7 +142,7 @@ const API = (() => {
 
     const [students, attendance] = await Promise.all([
       _get(`students?study_room=eq.${encodeURIComponent(groupName)}&order=class_num,student_num`),
-      _get(`attendance?record_date=eq.${date}&session=eq.${encodeURIComponent(sessionName)}&select=student_id,status,reason,no_count,checker,early_leave_mins`),
+      _get(`attendance?record_date=eq.${date}&session=eq.${encodeURIComponent(sessionName)}&select=student_id,status,reason,no_count,checker,early_leave_mins,late_mins`),
     ]);
 
     const attMap = Object.fromEntries(attendance.map(a => [a.student_id, a]));
@@ -190,6 +190,7 @@ const API = (() => {
           absentCount:   absentCountMap[s.id] ?? 0,
           earlyLeaveMins: savedEarly ?? recurringEarly ?? 0,
           isRecurring:    recurringEarly != null,
+          lateMins:       att?.late_mins ?? 0,
         };
       });
 
@@ -252,6 +253,7 @@ const API = (() => {
       no_count:         s.noCount || false,
       checker:          checkerName || '',
       early_leave_mins: s.earlyLeaveMins || 0,
+      late_mins:        s.lateMins || 0,
     }));
 
     await _post('attendance', rows);
@@ -383,7 +385,7 @@ const API = (() => {
   async function calculateStats() {
     const [students, attendance] = await Promise.all([
       _get('students?order=study_room,class_num,student_num'),
-      _get('attendance?select=student_id,session,status,record_date,no_count,early_leave_mins'),
+      _get('attendance?select=student_id,session,status,record_date,no_count,early_leave_mins,late_mins'),
     ]);
 
     const attByStudent = {};
@@ -397,7 +399,7 @@ const API = (() => {
       for (const r of recs) {
         if (r.status === '출석') {
           const weight    = SESSION_WEIGHTS[r.session] ?? 0;
-          const deduction = (r.early_leave_mins ?? 0) / 60;
+          const deduction = ((r.early_leave_mins ?? 0) + (r.late_mins ?? 0)) / 60;
           total       += Math.max(0, weight - deduction);
           attendCount += 1;
         }
@@ -475,6 +477,7 @@ const API = (() => {
       noCount:       r.no_count,
       checker:       r.checker || '',
       earlyLeaveMins: r.early_leave_mins ?? 0,
+      lateMins:       r.late_mins ?? 0,
     }));
   }
 

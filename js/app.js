@@ -350,12 +350,14 @@ function renderStudents() {
     return updateDashboard();
   }
   const _clockSvg='<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
+  const _lateSvg ='<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>';
   container.innerHTML=currentStudents.map((s,idx)=>{
     const absentBadge=s.absentCount>0?`<span class="absent-count-badge">결석 ${s.absentCount}회</span>`:'';
     const isAbsent=(s.status==='결석');
     const elm=s.earlyLeaveMins||0;
     const elRec=s.isRecurring||false;
     const elPanelShow=elm>0;
+    const ltm=s.lateMins||0;
     return `<div class="student-card ${isAbsent?'absent':'present'}"
            onpointerdown="startPress(${idx},event)" onpointerup="endPress(${idx},event)"
            onpointermove="handlePointerMove(event)" onpointercancel="cancelPress()">
@@ -387,9 +389,12 @@ function renderStudents() {
         </div>
         <div class="early-leave-drop" onclick="event.stopPropagation()" onpointerdown="event.stopPropagation()" onpointerup="event.stopPropagation()">
           <div class="early-leave-overflow"><div class="early-leave-inner">
-            <div>
+            <div style="display:flex;gap:7px;flex-wrap:wrap;">
               <button class="el-chip${elm>0?' active':''}" id="el-chip-${idx}" onclick="toggleEarlyLeavePanel(${idx})">
                 ${_clockSvg} <span id="el-chip-lbl-${idx}">${elm>0?elm+'분 조기 퇴실':'조기 퇴실'}</span>
+              </button>
+              <button class="el-chip late-chip${ltm>0?' active':''}" id="late-chip-${idx}" onclick="toggleLatePanel(${idx})">
+                ${_lateSvg} <span id="late-chip-lbl-${idx}">${ltm>0?ltm+'분 지각':'지각'}</span>
               </button>
             </div>
             <div class="el-panel${elPanelShow?' show':''}" id="el-panel-${idx}">
@@ -409,6 +414,23 @@ function renderStudents() {
                   </button>
                   <span class="nocount-label${elRec?' on':''}" id="el-rec-lbl-${idx}">매주 반복</span>
                 </div>
+              </div></div>
+            </div>
+            <div class="el-panel${ltm>0?' show':''}" id="late-panel-${idx}">
+              <div class="el-panel-overflow"><div class="el-panel-inner">
+                <div class="el-presets">
+                  ${[5,10,15,30].map(m=>`<button class="el-preset${ltm===m?' active':''}" onclick="setLate(${idx},${m})">${m}분</button>`).join('')}
+                </div>
+                <div class="el-input-row">
+                  <input type="number" inputmode="numeric" class="el-mins-input" id="late-mins-${idx}"
+                    value="${ltm||''}" min="1" max="120" placeholder="직접 입력"
+                    oninput="changeLateMins(${idx},this.value)">
+                  <span class="el-mins-unit">분 지각</span>
+                </div>
+                <button class="el-fine-btn" id="late-fine-btn-${idx}" onclick="openLateViolSheet(${idx})" style="${ltm>0?'':'display:none'}">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-4 0v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  벌금 등록
+                </button>
               </div></div>
             </div>
           </div></div>
@@ -461,8 +483,8 @@ function toggleStatus(idx,card,clientX,clientY) {
     const rt=card.querySelector('.reason-text');
     if(rt)rt.remove();
   } else {
-    // 결석으로 전환: 조기 퇴실 초기화
-    s.earlyLeaveMins=0; s.isRecurring=false;
+    // 결석으로 전환: 조기 퇴실·지각 초기화
+    s.earlyLeaveMins=0; s.isRecurring=false; s.lateMins=0;
   }
   const isNowAbsent=(s.status==='결석');
   const rect=card.getBoundingClientRect();
@@ -530,6 +552,45 @@ function changeEarlyLeaveMins(idx, val) {
   if (panel) panel.querySelectorAll('.el-preset').forEach(b => b.classList.toggle('active', parseInt(b.textContent) === mins));
   _updateEarlyLeaveChip(idx, mins);
 }
+function toggleLatePanel(idx) {
+  const panel = document.getElementById(`late-panel-${idx}`);
+  if (panel) panel.classList.toggle('show');
+}
+function _updateLateChip(idx, mins) {
+  const chip = document.getElementById(`late-chip-${idx}`);
+  const lbl  = document.getElementById(`late-chip-lbl-${idx}`);
+  if (!chip) return;
+  chip.classList.toggle('active', mins > 0);
+  if (lbl) lbl.textContent = mins > 0 ? `${mins}분 지각` : '지각';
+  const fineBtn = document.getElementById(`late-fine-btn-${idx}`);
+  if (fineBtn) fineBtn.style.display = mins > 0 ? '' : 'none';
+}
+function setLate(idx, mins) {
+  const s = currentStudents[idx]; if (!s) return;
+  s.lateMins = s.lateMins === mins ? 0 : mins;
+  hasUnsavedChanges = true;
+  const panel = document.getElementById(`late-panel-${idx}`);
+  if (panel) panel.querySelectorAll('.el-preset').forEach(b => b.classList.toggle('active', parseInt(b.textContent) === s.lateMins));
+  const inp = document.getElementById(`late-mins-${idx}`);
+  if (inp) inp.value = s.lateMins || '';
+  _updateLateChip(idx, s.lateMins);
+}
+function changeLateMins(idx, val) {
+  const s = currentStudents[idx]; if (!s) return;
+  const mins = Math.max(0, parseInt(val) || 0);
+  s.lateMins = mins;
+  hasUnsavedChanges = true;
+  const panel = document.getElementById(`late-panel-${idx}`);
+  if (panel) panel.querySelectorAll('.el-preset').forEach(b => b.classList.toggle('active', parseInt(b.textContent) === mins));
+  _updateLateChip(idx, mins);
+}
+function openLateViolSheet(idx) {
+  const s = currentStudents[idx]; if (!s) return;
+  const target = { id: s.id, ban: s.ban, num: s.num, name: s.name, group: loadedGroup };
+  _violTarget = target;
+  openViolSheet(target, { violType: '무단 지각' });
+}
+
 async function toggleRecurringLeave(idx) {
   const s = currentStudents[idx]; if (!s) return;
   if (!s.isRecurring && !(s.earlyLeaveMins > 0)) {
@@ -1294,7 +1355,7 @@ function _openStudentPickerSheet(students) {
 /* ════════════════════════════════
    규정 위반 등록 Bottom Sheet
 ════════════════════════════════ */
-function openViolSheet(student) {
+function openViolSheet(student, preselect = {}) {
   const backdrop = document.createElement('div'); backdrop.className = 'custom-sheet-backdrop';
   const sheet    = document.createElement('div'); sheet.className    = 'custom-sheet';
   sheet.style.paddingBottom = '40px';
@@ -1356,6 +1417,10 @@ function openViolSheet(student) {
   requestAnimationFrame(()=>requestAnimationFrame(()=>backdrop.classList.add('show')));
   backdrop.addEventListener('click', e=>{ if(e.target===backdrop){ backdrop.classList.remove('show'); setTimeout(()=>backdrop.remove(),350); } });
   window._violBackdrop = backdrop;
+  if (preselect.violType) {
+    const sel = sheet.querySelector('#_vType');
+    if (sel) { sel.value = preselect.violType; _onViolTypeChange(sel); }
+  }
 }
 
 function _onViolTypeChange(sel) {
