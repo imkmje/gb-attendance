@@ -349,9 +349,13 @@ function renderStudents() {
     container.innerHTML='<div class="col-12 text-center py-5" style="color:var(--ink-3);font-weight:600;">해당 조건에 학생이 없습니다.</div>';
     return updateDashboard();
   }
+  const _clockSvg='<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
   container.innerHTML=currentStudents.map((s,idx)=>{
     const absentBadge=s.absentCount>0?`<span class="absent-count-badge">결석 ${s.absentCount}회</span>`:'';
     const isAbsent=(s.status==='결석');
+    const elm=s.earlyLeaveMins||0;
+    const elRec=s.isRecurring||false;
+    const elPanelShow=elm>0;
     return `<div class="student-card ${isAbsent?'absent':'present'}"
            onpointerdown="startPress(${idx},event)" onpointerup="endPress(${idx},event)"
            onpointermove="handlePointerMove(event)" onpointercancel="cancelPress()">
@@ -378,6 +382,34 @@ function renderStudents() {
                 <div class="nocount-sw-thumb"></div>
               </button>
               <span class="nocount-label${s.noCount?' on':''}" id="nocount-lbl-${idx}">노카운트 <span style="font-weight:500;opacity:0.7;">(결석 횟수 미산입)</span></span>
+            </div>
+          </div></div>
+        </div>
+        <div class="early-leave-drop" onclick="event.stopPropagation()" onpointerdown="event.stopPropagation()" onpointerup="event.stopPropagation()">
+          <div class="early-leave-overflow"><div class="early-leave-inner">
+            <div>
+              <button class="el-chip${elm>0?' active':''}" id="el-chip-${idx}" onclick="toggleEarlyLeavePanel(${idx})">
+                ${_clockSvg} <span id="el-chip-lbl-${idx}">${elm>0?elm+'분 조기 퇴실':'조기 퇴실'}</span>
+              </button>
+            </div>
+            <div class="el-panel${elPanelShow?' show':''}" id="el-panel-${idx}">
+              <div class="el-panel-overflow"><div class="el-panel-inner">
+                <div class="el-presets">
+                  ${[15,30,45,60].map(m=>`<button class="el-preset${elm===m?' active':''}" onclick="setEarlyLeave(${idx},${m})">${m}분</button>`).join('')}
+                </div>
+                <div class="el-input-row">
+                  <input type="number" inputmode="numeric" class="el-mins-input" id="el-mins-${idx}"
+                    value="${elm||''}" min="1" max="180" placeholder="직접 입력"
+                    oninput="changeEarlyLeaveMins(${idx},this.value)">
+                  <span class="el-mins-unit">분 일찍 퇴실</span>
+                </div>
+                <div class="nocount-row el-recurring-row" onclick="event.stopPropagation()" onpointerdown="event.stopPropagation()" onpointerup="event.stopPropagation()">
+                  <button class="nocount-sw${elRec?' on':''}" id="el-rec-${idx}" onclick="toggleRecurringLeave(${idx},this)">
+                    <div class="nocount-sw-thumb"></div>
+                  </button>
+                  <span class="nocount-label${elRec?' on':''}" id="el-rec-lbl-${idx}">매주 반복</span>
+                </div>
+              </div></div>
             </div>
           </div></div>
         </div>
@@ -428,6 +460,9 @@ function toggleStatus(idx,card,clientX,clientY) {
     // DOM에서 ⚠ 사유 경고 텍스트 즉시 제거
     const rt=card.querySelector('.reason-text');
     if(rt)rt.remove();
+  } else {
+    // 결석으로 전환: 조기 퇴실 초기화
+    s.earlyLeaveMins=0; s.isRecurring=false;
   }
   const isNowAbsent=(s.status==='결석');
   const rect=card.getBoundingClientRect();
@@ -456,6 +491,72 @@ function toggleNoCount(idx, btn) {
   const lbl = document.getElementById('nocount-lbl-' + idx);
   if (lbl) lbl.classList.toggle('on', s.noCount);
   hasUnsavedChanges = true;
+}
+
+/* ════════════════════════════════
+   조기 퇴실
+════════════════════════════════ */
+function _getDayOfWeekNum(dateStr) {
+  const p = dateStr.split('-');
+  return new Date(+p[0], +p[1]-1, +p[2]).getDay();
+}
+function _updateEarlyLeaveChip(idx, mins) {
+  const chip = document.getElementById(`el-chip-${idx}`);
+  const lbl  = document.getElementById(`el-chip-lbl-${idx}`);
+  if (!chip) return;
+  chip.classList.toggle('active', mins > 0);
+  if (lbl) lbl.textContent = mins > 0 ? `${mins}분 조기 퇴실` : '조기 퇴실';
+}
+function toggleEarlyLeavePanel(idx) {
+  const panel = document.getElementById(`el-panel-${idx}`);
+  if (panel) panel.classList.toggle('show');
+}
+function setEarlyLeave(idx, mins) {
+  const s = currentStudents[idx]; if (!s) return;
+  s.earlyLeaveMins = s.earlyLeaveMins === mins ? 0 : mins;
+  hasUnsavedChanges = true;
+  const panel = document.getElementById(`el-panel-${idx}`);
+  if (panel) panel.querySelectorAll('.el-preset').forEach(b => b.classList.toggle('active', parseInt(b.textContent) === s.earlyLeaveMins));
+  const inp = document.getElementById(`el-mins-${idx}`);
+  if (inp) inp.value = s.earlyLeaveMins || '';
+  _updateEarlyLeaveChip(idx, s.earlyLeaveMins);
+}
+function changeEarlyLeaveMins(idx, val) {
+  const s = currentStudents[idx]; if (!s) return;
+  const mins = Math.max(0, parseInt(val) || 0);
+  s.earlyLeaveMins = mins;
+  hasUnsavedChanges = true;
+  const panel = document.getElementById(`el-panel-${idx}`);
+  if (panel) panel.querySelectorAll('.el-preset').forEach(b => b.classList.toggle('active', parseInt(b.textContent) === mins));
+  _updateEarlyLeaveChip(idx, mins);
+}
+async function toggleRecurringLeave(idx) {
+  const s = currentStudents[idx]; if (!s) return;
+  if (!s.isRecurring && !(s.earlyLeaveMins > 0)) {
+    const el = _cdToast({ type:'amber', title:'먼저 조기 퇴실 시간을 설정하세요', sub:'' });
+    setTimeout(()=>{ el.classList.add('out'); setTimeout(()=>el.remove(),280); }, 2000);
+    return;
+  }
+  s.isRecurring = !s.isRecurring;
+  const swBtn = document.getElementById(`el-rec-${idx}`);
+  const lbl   = document.getElementById(`el-rec-lbl-${idx}`);
+  if (swBtn) swBtn.classList.toggle('on', s.isRecurring);
+  if (lbl)   lbl.classList.toggle('on', s.isRecurring);
+  const dayOfWeek = _getDayOfWeekNum(loadedDate);
+  try {
+    if (s.isRecurring) {
+      await API.upsertRecurringEarlyLeave(s.id, dayOfWeek, loadedSessionText, s.earlyLeaveMins);
+      showSuccessToast('매주 반복 설정됨', `${s.name} · ${s.earlyLeaveMins}분`);
+    } else {
+      await API.deleteRecurringEarlyLeave(s.id, dayOfWeek, loadedSessionText);
+      showSuccessToast('반복 해제됨', s.name);
+    }
+  } catch {
+    s.isRecurring = !s.isRecurring;
+    if (swBtn) swBtn.classList.toggle('on', s.isRecurring);
+    if (lbl)   lbl.classList.toggle('on', s.isRecurring);
+    _cdToast({ type:'red', title:'저장 실패', sub:'다시 시도해 주세요' });
+  }
 }
 
 /* ════════════════════════════════

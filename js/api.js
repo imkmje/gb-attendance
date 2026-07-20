@@ -137,26 +137,33 @@ const API = (() => {
    */
   async function getStudentList(groupName, sessionName, date, _colIdx, includeAfterSchool = true) {
     const [dayKey, sessIdx] = _schedKey(sessionName, date);
+    const parts = date.split('-');
+    const dayOfWeek = new Date(+parts[0], +parts[1]-1, +parts[2]).getDay(); // 0=일, 6=토
 
     const [students, attendance] = await Promise.all([
       _get(`students?study_room=eq.${encodeURIComponent(groupName)}&order=class_num,student_num`),
-      _get(`attendance?record_date=eq.${date}&session=eq.${encodeURIComponent(sessionName)}&select=student_id,status,reason,no_count,checker`),
+      _get(`attendance?record_date=eq.${date}&session=eq.${encodeURIComponent(sessionName)}&select=student_id,status,reason,no_count,checker,early_leave_mins`),
     ]);
 
     const attMap = Object.fromEntries(attendance.map(a => [a.student_id, a]));
     const isAlreadySaved = attendance.length > 0;
 
-    // 결석 횟수: 이 자습반 학생 전체 출석기록 조회
+    // 결석 횟수 + 조기퇴실 반복규칙
     const studentIds = students.map(s => s.id);
     let absentCountMap = {};
+    let recurringMap = {};
     if (studentIds.length > 0) {
-      const allAtt = await _get(
-        `attendance?student_id=in.(${studentIds.join(',')})&select=student_id,record_date,session,status,no_count`
-      );
+      const idList = studentIds.join(',');
+      const [allAtt, recurringRules] = await Promise.all([
+        _get(`attendance?student_id=in.(${idList})&select=student_id,record_date,session,status,no_count`),
+        _get(`recurring_early_leave?day_of_week=eq.${dayOfWeek}&session=eq.${encodeURIComponent(sessionName)}&student_id=in.(${idList})&select=student_id,early_leave_mins`)
+          .catch(() => []),
+      ]);
       for (const s of students) {
         const recs = allAtt.filter(a => a.student_id === s.id);
         absentCountMap[s.id] = _calcAbsentCounts(recs);
       }
+      recurringMap = Object.fromEntries(recurringRules.map(r => [r.student_id, r.early_leave_mins]));
     }
 
     const list = students
@@ -169,16 +176,20 @@ const API = (() => {
       .map(s => {
         const val = s.schedule?.[dayKey]?.[sessIdx];
         const att = attMap[s.id];
+        const savedEarly   = att?.early_leave_mins ?? null;
+        const recurringEarly = recurringMap[s.id] ?? null;
         return {
-          id:          s.id,
-          ban:         String(s.class_num),
-          num:         String(s.student_num),
-          name:        s.name,
-          isTarget:    val === 'O' || val === '방과후',
-          status:      att?.status ?? '출석',
-          reason:      att?.reason ?? '',
-          noCount:     att?.no_count ?? false,
-          absentCount: absentCountMap[s.id] ?? 0,
+          id:            s.id,
+          ban:           String(s.class_num),
+          num:           String(s.student_num),
+          name:          s.name,
+          isTarget:      val === 'O' || val === '방과후',
+          status:        att?.status ?? '출석',
+          reason:        att?.reason ?? '',
+          noCount:       att?.no_count ?? false,
+          absentCount:   absentCountMap[s.id] ?? 0,
+          earlyLeaveMins: savedEarly ?? recurringEarly ?? 0,
+          isRecurring:    recurringEarly != null,
         };
       });
 
@@ -233,13 +244,14 @@ const API = (() => {
     }
 
     const rows = students.map(s => ({
-      student_id:  s.student_id,
-      record_date: date,
-      session:     sessionName,
-      status:      s.type,
-      reason:      s.reason || '',
-      no_count:    s.noCount || false,
-      checker:     checkerName || '',
+      student_id:       s.student_id,
+      record_date:      date,
+      session:          sessionName,
+      status:           s.type,
+      reason:           s.reason || '',
+      no_count:         s.noCount || false,
+      checker:          checkerName || '',
+      early_leave_mins: s.earlyLeaveMins || 0,
     }));
 
     await _post('attendance', rows);
@@ -371,7 +383,7 @@ const API = (() => {
   async function calculateStats() {
     const [students, attendance] = await Promise.all([
       _get('students?order=study_room,class_num,student_num'),
-      _get('attendance?select=student_id,session,status,record_date,no_count'),
+      _get('attendance?select=student_id,session,status,record_date,no_count,early_leave_mins'),
     ]);
 
     const attByStudent = {};
@@ -384,7 +396,9 @@ const API = (() => {
       let attendCount = 0;
       for (const r of recs) {
         if (r.status === '출석') {
-          total       += SESSION_WEIGHTS[r.session] ?? 0;
+          const weight    = SESSION_WEIGHTS[r.session] ?? 0;
+          const deduction = (r.early_leave_mins ?? 0) / 60;
+          total       += Math.max(0, weight - deduction);
           attendCount += 1;
         }
       }
@@ -453,14 +467,26 @@ const API = (() => {
   async function getStudentAttendanceFull(studentId) {
     const rows = await _get(`attendance?student_id=eq.${studentId}&order=record_date.desc,session.desc`);
     return rows.map(r => ({
-      id:      r.id,
-      date:    r.record_date,
-      session: r.session,
-      status:  r.status,
-      reason:  r.reason || '',
-      noCount: r.no_count,
-      checker: r.checker || '',
+      id:            r.id,
+      date:          r.record_date,
+      session:       r.session,
+      status:        r.status,
+      reason:        r.reason || '',
+      noCount:       r.no_count,
+      checker:       r.checker || '',
+      earlyLeaveMins: r.early_leave_mins ?? 0,
     }));
+  }
+
+  async function upsertRecurringEarlyLeave(studentId, dayOfWeek, session, earlyLeaveMins) {
+    await _req('POST', 'recurring_early_leave',
+      { student_id: studentId, day_of_week: dayOfWeek, session, early_leave_mins: earlyLeaveMins },
+      { Prefer: 'resolution=merge-duplicates,return=minimal' }
+    );
+  }
+
+  async function deleteRecurringEarlyLeave(studentId, dayOfWeek, session) {
+    await _del(`recurring_early_leave?student_id=eq.${studentId}&day_of_week=eq.${dayOfWeek}&session=eq.${encodeURIComponent(session)}`);
   }
 
   async function updateAttendanceRecord(recordId, updates) {
@@ -669,6 +695,8 @@ const API = (() => {
     getGroupSchedule,
     buildAbsentReport,
     getStudentAttendanceFull,
+    upsertRecurringEarlyLeave,
+    deleteRecurringEarlyLeave,
     updateAttendanceRecord,
     deleteAttendanceRecord,
     addStudent,

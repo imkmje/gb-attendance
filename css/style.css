@@ -535,6 +535,26 @@ html[data-theme="dark"] .viol-select { background-image:url("data:image/svg+xml,
 .roster-fab-tip { position:absolute; right:62px; top:50%; transform:translateY(-50%); background:var(--ink); color:var(--surface); font-size:11px; font-weight:700; padding:5px 10px; border-radius:var(--radius-sm); white-space:nowrap; pointer-events:none; opacity:0; transition:opacity var(--dur-fast) var(--ease); }
 .roster-fab:hover .roster-fab-tip { opacity:1; }
 
+/* ── 조기 퇴실 ──────────────────────────── */
+.early-leave-drop { display:grid; grid-template-rows:0fr; opacity:0; transition:grid-template-rows 300ms cubic-bezier(0.4,0,0.2,1),opacity 180ms var(--ease); }
+.early-leave-overflow { overflow:hidden; }
+.student-card.present .early-leave-drop { grid-template-rows:1fr; opacity:1; transition:grid-template-rows 420ms var(--ease),opacity 240ms var(--ease) 60ms; }
+.early-leave-inner { padding-top:10px; margin-top:10px; border-top:1px dashed rgba(114,184,150,0.28); display:flex; flex-direction:column; gap:8px; }
+.el-chip { display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:var(--radius-pill);border:none;cursor:pointer;font-family:var(--font);font-size:11px;font-weight:700;background:var(--bg-deep);color:var(--ink-3);transition:all var(--dur-fast) var(--ease);-webkit-tap-highlight-color:transparent; }
+.el-chip.active { background:var(--amber-dim);color:var(--amber); }
+.el-panel { display:grid;grid-template-rows:0fr;opacity:0;transition:grid-template-rows 280ms var(--ease),opacity 180ms var(--ease); }
+.el-panel.show { grid-template-rows:1fr;opacity:1; }
+.el-panel-overflow { overflow:hidden; }
+.el-panel-inner { padding-top:8px;display:flex;flex-direction:column;gap:7px; }
+.el-presets { display:flex;gap:5px; }
+.el-preset { flex:1;padding:7px 4px;border-radius:var(--radius-sm);border:none;cursor:pointer;font-family:var(--font);font-size:12px;font-weight:700;background:var(--bg-deep);color:var(--ink-3);transition:all var(--dur-fast) var(--ease);-webkit-tap-highlight-color:transparent; }
+.el-preset.active { background:var(--amber-dim);color:var(--amber); }
+.el-input-row { display:flex;align-items:center;gap:8px; }
+.el-mins-input { flex:1;padding:7px 12px;border-radius:var(--radius-pill);border:1.5px solid var(--bg-deep);background:var(--bg-deep);font-family:var(--font);font-size:13px;font-weight:700;color:var(--ink-2);outline:none;-moz-appearance:textfield; }
+.el-mins-input::-webkit-outer-spin-button,.el-mins-input::-webkit-inner-spin-button { -webkit-appearance:none;margin:0; }
+.el-mins-unit { font-size:11px;font-weight:700;color:var(--ink-3);white-space:nowrap; }
+.el-recurring-row { display:flex;align-items:center;gap:8px; }
+
 @media print {
   @page { size:A4 landscape; margin:10mm; }
   body * { visibility:hidden; }
