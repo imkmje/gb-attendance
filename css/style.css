@@ -105,6 +105,11 @@ html[data-theme="dark"] .splash-icon-wrap::after { background:linear-gradient(15
 .header-btn:active { transform:scale(0.90); box-shadow:var(--sh-pressed); }
 .header-btn:focus-visible { outline:none; box-shadow:var(--sh-focus); }
 
+.back-btn { display:inline-flex; align-items:center; gap:3px; padding:6px 10px; border-radius:var(--radius-pill); border:none; background:var(--bg-deep); color:var(--ink-3); font-family:var(--font); font-size:12px; font-weight:700; cursor:pointer; white-space:nowrap; box-shadow:var(--sh-xs); opacity:0; pointer-events:none; transform:translateX(-6px); transition:opacity 0.2s var(--ease), transform 0.22s var(--spring), box-shadow var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
+.back-btn.visible { opacity:1; pointer-events:auto; transform:translateX(0); }
+.back-btn:hover  { box-shadow:var(--sh-hover); color:var(--ink); }
+.back-btn:active { transform:scale(0.92) !important; box-shadow:var(--sh-pressed); }
+
 .filter-section { position:sticky; top:0; z-index:80; background:var(--surface); box-shadow:var(--sh-sm); padding:10px 14px 0; display:flex; flex-direction:column; gap:0; }
 .filter-row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:center; padding-bottom:10px; }
 .cd-input, .cd-select { font-family:var(--font); background:var(--bg-deep) !important; box-shadow:var(--sh-pressed) !important; border:none !important; border-radius:var(--radius-sm) !important; color:var(--ink) !important; font-size:13px !important; font-weight:600 !important; padding:8px 12px !important; transition:box-shadow var(--dur-fast) var(--ease) !important; outline:none; -webkit-appearance:none; appearance:none; }

@@ -35,6 +35,8 @@ let _lockChipTimer = null;
 let _rosterData        = [];
 let _rosterLoaded      = false;
 let _rosterActivePill  = 0;
+let _ssRestored        = false;
+let _skipHistory       = false;
 let _violTarget        = null;
 let _includeAfterSchool = false;
 let _holidays = [];
@@ -146,10 +148,24 @@ function executeSwitchTab(tabName) {
   else if (tabName === 'roster') { ab.classList.add('d-none');    fab.classList.add('visible'); }
   else                           { ab.classList.add('d-none');    fab.classList.remove('visible'); }
 
+  // 뒤로가기 버튼 표시/숨김
+  const backBtn = document.getElementById('backBtn');
+  if (backBtn) backBtn.classList.toggle('visible', tabName !== 'home');
+
+  // 브라우저 히스토리 관리
+  if (!_skipHistory) {
+    if (tabName !== 'home') history.pushState({ tab: tabName }, '');
+    else history.replaceState({ tab: 'home' }, '');
+  }
+
   window.scrollTo(0,0);
   if (tabName === 'stats')    loadStats();
   if (tabName === 'schedule') updateGroupScheduleView();
   if (tabName === 'roster')   loadRoster();
+}
+
+function goBack() {
+  executeSwitchTab('home');
 }
 
 /* ════════════════════════════════
@@ -166,6 +182,7 @@ function handleDateChange(forceLoad=false) {
     }); return;
   }
   const dateStr = document.getElementById('dateInput').value;
+  sessionStorage.setItem('ss_date', dateStr);
   const day = new Date(dateStr).getDay();
   sessionOptions=[]; selectedSessionIdx=0;
 
@@ -196,6 +213,11 @@ function handleDateChange(forceLoad=false) {
     const hm=today.getHours()*100+today.getMinutes();
     if (day===6){if(hm>=1300)selectedSessionIdx=1;}
     else{if(hm>=2110)selectedSessionIdx=2; else if(hm>=1900)selectedSessionIdx=1;}
+  }
+  if (!_ssRestored) {
+    const _sv = sessionStorage.getItem('ss_session');
+    if (_sv) { const _si = sessionOptions.findIndex(o => o.text === _sv); if (_si >= 0) selectedSessionIdx = _si; }
+    _ssRestored = true;
   }
   renderSessionPills(); loadStudents();
 }
@@ -263,6 +285,7 @@ function selectSessionPill(idx, forceLoad=false) {
   }
   if(navigator.vibrate)navigator.vibrate(20);
   selectedSessionIdx=idx;
+  sessionStorage.setItem('ss_session', sessionOptions[idx].text);
   const wrap=document.getElementById('sessionPillWrap');
   if(wrap){
     wrap.querySelectorAll('.session-pill').forEach((b,i)=>b.classList.toggle('active',i===idx));
@@ -2974,7 +2997,20 @@ function _devResetAttendance() {
 ════════════════════════════════ */
 window.onload = () => {
   updateThemeIcon();
-  document.getElementById('dateInput').valueAsDate = new Date();
+
+  // 날짜: sessionStorage 복원 (없으면 오늘)
+  const _ssDate = sessionStorage.getItem('ss_date');
+  if (_ssDate) document.getElementById('dateInput').value = _ssDate;
+  else document.getElementById('dateInput').valueAsDate = new Date();
+
+  // 브라우저 뒤로가기 처리
+  history.replaceState({ tab: 'home' }, '');
+  window.addEventListener('popstate', (e) => {
+    const targetTab = (e.state && e.state.tab) || 'home';
+    _skipHistory = true;
+    executeSwitchTab(targetTab);
+    _skipHistory = false;
+  });
 
   const savedChecker = localStorage.getItem('checkerName');
   if (savedChecker) document.getElementById('checkerName').value = savedChecker;
