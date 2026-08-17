@@ -367,9 +367,12 @@ const API = (() => {
     await Promise.all(
       existing.filter(e => !newDates.has(e.hol_date)).map(e => _del(`holidays?hol_date=eq.${e.hol_date}`))
     );
-    // 신규·변경 공휴일 upsert (hol_date PK 기준 merge)
+    // 신규·변경 공휴일 upsert (hol_date UNIQUE 컬럼 기준 merge)
+    // on_conflict을 명시하지 않으면 PostgREST가 PK(id)를 충돌 대상으로 삼는데,
+    // id를 보내지 않으므로 매번 신규 INSERT로 처리되어 이미 존재하는 hol_date와
+    // UNIQUE 제약이 충돌해 오류가 났었음.
     if (holidays.length) {
-      await _req('POST', 'holidays', holidays.map(h => ({
+      await _req('POST', 'holidays?on_conflict=hol_date', holidays.map(h => ({
         hol_date: h.date,
         has_am:   h.am ?? true,
         has_pm:   h.pm ?? true,

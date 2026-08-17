@@ -1125,9 +1125,9 @@ function _bindRosterCardEvents() {
     if (_rosterIsLong) { _rosterIsLong = false; return; }
     const card = e.target.closest('.roster-card');
     if (!card) return;
-    const [ban, num, name, group] = card.dataset.sid.split('_');
+    const [ban, num, name, group, id] = card.dataset.sid.split('_');
     openViolHistory({
-      ban, num,
+      id, ban, num,
       name:  decodeURIComponent(name),
       group: decodeURIComponent(group)
     });
@@ -1147,9 +1147,9 @@ function _bindRosterCardEvents() {
       _rosterIsLong = true;
       if (navigator.vibrate) navigator.vibrate([30, 20, 30]);
       card.classList.add('pressing');
-      const [ban, num, name, group] = card.dataset.sid.split('_');
+      const [ban, num, name, group, id] = card.dataset.sid.split('_');
       _violTarget = {
-        ban, num,
+        id, ban, num,
         name:  decodeURIComponent(name),
         group: decodeURIComponent(group)
       };
@@ -1182,7 +1182,7 @@ function _rosterCardHtml(s) {
   const absentBadge = s.absentCount > 0
     ? `<div class="rc-absent-badge">결석 ${s.absentCount}회</div>` : '';
   const violClass   = s.violCount > 0 ? ' has-violation' : '';
-  return `<div class="roster-card${violClass}" data-sid="${s.ban}_${s.num}_${encodeURIComponent(s.name)}_${encodeURIComponent(s.group)}">
+  return `<div class="roster-card${violClass}" data-sid="${s.ban}_${s.num}_${encodeURIComponent(s.name)}_${encodeURIComponent(s.group)}_${s.id}">
     <div class="rc-num">${s.ban}반 ${s.num}번</div>
     <div class="rc-name">${s.name}</div>
     <div style="display:flex;flex-wrap:wrap;gap:3px;justify-content:center;margin-top:4px;">
@@ -1225,6 +1225,9 @@ function openViolHistory(student) {
         <button class="vh-seg-btn" id="_vhSegAbsent" onclick="_switchVhSeg('absent')">
           결석 기록 <span class="vh-seg-count amber" id="_vhSegAbsentCount">—</span>
         </button>
+        <button class="vh-seg-btn" id="_vhSegSchedule" onclick="_switchVhSeg('schedule')">
+          자습 세션
+        </button>
       </div>
     </div>
     <div class="vh-body" id="_vhBody">
@@ -1244,10 +1247,10 @@ function openViolHistory(student) {
   sheet.querySelector('#_vhClose').addEventListener('click', closeSheet);
   sheet.querySelector('#_vhAddBtn').addEventListener('click', ()=>{ closeSheet(); _violTarget=student; setTimeout(()=>openViolSheet(student),370); });
   window._vhStudent=student; window._vhSheet=sheet; window._vhMoneyBar=sheet.querySelector('#_vhMoneyBar');
-  window._vhRecords=null; window._vhAbsents=null; window._vhActiveSeg='viol';
+  window._vhRecords=null; window._vhAbsents=null; window._vhSchedule=null; window._vhActiveSeg='viol';
   let loaded=0;
   const checkBoth=()=>{
-    if(++loaded<2)return;
+    if(++loaded<3)return;
     const vc=sheet.querySelector('#_vhSegViolCount'); const ac=sheet.querySelector('#_vhSegAbsentCount');
     if(vc)vc.textContent=(window._vhRecords||[]).length;
     if(ac)ac.textContent=(window._vhAbsents||[]).length;
@@ -1263,22 +1266,72 @@ function openViolHistory(student) {
   API.getAbsentHistory(student.ban, student.num, student.name, student.group)
     .then(absents=>{window._vhAbsents=absents||[];checkBoth();})
     .catch(()=>{window._vhAbsents=[];checkBoth();});
+  if (student.id) {
+    API.getStudentSchedule(student.id)
+      .then(schedule=>{window._vhSchedule=schedule||{};checkBoth();})
+      .catch(()=>{window._vhSchedule={};checkBoth();});
+  } else {
+    window._vhSchedule={};checkBoth();
+  }
 }
+
+const VH_SEGS=['viol','absent','schedule'];
 
 function _switchVhSeg(seg){
   window._vhActiveSeg=seg;
   const sheet=window._vhSheet; if(!sheet)return;
+  const wrap=sheet.querySelector('.vh-seg-wrap');
   const slider=sheet.querySelector('#_vhSegSlider');
-  const bViol=sheet.querySelector('#_vhSegViol'); const bAbs=sheet.querySelector('#_vhSegAbsent');
+  const btns=[...wrap.querySelectorAll('.vh-seg-btn')];
   const addBtn=sheet.querySelector('#_vhAddBtn');
-  if(seg==='viol'){bViol.classList.add('active');bAbs.classList.remove('active');if(slider)slider.style.transform='translateX(0)';if(addBtn)addBtn.style.display='';}
-  else{bAbs.classList.add('active');bViol.classList.remove('active');if(slider)slider.style.transform='translateX(100%)';if(addBtn)addBtn.style.display='none';}
+  const idx=VH_SEGS.indexOf(seg);
+  btns.forEach((b,i)=>b.classList.toggle('active', i===idx));
+  if(slider){slider.style.width=(100/btns.length)+'%';slider.style.transform=`translateX(${idx*100}%)`;}
+  if(addBtn)addBtn.style.display = seg==='viol' ? '' : 'none';
   _renderVhActiveTab(sheet);
 }
 
 function _renderVhActiveTab(sheet){
   const body=sheet.querySelector('#_vhBody');
-  if(window._vhActiveSeg==='viol')_renderViolHistoryBody(body); else _renderAbsentHistoryBody(body);
+  if(window._vhActiveSeg==='viol')_renderViolHistoryBody(body);
+  else if(window._vhActiveSeg==='absent')_renderAbsentHistoryBody(body);
+  else _renderScheduleHistoryBody(body);
+}
+
+function _renderScheduleHistoryBody(body){
+  const sched = window._vhSchedule;
+  const student = window._vhStudent;
+  if(!sched){ body.innerHTML='<div class="vh-empty">시간표를 불러오지 못했습니다.</div>'; return; }
+  const DAYS=[['mon','월'],['tue','화'],['wed','수'],['thu','목'],['fri','금']];
+  const cellCls=v => v==='O' ? 'sch-dr-s sds-on' : (v==='방과후' ? 'sch-dr-s sds-aft' : 'sch-dr-s sds-off');
+  const cellTxt=v => v==='방과후' ? '방과후' : (v || '-');
+  const row=(label, vals)=>{
+    const arr = Array.isArray(vals) ? vals : [];
+    const cells = arr.map(v=>`<span class="${cellCls(v)}">${cellTxt(v)}</span>`).join('');
+    return `<div class="sch-day-row"><div class="sch-dr-num">${label}</div><div class="sch-dr-sess">${cells}</div></div>`;
+  };
+  const rows = DAYS.map(([k,kr]) => row(kr, sched[k] && sched[k].length ? sched[k] : ['-','-','-'])).join('')
+    + row('토', sched.sat && sched.sat.length ? sched.sat : ['-','-']);
+  body.innerHTML = `
+    <div style="font-size:11px;color:var(--ink-4);margin-bottom:8px;">현재 등록된 자습 참여 세션입니다. (순서: 평일 오후/야간/심야, 토 오전/오후)</div>
+    <div style="background:var(--surface);border-radius:var(--radius);box-shadow:var(--sh-sm);overflow:hidden;">${rows}</div>
+    <button id="_vhSchedEdit" style="margin-top:16px;width:100%;padding:12px;border-radius:var(--radius);border:none;background:var(--blue);color:#fff;font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;box-shadow:var(--sh-blue);">세션 수정</button>`;
+  const editBtn = body.querySelector('#_vhSchedEdit');
+  if (editBtn) editBtn.addEventListener('click', () => {
+    if (!student?.id) { Swal.fire('오류','학생 정보를 찾을 수 없습니다.','error'); return; }
+    _renderScheduleEditor(student, sched, (newSched) => {
+      window._vhSchedule = newSched;
+      if (window._vhActiveSeg === 'schedule') {
+        const b = _vhBodyEl();
+        if (b) _renderScheduleHistoryBody(b);
+      }
+    });
+  });
+}
+
+function _vhBodyEl(){
+  const sheet = window._vhSheet;
+  return sheet ? sheet.querySelector('#_vhBody') : null;
 }
 
 function _renderViolHistoryBody(body){
@@ -1568,6 +1621,8 @@ function _openTeacherMenu() {
           title:'자습 세션 변경',  sub:'학생별 자습 참가 세션(O/방과후/-)을 편집합니다', fn:_teacherEditSchedule },
         { bg:'#fef3c7',          fg:'#d97706',      svg:'<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
           title:'전체 벌금 현황',  sub:'전체 벌금 목록 조회 및 납부 상태를 수정합니다', fn:_teacherViewFines },
+        { bg:'#fce7f3',          fg:'#db2777',      svg:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01"/>',
+          title:'평일 공휴일 설정', sub:'평일 중 자율학습을 쉬는 날짜를 등록/삭제합니다', fn:_teacherEditHolidays },
       ],
     },
     {
@@ -1904,7 +1959,7 @@ function _teacherLoadSchedule(student) {
     .catch(() => { hideLoading(); Swal.fire('오류', '시간표를 불러오지 못했습니다.', 'error'); });
 }
 
-function _renderScheduleEditor(student, rawSchedule) {
+function _renderScheduleEditor(student, rawSchedule, onSaved) {
   const sched = JSON.parse(JSON.stringify(rawSchedule || {}));
   ['mon','tue','wed','thu','fri'].forEach(d => { if (!Array.isArray(sched[d])) sched[d] = ['-','-','-']; });
   if (!Array.isArray(sched.sat)) sched.sat = ['-','-'];
@@ -2017,12 +2072,68 @@ function _renderScheduleEditor(student, rawSchedule) {
       if (homeSel && homeSel.value === student.group) {
         loadStudents(false, true);
       }
+      if (typeof onSaved === 'function') onSaved(sched);
     } catch (err) {
       Swal.fire('오류', err?.message || '저장하지 못했습니다.', 'error');
       saveBtn.disabled = false;
       saveBtn.textContent = '저장';
     }
   });
+}
+
+// ── 2-1. 평일 공휴일 설정 (교사 메뉴) ──────────────────
+function _teacherEditHolidays() {
+  showLoading('공휴일 설정 불러오는 중...');
+  API.getHolidays()
+    .then(holidays => {
+      hideLoading();
+      _holidays = holidays || [];
+      _renderHolidayEditorSheet();
+    })
+    .catch(() => { hideLoading(); Swal.fire('오류', '공휴일 설정을 불러오지 못했습니다.', 'error'); });
+}
+
+function _renderHolidayEditorSheet() {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'custom-sheet-backdrop';
+  backdrop.style.zIndex = '3200';
+  const sheet = document.createElement('div');
+  sheet.className = 'custom-sheet';
+  sheet.style.cssText = 'padding-bottom:40px;max-height:88vh;overflow-y:auto;';
+
+  sheet.innerHTML = `
+    <div class="custom-sheet-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <div style="font-size:15px;font-weight:800;color:var(--ink);letter-spacing:-0.4px;">📅 평일 공휴일 설정</div>
+      <button id="_heClose" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--sh-xs);">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div style="font-size:11px;color:var(--ink-4);margin-bottom:12px;line-height:1.5;">평일 중 자율학습을 쉬는 날짜를 등록하면 해당 요일 오전/오후가 공휴일 세션으로 전환됩니다.</div>
+    <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px;box-shadow:var(--sh-pressed);margin-bottom:12px;">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <input type="date" id="_holDateInput" class="cd-input" style="flex:1;min-width:130px;">
+        <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:600;color:var(--ink-2);cursor:pointer;">
+          <input type="checkbox" id="_holAm" checked style="width:15px;height:15px;"> 오전
+        </label>
+        <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:600;color:var(--ink-2);cursor:pointer;">
+          <input type="checkbox" id="_holPm" checked style="width:15px;height:15px;"> 오후
+        </label>
+        <button onclick="_addHoliday()" style="padding:8px 16px;border-radius:var(--radius-pill);border:none;background:var(--blue);color:#fff;font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;box-shadow:var(--sh-blue);white-space:nowrap;">+ 추가</button>
+      </div>
+    </div>
+    <div id="_holList" style="display:flex;flex-direction:column;gap:8px;"></div>`;
+
+  backdrop.appendChild(sheet);
+  document.body.appendChild(backdrop);
+  requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
+
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+  sheet.querySelector('#_heClose').addEventListener('click', close);
+
+  sheet.querySelector('#_holDateInput').valueAsDate = new Date();
+  _renderHolidayList(sheet);
 }
 
 // ── 3. 출석 기록 초기화 ────────────────────────────────
