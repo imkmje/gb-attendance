@@ -485,7 +485,10 @@ const API = (() => {
   }
 
   async function upsertRecurringEarlyLeave(studentId, dayOfWeek, session, earlyLeaveMins) {
-    await _req('POST', 'recurring_early_leave',
+    // on_conflict 없이 resolution=merge-duplicates만 쓰면 PostgREST가 PK(id) 기준으로 충돌을 판정하는데
+    // id를 보내지 않으므로 매번 신규 INSERT로 처리되어, 이미 같은 (student_id, day_of_week, session) 규칙이
+    // 있을 때(다른 교사가 먼저 설정했거나 화면이 오래 열려 있던 경우) UNIQUE 제약 충돌로 저장이 실패했었음
+    await _req('POST', 'recurring_early_leave?on_conflict=student_id,day_of_week,session',
       { student_id: studentId, day_of_week: dayOfWeek, session, early_leave_mins: earlyLeaveMins },
       { Prefer: 'resolution=merge-duplicates,return=minimal' }
     );
@@ -563,19 +566,43 @@ const API = (() => {
   }
 
   async function importStudents(rows, replaceAll) {
+    const BATCH = 100;
     if (replaceAll) {
       await _del('students?id=not.is.null');
+      const payload = rows.map(r => ({
+        class_num: r.ban, student_num: r.num, name: r.name, study_room: r.group, schedule: r.schedule,
+      }));
+      for (let i = 0; i < payload.length; i += BATCH) {
+        await _req('POST', 'students', payload.slice(i, i + BATCH), { Prefer: 'return=minimal' });
+      }
+      return;
     }
-    const payload = rows.map(r => ({
-      class_num:   r.ban,
-      student_num: r.num,
-      name:        r.name,
-      study_room:  r.group,
-      schedule:    r.schedule,
-    }));
-    const BATCH = 100;
-    for (let i = 0; i < payload.length; i += BATCH) {
-      await _req('POST', 'students', payload.slice(i, i + BATCH), { Prefer: 'resolution=merge-duplicates,return=minimal' });
+
+    // 추가/갱신: students 테이블엔 (class_num, student_num) UNIQUE 제약이 없어
+    // PostgREST merge-duplicates upsert(on_conflict)를 쓸 수 없음 — 그대로 두면 같은 파일을
+    // 재업로드할 때마다 학생이 통째로 중복 생성됨. 기존 명단을 먼저 조회해 (반,번호)로 매칭한 뒤
+    // 있으면 UPDATE, 없으면 INSERT로 클라이언트에서 직접 분기.
+    const existing = await _get('students?select=id,class_num,student_num');
+    const existingMap = new Map(existing.map(e => [`${e.class_num}-${e.student_num}`, e.id]));
+
+    const toInsert = [];
+    const toUpdate = [];
+    for (const r of rows) {
+      const id = existingMap.get(`${r.ban}-${r.num}`);
+      if (id) toUpdate.push({ id, class_num: r.ban, student_num: r.num, name: r.name, study_room: r.group, schedule: r.schedule });
+      else    toInsert.push({ class_num: r.ban, student_num: r.num, name: r.name, study_room: r.group, schedule: r.schedule });
+    }
+
+    for (let i = 0; i < toInsert.length; i += BATCH) {
+      await _req('POST', 'students', toInsert.slice(i, i + BATCH), { Prefer: 'return=minimal' });
+    }
+
+    const CONCURRENCY = 8;
+    for (let i = 0; i < toUpdate.length; i += CONCURRENCY) {
+      const batch = toUpdate.slice(i, i + CONCURRENCY);
+      await Promise.all(batch.map(u => _patch(`students?id=eq.${u.id}`, {
+        name: u.name, study_room: u.study_room, schedule: u.schedule,
+      })));
     }
   }
 
