@@ -1254,6 +1254,7 @@ function openViolHistory(student) {
     const vc=sheet.querySelector('#_vhSegViolCount'); const ac=sheet.querySelector('#_vhSegAbsentCount');
     if(vc)vc.textContent=(window._vhRecords||[]).length;
     if(ac)ac.textContent=(window._vhAbsents||[]).length;
+    _updateVhSegSlider(sheet);
     _renderVhActiveTab(sheet);
   };
   API.getViolationHistory(student.ban, student.num, student.name, student.group)
@@ -1277,16 +1278,23 @@ function openViolHistory(student) {
 
 const VH_SEGS=['viol','absent','schedule'];
 
+// 세그먼트 슬라이더 크기/위치 갱신 (버튼 개수 기준 동적 계산) — 최초 렌더 시에도 호출 필요
+function _updateVhSegSlider(sheet){
+  const wrap=sheet.querySelector('.vh-seg-wrap');
+  const slider=sheet.querySelector('#_vhSegSlider');
+  if(!wrap||!slider)return;
+  const btns=[...wrap.querySelectorAll('.vh-seg-btn')];
+  const idx=Math.max(0, VH_SEGS.indexOf(window._vhActiveSeg));
+  btns.forEach((b,i)=>b.classList.toggle('active', i===idx));
+  slider.style.width=(100/btns.length)+'%';
+  slider.style.transform=`translateX(${idx*100}%)`;
+}
+
 function _switchVhSeg(seg){
   window._vhActiveSeg=seg;
   const sheet=window._vhSheet; if(!sheet)return;
-  const wrap=sheet.querySelector('.vh-seg-wrap');
-  const slider=sheet.querySelector('#_vhSegSlider');
-  const btns=[...wrap.querySelectorAll('.vh-seg-btn')];
   const addBtn=sheet.querySelector('#_vhAddBtn');
-  const idx=VH_SEGS.indexOf(seg);
-  btns.forEach((b,i)=>b.classList.toggle('active', i===idx));
-  if(slider){slider.style.width=(100/btns.length)+'%';slider.style.transform=`translateX(${idx*100}%)`;}
+  _updateVhSegSlider(sheet);
   if(addBtn)addBtn.style.display = seg==='viol' ? '' : 'none';
   _renderVhActiveTab(sheet);
 }
@@ -1319,13 +1327,15 @@ function _renderScheduleHistoryBody(body){
   const editBtn = body.querySelector('#_vhSchedEdit');
   if (editBtn) editBtn.addEventListener('click', () => {
     if (!student?.id) { Swal.fire('오류','학생 정보를 찾을 수 없습니다.','error'); return; }
-    _renderScheduleEditor(student, sched, (newSched) => {
-      window._vhSchedule = newSched;
-      if (window._vhActiveSeg === 'schedule') {
-        const b = _vhBodyEl();
-        if (b) _renderScheduleHistoryBody(b);
-      }
-    });
+    _requireTeacherAuth(() => {
+      _renderScheduleEditor(student, sched, (newSched) => {
+        window._vhSchedule = newSched;
+        if (window._vhActiveSeg === 'schedule') {
+          const b = _vhBodyEl();
+          if (b) _renderScheduleHistoryBody(b);
+        }
+      });
+    }, { title: '교사 인증', text: '자습 세션을 수정하려면 교사 메뉴 비밀번호를 입력하세요.' });
   });
 }
 
@@ -1581,13 +1591,16 @@ function _submitViolation() {
    교사 메뉴
 ════════════════════════════════ */
 
-function handleTeacherMenuClick() {
+// 교사 메뉴 비밀번호(2821) 인증 게이트 — 교사 메뉴 진입, 명단 탭 세션 수정 등
+// 교사만 허용해야 하는 동작 앞에서 공통으로 사용
+function _requireTeacherAuth(onSuccess, opts = {}) {
   if (localStorage.getItem('teacherPwEnabled') === 'false') {
-    _openTeacherMenu();
+    onSuccess();
     return;
   }
   Swal.fire({
-    title: '교사 메뉴',
+    title: opts.title || '교사 인증',
+    text: opts.text,
     input: 'password',
     inputPlaceholder: '비밀번호를 입력하세요',
     inputAttributes: { autocomplete: 'off' },
@@ -1596,11 +1609,15 @@ function handleTeacherMenuClick() {
     cancelButtonText: '취소',
   }).then(result => {
     if (result.isConfirmed && result.value === '2821') {
-      _openTeacherMenu();
+      onSuccess();
     } else if (result.isConfirmed) {
       Swal.fire({ title: '비밀번호가 틀렸습니다', icon: 'error', confirmButtonText: '확인' });
     }
   });
+}
+
+function handleTeacherMenuClick() {
+  _requireTeacherAuth(_openTeacherMenu, { title: '교사 메뉴' });
 }
 
 function _openTeacherMenu() {
