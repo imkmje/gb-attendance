@@ -52,6 +52,17 @@ const _cache = {
 };
 
 /* ════════════════════════════════
+   유틸
+════════════════════════════════ */
+// 로컬 타임존 기준 오늘 날짜 (YYYY-MM-DD)
+// ⚠ toISOString().slice(0,10) / valueAsDate=new Date() 는 UTC 기준이라
+//   한국시간(UTC+9) 자정~오전 9시 사이에는 어제 날짜가 나오는 버그가 있었음 — 절대 쓰지 말 것
+function _todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+/* ════════════════════════════════
    테마
 ════════════════════════════════ */
 function updateThemeIcon() {
@@ -1562,7 +1573,7 @@ function _submitViolation() {
   if (btn) { btn.disabled=true; btn.innerHTML='<div class="spin-ring-s" style="border-top-color:#fff;border-color:rgba(255,255,255,0.3);"></div> 등록 중...'; }
 
   const payload = {
-    date:      new Date().toISOString().slice(0,10),
+    date:      _todayStr(),
     group:     _violTarget.group,
     ban:       _violTarget.ban,
     num:       _violTarget.num,
@@ -1873,7 +1884,8 @@ function _renderAttEditor(student, records) {
     inp.addEventListener('input', () => {
       rec.reason = inp.value;
       clearTimeout(_reasonTimer);
-      _reasonTimer = setTimeout(() => API.updateAttendanceRecord(rid, { reason: inp.value }).catch(() => {}), 600);
+      _reasonTimer = setTimeout(() => API.updateAttendanceRecord(rid, { reason: inp.value })
+        .catch(() => { _cdToast({type:'red', title:'저장 실패', sub:'사유를 저장하지 못했습니다. 다시 입력해 주세요.'}); }), 600);
     });
   };
 
@@ -2149,13 +2161,13 @@ function _renderHolidayEditorSheet() {
   backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
   sheet.querySelector('#_heClose').addEventListener('click', close);
 
-  sheet.querySelector('#_holDateInput').valueAsDate = new Date();
+  sheet.querySelector('#_holDateInput').value = _todayStr();
   _renderHolidayList(sheet);
 }
 
 // ── 3. 출석 기록 초기화 ────────────────────────────────
 function _teacherResetAttendance() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = _todayStr();
   const backdrop = document.createElement('div');
   backdrop.className = 'custom-sheet-backdrop';
   backdrop.style.zIndex = '3100';
@@ -2554,7 +2566,7 @@ function _teacherExportData() {
       if (wantViol  && violRows.length)  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(violRows),  '벌금현황');
       if (wantSched && schedRows.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(schedRows), '세션편성');
       if (!wb.SheetNames.length) { Swal.fire('알림', '내보낼 데이터가 없습니다.', 'info'); btn.disabled=false; btn.textContent='Excel로 내보내기'; return; }
-      const today = new Date().toISOString().slice(0, 10);
+      const today = _todayStr();
       XLSX.writeFile(wb, `청백운반_${today}.xlsx`);
       close();
       showSuccessToast('내보내기 완료', `시트 ${wb.SheetNames.length}개`);
@@ -2974,8 +2986,8 @@ function _renderDevMenuSheet() {
   backdrop.addEventListener('click', e=>{ if(e.target===backdrop) close(); });
   sheet.querySelector('#_devClose').addEventListener('click', close);
 
-  sheet.querySelector('#_holDateInput').valueAsDate = new Date();
-  sheet.querySelector('#_resetDateInput').valueAsDate = new Date();
+  sheet.querySelector('#_holDateInput').value = _todayStr();
+  sheet.querySelector('#_resetDateInput').value = _todayStr();
   _renderHolidayList(sheet);
   _renderReasonList(sheet);
   const pwBtn = sheet.querySelector('#_devPwToggle');
@@ -3123,13 +3135,20 @@ function _devResetAttendance() {
 /* ════════════════════════════════
    초기화
 ════════════════════════════════ */
+// 출석 체크 중 저장하지 않고 탭을 닫거나 새로고침하면 경고 (모바일에서 흔히 발생)
+window.addEventListener('beforeunload', (e) => {
+  if (!hasUnsavedChanges) return;
+  e.preventDefault();
+  e.returnValue = '';
+});
+
 window.onload = () => {
   updateThemeIcon();
 
   // 날짜: sessionStorage 복원 (없으면 오늘)
   const _ssDate = sessionStorage.getItem('ss_date');
   if (_ssDate) document.getElementById('dateInput').value = _ssDate;
-  else document.getElementById('dateInput').valueAsDate = new Date();
+  else document.getElementById('dateInput').value = _todayStr();
 
   // 브라우저 뒤로가기 처리
   history.replaceState({ tab: 'home' }, '');
