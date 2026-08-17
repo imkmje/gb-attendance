@@ -400,10 +400,10 @@ function renderStudents() {
             </select>
             <div style="position:relative;display:${s.reasonType==='직접 입력'?'block':'none'}">
               <input type="text" class="cd-reason-input" placeholder="상세 사유 입력" value="${s.reasonText||''}" oninput="changeReasonText(${idx},this.value)">
-              <span class="clear-input-btn" onclick="clearReasonText(${idx},this)">&times;</span>
+              <span class="clear-input-btn" onclick="clearReasonText(${idx},this)" role="button" tabindex="0" aria-label="입력 지우기">&times;</span>
             </div>
             <div class="nocount-row" onclick="event.stopPropagation()" onpointerdown="event.stopPropagation()" onpointerup="event.stopPropagation()">
-              <button class="nocount-sw${s.noCount?' on':''}" id="nocount-sw-${idx}" onclick="toggleNoCount(${idx},this)">
+              <button class="nocount-sw${s.noCount?' on':''}" id="nocount-sw-${idx}" onclick="toggleNoCount(${idx},this)" aria-label="노카운트 전환" aria-pressed="${s.noCount?'true':'false'}">
                 <div class="nocount-sw-thumb"></div>
               </button>
               <span class="nocount-label${s.noCount?' on':''}" id="nocount-lbl-${idx}">노카운트 <span style="font-weight:500;opacity:0.7;">(결석 횟수 미산입)</span></span>
@@ -432,7 +432,7 @@ function renderStudents() {
                   <span class="el-mins-unit">분 일찍 퇴실</span>
                 </div>
                 <div class="nocount-row el-recurring-row" onclick="event.stopPropagation()" onpointerdown="event.stopPropagation()" onpointerup="event.stopPropagation()">
-                  <button class="nocount-sw${elRec?' on':''}" id="el-rec-${idx}" onclick="toggleRecurringLeave(${idx},this)">
+                  <button class="nocount-sw${elRec?' on':''}" id="el-rec-${idx}" onclick="toggleRecurringLeave(${idx},this)" aria-label="매주 반복 전환" aria-pressed="${elRec?'true':'false'}">
                     <div class="nocount-sw-thumb"></div>
                   </button>
                   <span class="nocount-label${elRec?' on':''}" id="el-rec-lbl-${idx}">매주 반복</span>
@@ -1208,7 +1208,7 @@ function openViolHistory(student) {
           <div class="vh-name">${student.name}</div>
           <div class="vh-meta">${student.ban}반 ${student.num}번 · ${student.group}</div>
         </div>
-        <button class="vh-close-btn" id="_vhClose">
+        <button class="vh-close-btn" id="_vhClose" aria-label="닫기">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
       </div>
@@ -1695,7 +1695,7 @@ function _openTeacherMenu() {
         <div style="font-size:16px;font-weight:800;color:var(--ink);letter-spacing:-0.4px;">교사 메뉴</div>
         <div style="font-size:11px;color:var(--ink-3);margin-top:1px;">관리자 전용 기능</div>
       </div>
-      <button id="_tmClose" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--sh-xs);">
+      <button id="_tmClose" aria-label="닫기" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--sh-xs);">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
@@ -1821,7 +1821,7 @@ function _renderAttEditor(student, records) {
         <span style="font-size:13px;font-weight:700;color:var(--ink-2);">${r.date}</span>
         <span style="font-size:11px;font-weight:600;color:var(--ink-3);background:var(--bg-deep);border-radius:var(--radius-pill);padding:2px 8px;">${SESSION_ABBR[r.session]||r.session}</span>
         <span class="_ate-status" style="margin-left:auto;cursor:pointer;font-size:12px;font-weight:700;border-radius:var(--radius-pill);padding:4px 12px;transition:background .15s,color .15s;background:${isAbsent?'var(--red-dim)':'var(--green-dim)'};color:${isAbsent?'var(--red)':'var(--green)'};">${r.status}</span>
-        <button class="_ate-del" style="background:none;border:none;color:var(--ink-4);cursor:pointer;padding:2px 4px;font-size:14px;flex-shrink:0;line-height:1;">✕</button>
+        <button class="_ate-del" aria-label="기록 삭제" style="background:none;border:none;color:var(--ink-4);cursor:pointer;padding:2px 4px;font-size:14px;flex-shrink:0;line-height:1;">✕</button>
       </div>
       ${isAbsent ? `<div class="_ate-extra" style="display:flex;align-items:center;gap:8px;">
         <button class="_ate-nc" style="flex-shrink:0;border:none;border-radius:var(--radius-pill);padding:4px 10px;cursor:pointer;font-family:var(--font);font-size:11px;font-weight:700;transition:background .15s,color .15s;background:${nc?'var(--green-dim)':'var(--bg-deep)'};color:${nc?'var(--green)':'var(--ink-3)'};">노카운트</button>
@@ -1839,7 +1839,7 @@ function _renderAttEditor(student, records) {
         <div style="font-size:15px;font-weight:800;color:var(--ink);">${student.name}</div>
         <div style="font-size:12px;color:var(--ink-3);margin-top:2px;">${student.ban}반 ${student.num}번 · ${student.group}</div>
       </div>
-      <button id="_aeClose" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;box-shadow:var(--sh-xs);">✕</button>
+      <button id="_aeClose" aria-label="닫기" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;box-shadow:var(--sh-xs);">✕</button>
     </div>
     <div style="display:flex;gap:12px;margin-bottom:12px;padding:10px 12px;background:var(--bg-deep);border-radius:var(--radius-sm);">
       <span style="font-size:12px;font-weight:600;color:var(--ink-3);">기록 <b style="color:var(--ink);">${records.length}회</b></span>
@@ -2012,7 +2012,7 @@ function _renderScheduleEditor(student, rawSchedule, onSaved) {
         <div style="font-size:15px;font-weight:800;color:var(--ink);">${student.name}</div>
         <div style="font-size:12px;color:var(--ink-3);margin-top:2px;">${student.ban}반 ${student.num}번 · ${student.group}</div>
       </div>
-      <button id="_sceClose" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;font-size:12px;box-shadow:var(--sh-xs);">✕</button>
+      <button id="_sceClose" aria-label="닫기" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;font-size:12px;box-shadow:var(--sh-xs);">✕</button>
     </div>
     <div style="font-size:11px;color:var(--ink-4);margin-bottom:10px;">셀을 눌러 O / 방과후 / - 를 전환하세요</div>
     <!-- 평일 헤더 -->
@@ -2122,7 +2122,7 @@ function _renderHolidayEditorSheet() {
     <div class="custom-sheet-handle"></div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
       <div style="font-size:15px;font-weight:800;color:var(--ink);letter-spacing:-0.4px;">📅 평일 공휴일 설정</div>
-      <button id="_heClose" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--sh-xs);">
+      <button id="_heClose" aria-label="닫기" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--sh-xs);">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
@@ -2167,7 +2167,7 @@ function _teacherResetAttendance() {
     <div class="custom-sheet-handle"></div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
       <div style="font-size:15px;font-weight:800;color:var(--ink);">🗑️ 출석 기록 초기화</div>
-      <button id="_traClose" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;font-size:12px;box-shadow:var(--sh-xs);">✕</button>
+      <button id="_traClose" aria-label="닫기" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;font-size:12px;box-shadow:var(--sh-xs);">✕</button>
     </div>
     <div style="background:var(--bg-deep);border-radius:var(--radius);padding:12px 14px;margin-bottom:16px;">
       <div style="font-size:12px;font-weight:700;color:var(--red,#ef4444);margin-bottom:4px;">⚠ 주의</div>
@@ -2598,7 +2598,7 @@ function _renderFineSheet(fines) {
     <div class="custom-sheet-handle"></div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
       <div style="font-size:15px;font-weight:800;color:var(--ink);letter-spacing:-0.4px;">전체 벌금 현황</div>
-      <button id="_fshClose" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--sh-xs);">
+      <button id="_fshClose" aria-label="닫기" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--sh-xs);">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
@@ -2672,10 +2672,10 @@ function _renderFineSheet(fines) {
           <div style="font-size:11px;color:var(--ink-3);margin-bottom:8px;">${v.violType}${v.detail ? ' · ' + v.detail : ''}</div>
           <div style="display:flex;align-items:center;gap:8px;">
             <span class="_fsh-amt" style="font-size:14px;font-weight:800;color:${isPaid ? 'var(--ink-3)' : 'var(--red)'};">${fmt(fine)}</span>
-            <button class="_fsh-e" title="수정" style="width:26px;height:26px;border-radius:6px;border:1.5px solid var(--bg-deep);background:var(--surface);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;flex-shrink:0;">
+            <button class="_fsh-e" title="수정" aria-label="수정" style="width:26px;height:26px;border-radius:6px;border:1.5px solid var(--bg-deep);background:var(--surface);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;flex-shrink:0;">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
             </button>
-            <button class="_fsh-d" title="삭제" style="width:26px;height:26px;border-radius:6px;border:1.5px solid var(--red-dim);background:var(--red-dim);color:var(--red);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;flex-shrink:0;">
+            <button class="_fsh-d" title="삭제" aria-label="삭제" style="width:26px;height:26px;border-radius:6px;border:1.5px solid var(--red-dim);background:var(--red-dim);color:var(--red);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;flex-shrink:0;">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
             </button>
             <div style="margin-left:auto;display:flex;border-radius:var(--radius-pill);overflow:hidden;border:1.5px solid var(--bg-deep);">
@@ -2780,7 +2780,7 @@ function _editFineRecord(viol, onSaved) {
     <div class="custom-sheet-handle"></div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
       <div style="font-size:15px;font-weight:800;color:var(--ink);">벌금 기록 수정</div>
-      <button id="_feClose" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--sh-xs);">
+      <button id="_feClose" aria-label="닫기" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--sh-xs);">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
@@ -2916,7 +2916,7 @@ function _renderDevMenuSheet() {
     <div class="custom-sheet-handle"></div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
       <div style="font-size:16px;font-weight:800;color:var(--ink);letter-spacing:-0.4px;">⚙️ 개발자 메뉴</div>
-      <button id="_devClose" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--sh-xs);">
+      <button id="_devClose" aria-label="닫기" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--sh-xs);">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
@@ -3007,9 +3007,9 @@ function _renderReasonList(sheet) {
   list.innerHTML = _reasonTypes.map((r, i) => `
     <div style="display:flex;align-items:center;gap:6px;padding:8px 10px;background:var(--surface);border-radius:var(--radius-sm);box-shadow:var(--sh-sm);">
       <span style="flex:1;font-size:13px;font-weight:600;color:var(--ink);">${r}</span>
-      <button onclick="_moveReasonType(${i},-1)" title="위로" style="width:28px;height:28px;border:none;border-radius:6px;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;font-size:13px;line-height:1;">↑</button>
-      <button onclick="_moveReasonType(${i},1)"  title="아래로" style="width:28px;height:28px;border:none;border-radius:6px;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;font-size:13px;line-height:1;">↓</button>
-      <button onclick="_deleteReasonType(${i})" title="삭제" style="width:28px;height:28px;border:none;border-radius:6px;background:var(--red-dim);color:var(--red,#ef4444);cursor:pointer;font-size:16px;font-weight:900;line-height:1;">×</button>
+      <button onclick="_moveReasonType(${i},-1)" title="위로" aria-label="위로 이동" style="width:28px;height:28px;border:none;border-radius:6px;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;font-size:13px;line-height:1;">↑</button>
+      <button onclick="_moveReasonType(${i},1)"  title="아래로" aria-label="아래로 이동" style="width:28px;height:28px;border:none;border-radius:6px;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;font-size:13px;line-height:1;">↓</button>
+      <button onclick="_deleteReasonType(${i})" title="삭제" aria-label="사유 삭제" style="width:28px;height:28px;border:none;border-radius:6px;background:var(--red-dim);color:var(--red,#ef4444);cursor:pointer;font-size:16px;font-weight:900;line-height:1;">×</button>
     </div>`).join('');
 }
 
