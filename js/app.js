@@ -54,6 +54,22 @@ const _cache = {
 /* ════════════════════════════════
    유틸
 ════════════════════════════════ */
+// 가로 스크롤되는 pill 줄(명단 그룹 필터, 세션 선택 등)에 좌우 페이드 힌트 표시
+// — 스크롤바를 숨겨놔서 넘치는 pill이 있어도 스크롤 가능하다는 걸 알기 어려웠음
+function _updatePillFade(id) {
+  const wrap = document.getElementById(id);
+  if (!wrap) return;
+  const scrollable = wrap.scrollWidth > wrap.clientWidth + 1;
+  wrap.classList.toggle('has-fade-r', scrollable && Math.ceil(wrap.scrollLeft + wrap.clientWidth) < wrap.scrollWidth - 1);
+  wrap.classList.toggle('has-fade-l', wrap.scrollLeft > 1);
+}
+function _bindPillFade(id) {
+  const wrap = document.getElementById(id);
+  if (!wrap) return;
+  wrap.addEventListener('scroll', () => _updatePillFade(id), { passive: true });
+  window.addEventListener('resize', () => _updatePillFade(id));
+}
+
 // 로컬 타임존 기준 오늘 날짜 (YYYY-MM-DD)
 // ⚠ toISOString().slice(0,10) / valueAsDate=new Date() 는 UTC 기준이라
 //   한국시간(UTC+9) 자정~오전 9시 사이에는 어제 날짜가 나오는 버그가 있었음 — 절대 쓰지 말 것
@@ -246,6 +262,7 @@ function renderSessionPills() {
   const wrap=document.getElementById('sessionPillWrap');
   wrap.innerHTML='<div class="session-pill-slider" id="sessionPillSlider"></div>'+
     sessionOptions.map((opt,i)=>`<button class="session-pill${i===selectedSessionIdx?' active':''}" onclick="selectSessionPill(${i})">${opt.text}</button>`).join('');
+  _updatePillFade('sessionPillWrap');
   const slider=document.getElementById('sessionPillSlider');
   if(slider)slider.style.transition='none';
   setTimeout(()=>{
@@ -1049,6 +1066,7 @@ function _renderRosterPills() {
   const labels = ['전체', ...GROUPS];
   wrap.innerHTML = '<div class="roster-pill-slider" id="rosterPillSlider"></div>' +
     labels.map((lbl, i) => `<button class="roster-pill${i===_rosterActivePill?' active':''}" onclick="selectRosterPill(${i})">${lbl}</button>`).join('');
+  _updatePillFade('rosterPillWrap');
   const slider = document.getElementById('rosterPillSlider');
   if (slider) slider.style.transition = 'none';
   setTimeout(() => {
@@ -1237,7 +1255,7 @@ function openViolHistory(student) {
           결석 기록 <span class="vh-seg-count amber" id="_vhSegAbsentCount">—</span>
         </button>
         <button class="vh-seg-btn" id="_vhSegSchedule" onclick="_switchVhSeg('schedule')">
-          자습 세션
+          자습 세션 <span class="vh-seg-count blue" id="_vhSegScheduleCount">—</span>
         </button>
       </div>
     </div>
@@ -1262,9 +1280,10 @@ function openViolHistory(student) {
   let loaded=0;
   const checkBoth=()=>{
     if(++loaded<3)return;
-    const vc=sheet.querySelector('#_vhSegViolCount'); const ac=sheet.querySelector('#_vhSegAbsentCount');
+    const vc=sheet.querySelector('#_vhSegViolCount'); const ac=sheet.querySelector('#_vhSegAbsentCount'); const sc=sheet.querySelector('#_vhSegScheduleCount');
     if(vc)vc.textContent=(window._vhRecords||[]).length;
     if(ac)ac.textContent=(window._vhAbsents||[]).length;
+    if(sc)sc.textContent=_countOSessions(window._vhSchedule);
     _updateVhSegSlider(sheet);
     _renderVhActiveTab(sheet);
   };
@@ -1317,22 +1336,36 @@ function _renderVhActiveTab(sheet){
   else _renderScheduleHistoryBody(body);
 }
 
+// schedule 객체의 'O' 참여 세션 총 개수 (세그먼트 배지, 요약 등에 재사용)
+function _countOSessions(sched) {
+  if (!sched) return 0;
+  const days = ['mon','tue','wed','thu','fri','sat'];
+  let n = 0;
+  for (const d of days) if (Array.isArray(sched[d])) n += sched[d].filter(v => v === 'O').length;
+  return n;
+}
+
 function _renderScheduleHistoryBody(body){
   const sched = window._vhSchedule;
   const student = window._vhStudent;
   if(!sched){ body.innerHTML='<div class="vh-empty">시간표를 불러오지 못했습니다.</div>'; return; }
   const DAYS=[['mon','월'],['tue','화'],['wed','수'],['thu','목'],['fri','금']];
+  const WD_LABELS=['오','야','심'], SAT_LABELS=['전','후'];
+  // 참석(O)은 'O' 글자 그대로 두면 숫자 0과 헷갈리므로, 시간표 탭과 동일하게
+  // 세션 약자(오/야/심, 전/후)로 표시 — 어떤 세션인지도 바로 드러나서 더 명확함
   const cellCls=v => v==='O' ? 'sch-dr-s sds-on' : (v==='방과후' ? 'sch-dr-s sds-aft' : 'sch-dr-s sds-off');
-  const cellTxt=v => v==='방과후' ? '방과후' : (v || '-');
-  const row=(label, vals)=>{
+  const row=(label, vals, labels)=>{
     const arr = Array.isArray(vals) ? vals : [];
-    const cells = arr.map(v=>`<span class="${cellCls(v)}">${cellTxt(v)}</span>`).join('');
+    const cells = arr.map((v,i)=>{
+      const txt = v==='방과후' ? '방과후' : (v==='O' ? labels[i] : '-');
+      return `<span class="${cellCls(v)}">${txt}</span>`;
+    }).join('');
     return `<div class="sch-day-row"><div class="sch-dr-num">${label}</div><div class="sch-dr-sess">${cells}</div></div>`;
   };
-  const rows = DAYS.map(([k,kr]) => row(kr, sched[k] && sched[k].length ? sched[k] : ['-','-','-'])).join('')
-    + row('토', sched.sat && sched.sat.length ? sched.sat : ['-','-']);
+  const rows = DAYS.map(([k,kr]) => row(kr, sched[k] && sched[k].length ? sched[k] : ['-','-','-'], WD_LABELS)).join('')
+    + row('토', sched.sat && sched.sat.length ? sched.sat : ['-','-'], SAT_LABELS);
   body.innerHTML = `
-    <div style="font-size:11px;color:var(--ink-4);margin-bottom:8px;">현재 등록된 자습 참여 세션입니다. (순서: 평일 오후/야간/심야, 토 오전/오후)</div>
+    <div style="font-size:11px;color:var(--ink-4);margin-bottom:8px;">현재 등록된 자습 참여 세션입니다. (오후/야간/심야, 토 오전/오후)</div>
     <div style="background:var(--surface);border-radius:var(--radius);box-shadow:var(--sh-sm);overflow:hidden;">${rows}</div>
     <button id="_vhSchedEdit" style="margin-top:16px;width:100%;padding:12px;border-radius:var(--radius);border:none;background:var(--blue);color:#fff;font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;box-shadow:var(--sh-blue);">세션 수정</button>`;
   const editBtn = body.querySelector('#_vhSchedEdit');
@@ -1341,6 +1374,8 @@ function _renderScheduleHistoryBody(body){
     _requireTeacherAuth(() => {
       _renderScheduleEditor(student, sched, (newSched) => {
         window._vhSchedule = newSched;
+        const countEl = window._vhSheet?.querySelector('#_vhSegScheduleCount');
+        if (countEl) countEl.textContent = _countOSessions(newSched);
         if (window._vhActiveSeg === 'schedule') {
           const b = _vhBodyEl();
           if (b) _renderScheduleHistoryBody(b);
@@ -3144,6 +3179,8 @@ window.addEventListener('beforeunload', (e) => {
 
 window.onload = () => {
   updateThemeIcon();
+  _bindPillFade('sessionPillWrap');
+  _bindPillFade('rosterPillWrap');
 
   // 날짜: sessionStorage 복원 (없으면 오늘)
   const _ssDate = sessionStorage.getItem('ss_date');

@@ -121,6 +121,16 @@ html[data-theme="dark"] input[type="date"] { color-scheme:dark; }
 
 .session-pill-wrap { display:flex; gap:0; flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; padding:3px; background:var(--bg-deep); box-shadow:var(--sh-pressed); border-radius:var(--radius-sm); position:relative; isolation:isolate; }
 .session-pill-wrap::-webkit-scrollbar { display:none; }
+/* pill 줄이 스크롤바 없이 넘칠 때 좌우에 살짝 페이드를 줘서 "더 있다"는 걸 알려줌 */
+.session-pill-wrap::before, .session-pill-wrap::after,
+.roster-pill-wrap::before,  .roster-pill-wrap::after {
+  content:''; position:absolute; top:0; bottom:0; width:22px; z-index:2; pointer-events:none;
+  opacity:0; transition:opacity var(--dur-fast) var(--ease);
+}
+.session-pill-wrap::before, .roster-pill-wrap::before { left:0;  background:linear-gradient(to left,  transparent, var(--bg-deep) 70%); border-radius:var(--radius-sm) 0 0 var(--radius-sm); }
+.session-pill-wrap::after,  .roster-pill-wrap::after  { right:0; background:linear-gradient(to right, transparent, var(--bg-deep) 70%); border-radius:0 var(--radius-sm) var(--radius-sm) 0; }
+.session-pill-wrap.has-fade-l::before, .roster-pill-wrap.has-fade-l::before { opacity:1; }
+.session-pill-wrap.has-fade-r::after,  .roster-pill-wrap.has-fade-r::after  { opacity:1; }
 .session-pill-slider { position:absolute; top:3px; left:0; height:calc(100% - 6px); background:var(--surface); box-shadow:var(--sh-md); border-radius:calc(var(--radius-sm) - 2px); transition:transform var(--dur-normal) var(--spring), width var(--dur-normal) var(--ease); pointer-events:none; z-index:0; will-change:transform, width; }
 .session-pill-slider::after { content:''; position:absolute; inset:0; border-radius:inherit; background:linear-gradient(158deg, rgba(255,255,255,0.55) 0%, transparent 50%); pointer-events:none; }
 html[data-theme="dark"] .session-pill-slider::after { background:linear-gradient(158deg, rgba(255,255,255,0.06) 0%, transparent 40%); }
@@ -481,6 +491,7 @@ html[data-theme="dark"] .vh-seg-slider::after { background:linear-gradient(158de
 .vh-seg-count { font-size:11px; font-weight:700; border-radius:var(--radius-pill); padding:1px 7px; }
 .vh-seg-count.red   { background:var(--red-dim);   color:var(--red); }
 .vh-seg-count.amber { background:var(--amber-dim); color:var(--amber); }
+.vh-seg-count.blue  { background:var(--blue-dim);  color:var(--blue); }
 .vh-body { flex:1; overflow-y:auto; padding:14px 18px 24px; }
 .vh-empty { text-align:center; padding:48px 0; color:var(--ink-3); font-size:14px; font-weight:600; }
 .vh-item { background:var(--surface); border-radius:var(--radius); box-shadow:var(--sh-md); margin-bottom:10px; overflow:hidden; position:relative; transition:box-shadow var(--dur-fast) var(--ease); }
