@@ -120,6 +120,70 @@ function _isStandaloneApp() {
   return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 }
 
+// 앱으로 설치되어 실행 중(standalone)일 때만 새로고침 버튼 표시
+// — 일반 브라우저 탭에는 이미 주소창 새로고침/당겨서 새로고침이 있어서 안 보여줌
+function _applyRefreshBtnVisibility() {
+  const show = _isStandaloneApp();
+  document.querySelectorAll('.js-refresh-btn').forEach(btn => {
+    btn.style.display = show ? 'flex' : 'none';
+  });
+}
+
+// standalone 모드(홈 화면에 설치된 앱)에서는 iOS/Android 브라우저가 제공하는
+// "당겨서 새로고침" 제스처가 아예 없어져서, 직접 흉내 낸 버전을 붙여준다.
+// 열려있는 시트/모달 위에서 스크롤할 때는 절대 반응하지 않도록 가드를 둔다.
+function _initPullToRefresh() {
+  if (!_isStandaloneApp()) return;
+  const THRESHOLD = 68;
+  let startY = null, dragging = false, armed = false;
+
+  const indicator = document.createElement('div');
+  indicator.id = 'ptrIndicator';
+  indicator.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>`;
+  indicator.style.cssText = 'position:fixed;top:10px;left:50%;transform:translateX(-50%) translateY(-40px) scale(0.6);opacity:0;z-index:2500;width:34px;height:34px;border-radius:50%;background:var(--surface);box-shadow:var(--sh-md);display:flex;align-items:center;justify-content:center;transition:transform .18s var(--ease),opacity .18s var(--ease);pointer-events:none;';
+  document.body.appendChild(indicator);
+
+  const reset = () => {
+    indicator.style.opacity = '0';
+    indicator.style.transform = 'translateX(-50%) translateY(-40px) scale(0.6)';
+  };
+  const isBlocked = () =>
+    document.querySelector('.custom-sheet-backdrop.show') ||
+    document.querySelector('.modal.show') ||
+    document.querySelector('.swal2-container');
+
+  document.addEventListener('touchstart', (e) => {
+    if (isBlocked() || window.scrollY > 0) { dragging = false; return; }
+    startY = e.touches[0].clientY;
+    dragging = true; armed = false;
+  }, { passive: true });
+
+  document.addEventListener('touchmove', (e) => {
+    if (!dragging || startY === null) return;
+    if (isBlocked() || window.scrollY > 0) { dragging = false; reset(); return; }
+    const dy = e.touches[0].clientY - startY;
+    if (dy <= 0) { reset(); return; }
+    const progress = Math.min(dy / THRESHOLD, 1);
+    armed = progress >= 1;
+    indicator.style.transition = 'none';
+    indicator.style.opacity = String(progress);
+    indicator.style.transform = `translateX(-50%) translateY(${-40 + progress * 56}px) scale(${0.6 + progress * 0.4}) rotate(${progress * 280}deg)`;
+  }, { passive: true });
+
+  const finish = () => {
+    indicator.style.transition = 'transform .18s var(--ease),opacity .18s var(--ease)';
+    if (dragging && armed) {
+      indicator.style.transform = 'translateX(-50%) translateY(16px) scale(1)';
+      location.reload();
+    } else {
+      reset();
+    }
+    dragging = false; startY = null; armed = false;
+  };
+  document.addEventListener('touchend', finish, { passive: true });
+  document.addEventListener('touchcancel', finish, { passive: true });
+}
+
 // 이미 앱으로 설치되어 실행 중이면 설치 안내 아이콘은 숨김
 function _applyInstallBtnVisibility() {
   const show = !_isStandaloneApp();
@@ -3614,6 +3678,8 @@ window.onload = () => {
   if (savedChecker) document.getElementById('checkerName').value = savedChecker;
   _applyActivityBellVisibility();
   _applyInstallBtnVisibility();
+  _applyRefreshBtnVisibility();
+  _initPullToRefresh();
   _movePcNavIndicator('home');
 
   const splashSafetyTimer = setTimeout(() => {
