@@ -823,9 +823,31 @@ const API = (() => {
           name: s.name, group: s.study_room, sessions: [],
         };
       }
-      grouped[r.student_id].sessions.push({ session: r.session, reason: r.reason, noCount: r.no_count });
+      grouped[r.student_id].sessions.push({ session: r.session, status: '결석', reason: r.reason, noCount: r.no_count });
     }
     return Object.values(grouped);
+  }
+
+  /**
+   * 대시보드 — 특정 날짜의 전체 명단 (결석자뿐 아니라 전원 포함, 학생당 한 줄로 세션 병합)
+   * getTodayAbsences와 달리 출석·미기록 학생도 함께 반환한다 ("전체 명단" 뷰용)
+   * GAS 없음 — 신규
+   */
+  async function getDayRoster(date) {
+    const [students, records] = await Promise.all([
+      _get('students?select=id,class_num,student_num,name,study_room&order=study_room,class_num,student_num'),
+      _get(`attendance?record_date=eq.${date}&select=student_id,session,status,reason,no_count`),
+    ]);
+    const byStudent = {};
+    for (const r of records) (byStudent[r.student_id] ??= []).push(r);
+    return students.map(s => ({
+      id:    s.id,
+      ban:   String(s.class_num),
+      num:   String(s.student_num),
+      name:  s.name,
+      group: s.study_room,
+      sessions: (byStudent[s.id] ?? []).map(r => ({ session: r.session, status: r.status, reason: r.reason, noCount: r.no_count })),
+    }));
   }
 
   /**
@@ -846,9 +868,11 @@ const API = (() => {
     const total         = attendCount + countedAbsent;           // 통계 탭과 동일한 정의
     const attendRate    = total > 0 ? Math.round((attendCount / total) * 100) : null;
 
+    // 하루 대표 세션 기준 — 야간·심야가 같은 사유로 일괄 적용돼도 하루 1회로만 집계
     const reasonCounts = {};
-    absentRecs.forEach(r => {
-      const key = (r.reason || '').trim() || '사유 없음';
+    _forEachDayRepresentative(records, rec => {
+      if (rec.status !== '결석') return;
+      const key = (rec.reason || '').trim() || '사유 없음';
       reasonCounts[key] = (reasonCounts[key] || 0) + 1;
     });
 
@@ -958,6 +982,7 @@ const API = (() => {
     getActivityLogEnabled,
     saveActivityLogEnabled,
     getTodayAbsences,
+    getDayRoster,
     getStudentInsight,
     getViolationTypes,
     saveViolationTypes,

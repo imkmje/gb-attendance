@@ -16,8 +16,10 @@ const VIOLATION_ACTIONS = ['경고', '벌금', '직접 입력'];
    n.0.0 대규모 업데이트 · 0.n.0 기능/디자인 개선 · 0.0.n 버그 수정
    최신순 — 새 배포 때마다 맨 위에 추가할 것
 ════════════════════════════════ */
-const APP_VERSION = '2.10.0';
+const APP_VERSION = '2.11.0';
 const CHANGELOG = [
+  { v:'2.11.0', d:'2026-08-19', t:'minor', title:'대시보드에 날짜 이동 화살표·전체 명단 보기 추가, 통계 탭에 자습반 구분 없는 전체 순위 보기 추가' },
+  { v:'2.10.1', d:'2026-08-19', t:'patch', title:'학생 인사이트의 사유별 결석 집계를 하루 단위로 변경 (야간·심야 일괄 적용 시 하루 1회)' },
   { v:'2.10.0', d:'2026-08-19', t:'minor', title:'통계 탭 디자인을 다른 탭과 통일 (카드형 리스트로 개편) + 이름 클릭 시 명단과 동일한 상세 팝업 표시' },
   { v:'2.9.3', d:'2026-08-19', t:'patch', title:'대시보드 학생 인사이트의 노카운트 집계를 하루 단위로 변경 (일괄 적용해도 하루 1회)' },
   { v:'2.9.2', d:'2026-08-18', t:'patch', title:'"일괄 적용"(구 오늘 남은 세션도 결석) 토글이 실제 저장 상태를 반영하도록 수정 + 명칭 변경' },
@@ -117,10 +119,10 @@ function _emptyState(text, iconSvg) {
 // 로컬 타임존 기준 오늘 날짜 (YYYY-MM-DD)
 // ⚠ toISOString().slice(0,10) / valueAsDate=new Date() 는 UTC 기준이라
 //   한국시간(UTC+9) 자정~오전 9시 사이에는 어제 날짜가 나오는 버그가 있었음 — 절대 쓰지 말 것
-function _todayStr() {
-  const d = new Date();
+function _fmtYMD(d) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
+function _todayStr() { return _fmtYMD(new Date()); }
 
 /* ════════════════════════════════
    테마
@@ -432,7 +434,14 @@ function executeSwitchTab(tabName) {
   if (tabName === 'stats')     loadStats();
   if (tabName === 'schedule')  updateGroupScheduleView();
   if (tabName === 'roster')    loadRoster();
-  if (tabName === 'dashboard') loadDashboard();
+  if (tabName === 'dashboard') {
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const ind = document.getElementById('dashModeIndicator'); if (ind) ind.style.transition = 'none';
+      _moveDashModeSlider();
+      requestAnimationFrame(() => { const ind2 = document.getElementById('dashModeIndicator'); if (ind2) ind2.style.transition = ''; });
+    }));
+    loadDashboard();
+  }
 }
 
 function goBack() {
@@ -1325,16 +1334,27 @@ function filterStats(){
   _renderStatsList(filtered, g);
 }
 
-function _statRowHtml(s) {
+let _statsFlatView = false; // true면 자습반 구분 없이 전체를 한 순위표로 보여줌
+
+function toggleStatsFlatView() {
+  _statsFlatView = !_statsFlatView;
+  const sw = document.getElementById('statsFlatSw');
+  if (sw) sw.classList.toggle('on', _statsFlatView);
+  filterStats();
+}
+
+function _statRowHtml(s, showGroup) {
   const ratePct   = s.attendRate === -1 ? null : s.attendRate;
   const rateColor = ratePct === null ? 'var(--ink-4)' : ratePct >= 90 ? 'var(--green)' : ratePct >= 70 ? 'var(--amber)' : 'var(--red)';
   const rateDim   = ratePct === null ? 'var(--bg-deep)' : ratePct >= 90 ? 'var(--green-dim)' : ratePct >= 70 ? 'var(--amber-dim)' : 'var(--red-dim)';
   const rateLabel = ratePct === null ? '—' : ratePct + '%';
+  const groupTag  = showGroup ? `<span class="sch-dr-s" style="background:var(--bg-deep);color:var(--ink-3);">${s.group}</span>` : '';
   return `<div class="stat-row" data-sid="${s.id}">
     <div style="width:36px;height:36px;border-radius:var(--radius-sm);background:var(--blue-dim);color:var(--blue);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;">${s.ban}-${s.num}</div>
     <div style="flex:1;min-width:0;">
       <div style="font-size:14px;font-weight:700;color:var(--ink);">${s.name}</div>
       <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">
+        ${groupTag}
         <span class="sch-dr-s" style="background:var(--blue-dim);color:var(--blue);">${s.total.toFixed(1)}시간</span>
         <span class="sch-dr-s" style="background:${rateDim};color:${rateColor};">출석률 ${rateLabel}</span>
         <span class="sch-dr-s" style="background:var(--red-dim);color:var(--red);">결석 ${s.absentCount}회</span>
@@ -1350,15 +1370,23 @@ function _renderStatsList(filtered, groupFilter) {
   if (!filtered.length) { container.innerHTML = _emptyState('데이터가 없습니다.'); return; }
 
   let html;
-  if (groupFilter === '전체') {
+  if (groupFilter === '전체' && _statsFlatView) {
+    // 자습반 구분 없이 정렬 기준 그대로 한 줄 순위표로
+    html = `<div style="text-align:center;margin-bottom:14px;">
+      <span style="display:inline-flex;align-items:center;gap:7px;background:var(--surface);box-shadow:var(--sh-md);border-radius:var(--radius-pill);padding:9px 20px;font-size:13px;font-weight:700;color:var(--ink-2);">
+        전체 <span style="color:var(--blue);font-weight:800;">${filtered.length}명</span>
+      </span>
+    </div>
+    <div style="background:var(--surface);border-radius:var(--radius);box-shadow:var(--sh-md);overflow:hidden;margin-bottom:16px;">${filtered.map(s => _statRowHtml(s, true)).join('')}</div>`;
+  } else if (groupFilter === '전체') {
     html = GROUPS.map(g => {
       const gs = filtered.filter(s => s.group === g);
       if (!gs.length) return '';
       return `<div class="roster-section-head"><span class="roster-section-title">${g}</span><span class="roster-section-count">${gs.length}명</span><div class="roster-section-line"></div></div>
-        <div style="background:var(--surface);border-radius:var(--radius);box-shadow:var(--sh-md);overflow:hidden;margin-bottom:16px;">${gs.map(_statRowHtml).join('')}</div>`;
+        <div style="background:var(--surface);border-radius:var(--radius);box-shadow:var(--sh-md);overflow:hidden;margin-bottom:16px;">${gs.map(s => _statRowHtml(s, false)).join('')}</div>`;
     }).join('');
   } else {
-    html = `<div style="background:var(--surface);border-radius:var(--radius);box-shadow:var(--sh-md);overflow:hidden;margin-bottom:16px;">${filtered.map(_statRowHtml).join('')}</div>`;
+    html = `<div style="background:var(--surface);border-radius:var(--radius);box-shadow:var(--sh-md);overflow:hidden;margin-bottom:16px;">${filtered.map(s => _statRowHtml(s, false)).join('')}</div>`;
   }
   container.innerHTML = html;
 
@@ -1726,11 +1754,44 @@ function _rosterCardHtml(s) {
    대시보드 (교사 전용 — 오늘의 결석 현황 + 학생별 인사이트)
 ════════════════════════════════ */
 const DASH_GROUPS = ['청운반','백운 A반','백운 B반','백운 C반','백운 D반'];
+let _dashMode = 'absent'; // 'absent' | 'all' — "결석자만"/"전체 명단" 세그먼트 상태
+
+function _dashShiftDate(delta) {
+  const input = document.getElementById('dashDateInput');
+  const base = input.value ? new Date(input.value + 'T00:00:00') : new Date();
+  base.setDate(base.getDate() + delta);
+  input.value = _fmtYMD(base);
+  loadDashboard();
+}
+
+function _switchDashMode(mode) {
+  if (_dashMode === mode) return;
+  _dashMode = mode;
+  const absBtn = document.getElementById('dashMode-absent');
+  const allBtn = document.getElementById('dashMode-all');
+  if (absBtn) absBtn.classList.toggle('active', mode === 'absent');
+  if (allBtn) allBtn.classList.toggle('active', mode === 'all');
+  _moveDashModeSlider();
+  loadDashboard();
+}
+
+function _moveDashModeSlider() {
+  const bar = document.getElementById('dashModeBar');
+  const ind = document.getElementById('dashModeIndicator');
+  const active = bar && bar.querySelector('.sch-pill-item.active');
+  if (!bar || !ind || !active) return;
+  ind.style.width = active.offsetWidth + 'px';
+  ind.style.transform = 'translateX(' + active.offsetLeft + 'px)';
+}
+
+let _dashReqToken = 0; // 날짜/모드를 빠르게 연속 전환할 때 오래된 응답이 최신 화면을 덮어쓰지 않도록 막는 토큰
 
 function loadDashboard() {
   const dateInput = document.getElementById('dashDateInput');
   if (!dateInput.value) dateInput.value = _todayStr();
   const date = dateInput.value;
+  const mode = _dashMode;
+  const myToken = ++_dashReqToken;
 
   const summary = document.getElementById('dashSummary');
   const list = document.getElementById('dashAbsentList');
@@ -1742,12 +1803,54 @@ function loadDashboard() {
     </div>`
   ).join('');
 
-  API.getTodayAbsences(date)
-    .then(absences => _renderDashboard(absences, date))
+  const req = mode === 'all' ? API.getDayRoster(date) : API.getTodayAbsences(date);
+  req
+    .then(data => {
+      if (myToken !== _dashReqToken) return; // 이 사이 더 최신 요청이 시작됐으면 이 결과는 버림
+      mode === 'all' ? _renderDashboardAll(data, date) : _renderDashboard(data, date);
+    })
     .catch(() => {
+      if (myToken !== _dashReqToken) return;
       summary.innerHTML = '';
-      list.innerHTML = _emptyState('결석 현황을 불러오지 못했습니다.');
+      list.innerHTML = _emptyState('현황을 불러오지 못했습니다.');
     });
+}
+
+// 결석 세션 태그 하나 — "전체 명단" 모드에서는 출석 세션도 함께 표시해야 해서
+// 결석 전용이던 기존 로직에 출석 분기를 추가해 공용 헬퍼로 뺐다.
+function _dashSessTag(sess) {
+  const short = sess.session.replace(' 자율학습','').replace(/\(토\)/,'');
+  if (sess.status !== '결석') {
+    return `<span class="sch-dr-s" style="background:var(--green-dim);color:var(--green);">${short} 출석</span>`;
+  }
+  const label = sess.reason ? `${short} · ${sess.reason}` : short;
+  const bg = sess.noCount ? 'var(--green-dim)' : 'var(--red-dim)';
+  const fg = sess.noCount ? 'var(--green)'      : 'var(--red)';
+  return `<span class="sch-dr-s" style="background:${bg};color:${fg};">${label}${sess.noCount ? ' (노카운트)' : ''}</span>`;
+}
+
+function _dashStudentRowHtml(s, badgeBg, badgeFg) {
+  const tags = s.sessions.length
+    ? s.sessions.map(_dashSessTag).join('')
+    : `<span class="sch-dr-s" style="background:var(--bg-deep);color:var(--ink-4);">기록 없음</span>`;
+  return `<div class="_dash-student" data-sid="${s.id}" style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--bg-deep);cursor:pointer;">
+    <div style="width:36px;height:36px;border-radius:var(--radius-sm);background:${badgeBg};color:${badgeFg};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;">${s.ban}-${s.num}</div>
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:14px;font-weight:700;color:var(--ink);">${s.name}</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">${tags}</div>
+    </div>
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ink-4)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="9 18 15 12 9 6"/></svg>
+  </div>`;
+}
+
+function _bindDashRows(list) {
+  list.querySelectorAll('._dash-student').forEach((el, i) => {
+    el.style.animationDelay = (i * 20) + 'ms';
+    el.addEventListener('click', () => {
+      const s = (window._dashRoster || []).find(a => a.id === el.dataset.sid);
+      if (s) _openStudentInsightSheet(s);
+    });
+  });
 }
 
 function _renderDashboard(absences, date) {
@@ -1763,44 +1866,62 @@ function _renderDashboard(absences, date) {
   </div>`;
 
   if (!absences.length) {
-    list.innerHTML = _emptyState('오늘 결석자가 없습니다. 🎉');
+    list.innerHTML = _emptyState('결석자가 없습니다. 🎉');
     return;
   }
 
-  window._dashAbsences = absences;
+  window._dashRoster = absences;
   const html = DASH_GROUPS.map(g => {
     const gs = absences.filter(a => a.group === g)
       .sort((a,b) => parseInt(a.ban)-parseInt(b.ban) || parseInt(a.num)-parseInt(b.num));
     if (!gs.length) return '';
-    const rows = gs.map(s => {
-      const tags = s.sessions.map(sess => {
-        const short = sess.session.replace(' 자율학습','').replace(/\(토\)/,'');
-        const label = sess.reason ? `${short} · ${sess.reason}` : short;
-        const bg = sess.noCount ? 'var(--green-dim)' : 'var(--red-dim)';
-        const fg = sess.noCount ? 'var(--green)'      : 'var(--red)';
-        return `<span class="sch-dr-s" style="background:${bg};color:${fg};">${label}${sess.noCount ? ' (노카운트)' : ''}</span>`;
-      }).join('');
-      return `<div class="_dash-student" data-sid="${s.id}" style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--bg-deep);cursor:pointer;">
-        <div style="width:36px;height:36px;border-radius:var(--radius-sm);background:var(--red-dim);color:var(--red);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;">${s.ban}-${s.num}</div>
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:14px;font-weight:700;color:var(--ink);">${s.name}</div>
-          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">${tags}</div>
-        </div>
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ink-4)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="9 18 15 12 9 6"/></svg>
-      </div>`;
-    }).join('');
+    const rows = gs.map(s => _dashStudentRowHtml(s, 'var(--red-dim)', 'var(--red)')).join('');
     return `<div class="roster-section-head"><span class="roster-section-title">${g}</span><span class="roster-section-count">${gs.length}명</span><div class="roster-section-line"></div></div>
       <div style="background:var(--surface);border-radius:var(--radius);box-shadow:var(--sh-md);overflow:hidden;margin-bottom:16px;">${rows}</div>`;
   }).join('');
 
   list.innerHTML = html;
-  list.querySelectorAll('._dash-student').forEach((el, i) => {
-    el.style.animationDelay = (i * 20) + 'ms';
-    el.addEventListener('click', () => {
-      const s = window._dashAbsences.find(a => a.id === el.dataset.sid);
-      if (s) _openStudentInsightSheet(s);
-    });
-  });
+  _bindDashRows(list);
+}
+
+function _renderDashboardAll(roster, date) {
+  const summary = document.getElementById('dashSummary');
+  const list = document.getElementById('dashAbsentList');
+  const d = new Date(date), dn = ['일','월','화','수','목','금','토'];
+  const dl = `${d.getMonth()+1}월 ${d.getDate()}일 (${dn[d.getDay()]})`;
+  // "결석자만" 모드는 노카운트 여부와 무관하게 결석 기록이 있으면 포함하므로,
+  // 두 모드의 결석 인원수가 서로 다르게 보이지 않도록 동일한 기준을 쓴다.
+  const isAbsent = s => s.sessions.some(x => x.status === '결석');
+  const absentCount = roster.filter(isAbsent).length;
+
+  summary.innerHTML = `<div style="text-align:center;">
+    <span style="display:inline-flex;align-items:center;gap:8px;background:var(--surface);box-shadow:var(--sh-md);border-radius:var(--radius-pill);padding:10px 22px;font-size:13px;font-weight:700;color:var(--ink-2);">
+      ${dl} 전체 <span style="color:var(--blue);font-weight:800;font-size:15px;">${roster.length}명</span>
+      <span style="width:1px;height:12px;background:var(--bg-deep);"></span>
+      결석 <span style="color:var(--red);font-weight:800;font-size:15px;">${absentCount}명</span>
+    </span>
+  </div>`;
+
+  if (!roster.length) {
+    list.innerHTML = _emptyState('명단이 없습니다.');
+    return;
+  }
+
+  window._dashRoster = roster;
+  const html = DASH_GROUPS.map(g => {
+    const gs = roster.filter(s => s.group === g)
+      .sort((a,b) => parseInt(a.ban)-parseInt(b.ban) || parseInt(a.num)-parseInt(b.num));
+    if (!gs.length) return '';
+    const rows = gs.map(s => isAbsent(s)
+      ? _dashStudentRowHtml(s, 'var(--red-dim)', 'var(--red)')
+      : _dashStudentRowHtml(s, 'var(--blue-dim)', 'var(--blue)')
+    ).join('');
+    return `<div class="roster-section-head"><span class="roster-section-title">${g}</span><span class="roster-section-count">${gs.length}명</span><div class="roster-section-line"></div></div>
+      <div style="background:var(--surface);border-radius:var(--radius);box-shadow:var(--sh-md);overflow:hidden;margin-bottom:16px;">${rows}</div>`;
+  }).join('');
+
+  list.innerHTML = html;
+  _bindDashRows(list);
 }
 
 function _openStudentInsightSheet(student) {
