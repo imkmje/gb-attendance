@@ -1860,7 +1860,7 @@ function _openTeacherMenu() {
         { bg:'#fef3c7',          fg:'#d97706',      svg:'<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
           title:'전체 벌금 현황',  sub:'전체 벌금 목록 조회 및 납부 상태를 수정합니다', fn:_teacherViewFines },
         { bg:'#fce7f3',          fg:'#db2777',      svg:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01"/>',
-          title:'평일 공휴일 설정', sub:'평일 중 자율학습을 쉬는 날짜를 등록/삭제합니다', fn:_teacherEditHolidays },
+          title:'평일 공휴일 설정', sub:'평일 공휴일 중 자습하는 날을 등록/삭제합니다', fn:_teacherEditHolidays },
       ],
     },
     {
@@ -2379,7 +2379,7 @@ function _renderHolidayEditorSheet() {
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
-    <div style="font-size:11px;color:var(--ink-4);margin-bottom:12px;line-height:1.5;">평일 중 자율학습을 쉬는 날짜를 등록하면 해당 요일 오전/오후가 공휴일 세션으로 전환됩니다.</div>
+    <div style="font-size:11px;color:var(--ink-4);margin-bottom:12px;line-height:1.5;">평일 공휴일 중 자습하는 날을 등록하면 해당 요일이 공휴일 세션으로 전환됩니다.</div>
     <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px;box-shadow:var(--sh-pressed);margin-bottom:12px;">
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <input type="date" id="_holDateInput" class="cd-input" style="flex:1;min-width:130px;">

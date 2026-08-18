@@ -684,11 +684,15 @@ html[data-theme="dark"] .viol-select { background-image:url("data:image/svg+xml,
   /* ── FAB: 하단 탭바가 없으니 여백 축소 ── */
   .roster-fab { bottom:28px; }
 
-  /* ── 커스텀 시트 → 중앙 모달 카드 ── */
+  /* ── 커스텀 시트 → 중앙 모달 카드 ──
+     드래그 핸들 바를 숨기는 대신, 핸들이 만들어주던 상단 여백만큼
+     실제 padding-top을 넣어준다 (숨기기만 하면 내용이 위쪽 둥근 모서리에
+     바짝 붙어 "잘린" 것처럼 보이는 문제가 있었음). */
   .custom-sheet-backdrop { align-items:center; justify-content:center; padding:28px; }
   .custom-sheet {
     width:min(560px, 100%); max-height:84vh; overflow-y:auto;
-    border-radius:var(--radius-xl); transform:translateY(14px) scale(0.97);
+    border-radius:var(--radius-xl); padding-top:26px;
+    transform:translateY(14px) scale(0.97);
   }
   .custom-sheet-backdrop.show .custom-sheet { transform:none; }
   .custom-sheet-handle { display:none; }
@@ -698,7 +702,7 @@ html[data-theme="dark"] .viol-select { background-image:url("data:image/svg+xml,
     border-radius:var(--radius-xl); transform:translateY(14px) scale(0.97);
   }
   .custom-sheet-backdrop.show .vh-sheet { transform:none; }
-  .vh-header { border-radius:var(--radius-xl) var(--radius-xl) 0 0; }
+  .vh-header { border-radius:var(--radius-xl) var(--radius-xl) 0 0; padding-top:22px; }
   .vh-handle { display:none; }
 
   /* ── Bootstrap 모달(결과보기 등) → 중앙 모달 카드 ── */
@@ -706,6 +710,7 @@ html[data-theme="dark"] .viol-select { background-image:url("data:image/svg+xml,
   .modal-glass .modal-dialog { position:static !important; margin:0 !important; width:90% !important; max-width:600px !important; }
   .modal-glass .modal-content { border-radius:var(--radius-xl) !important; max-height:80vh; }
   .modal-glass .modal-content::before { display:none; }
+  .modal-glass .modal-header { padding-top:20px !important; }
   @keyframes modalPopDesktop { from { opacity:0; transform:translateY(14px) scale(0.97); } to { opacity:1; transform:none; } }
   .modal-glass.show .modal-content { animation:modalPopDesktop var(--dur-normal) var(--ease); }
 }
