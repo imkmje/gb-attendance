@@ -87,32 +87,43 @@ const API = (() => {
 
   // ─── 결석 카운트 (GAS _calcAbsentCounts 동일 로직) ────────
   // records: [{record_date, session, status, no_count}]
-  function _calcAbsentCounts(records) {
-    if (!records?.length) return 0;
+  // 하루의 "대표 세션"(평일: 심야>야간>오후 우선순위 중 기록 있는 첫 세션 /
+  // 토요일: 오전·오후 독립)을 골라 callback에 넘긴다 — 결석 카운트·노카운트
+  // 카운트 등 "하루 단위로 세는" 모든 집계가 이 규칙 하나를 공유한다.
+  function _forEachDayRepresentative(records, cb) {
+    if (!records?.length) return;
     const byDate = {};
     for (const r of records) {
       const dateKey = String(r.record_date).slice(0, 10); // 'YYYY-MM-DD' 보장
       (byDate[dateKey] ??= []).push(r);
     }
-    let count = 0;
-    for (const [date, recs] of Object.entries(byDate)) {
+    for (const [dateKey, recs] of Object.entries(byDate)) {
       // 타임존 오류 방지: 날짜 문자열에서 직접 파싱
-      const parts = date.split('-');
+      const parts = dateKey.split('-');
       const dayOfWeek = new Date(+parts[0], +parts[1] - 1, +parts[2]).getDay();
       const isSat = dayOfWeek === 6;
       if (isSat) {
-        for (const r of recs)
-          if (r.status === '결석' && !r.no_count) count++;
+        for (const r of recs) cb(r);
       } else {
         for (const sess of WEEKDAY_PRIORITY) {
           const rec = recs.find(r => r.session === sess);
-          if (rec) {
-            if (rec.status === '결석' && !rec.no_count) count++;
-            break;
-          }
+          if (rec) { cb(rec); break; }
         }
       }
     }
+  }
+
+  function _calcAbsentCounts(records) {
+    let count = 0;
+    _forEachDayRepresentative(records, rec => { if (rec.status === '결석' && !rec.no_count) count++; });
+    return count;
+  }
+
+  // 노카운트 결석을 "하루 단위"로 센다 — 일괄 적용 등으로 하루에 여러 세션이
+  // 전부 노카운트 결석이어도 그 날은 1회로만 집계한다.
+  function _calcNoCountDays(records) {
+    let count = 0;
+    _forEachDayRepresentative(records, rec => { if (rec.status === '결석' && rec.no_count) count++; });
     return count;
   }
 
@@ -830,7 +841,7 @@ const API = (() => {
     const attendCount   = records.filter(r => r.status === '출석').length;
     const absentRecs    = records.filter(r => r.status === '결석');
     const countedAbsent = _calcAbsentCounts(records);           // 노카운트 제외 실질 결석
-    const noCountAbsent = absentRecs.filter(r => r.no_count).length;
+    const noCountAbsent = _calcNoCountDays(records);  // 하루 대표 세션 기준 — 일괄 적용으로 하루 3세션이어도 1회
     const total         = attendCount + countedAbsent;           // 통계 탭과 동일한 정의
     const attendRate    = total > 0 ? Math.round((attendCount / total) * 100) : null;
 
