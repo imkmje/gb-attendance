@@ -714,6 +714,22 @@ const API = (() => {
   }
 
   /**
+   * 활동 로그 사용 여부 (전역 설정 — 모든 교사 공통)
+   */
+  async function getActivityLogEnabled() {
+    try {
+      const rows = await _get('settings?key=eq.activity_log_enabled&select=value');
+      if (rows.length) return rows[0].value !== false;
+    } catch (_) {}
+    return true;
+  }
+
+  async function saveActivityLogEnabled(enabled) {
+    await _req('POST', 'settings', { key: 'activity_log_enabled', value: !!enabled },
+      { Prefer: 'resolution=merge-duplicates,return=minimal' });
+  }
+
+  /**
    * 활동 로그 / 공지사항 조회 (최신순)
    */
   async function getActivityLog(limit = 50) {
@@ -769,5 +785,7 @@ const API = (() => {
     saveReasonTypes,
     getActivityLog,
     logActivity,
+    getActivityLogEnabled,
+    saveActivityLogEnabled,
   };
 })();

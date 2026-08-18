@@ -41,6 +41,7 @@ let _violTarget        = null;
 let _includeAfterSchool = false;
 let _holidays = [];
 let _reasonTypes = ['학원 보강', '병결', '개인 사정'];
+let _activityLogOn = true;
 let _scheduleEditMode = false;
 let _scheduleEditAuthed = false;
 let _headerClickCount = 0, _headerClickTimer = null;
@@ -1668,7 +1669,7 @@ function handleTeacherMenuClick() {
 
 // ── 활동 로그 / 공지사항 ──────────────────────────────
 function _activityLogEnabled() {
-  return localStorage.getItem('activityLogEnabled') !== 'false';
+  return _activityLogOn;
 }
 
 function _applyActivityBellVisibility() {
@@ -3083,13 +3084,16 @@ function _openDevPasswordPrompt() {
 
 function _openDevMenu() {
   showLoading('설정 불러오는 중...');
-  API.getHolidays()
-    .then(holidays => {
-      hideLoading();
-      _holidays = holidays || [];
-      _renderDevMenuSheet();
-    })
-    .catch(() => { hideLoading(); _renderDevMenuSheet(); });
+  Promise.all([
+    API.getHolidays().catch(() => []),
+    API.getActivityLogEnabled().catch(() => _activityLogOn),
+  ]).then(([holidays, activityLogOn]) => {
+    hideLoading();
+    _holidays = holidays || [];
+    _activityLogOn = activityLogOn;
+    _applyActivityBellVisibility();
+    _renderDevMenuSheet();
+  });
 }
 
 function _renderDevMenuSheet() {
@@ -3143,7 +3147,7 @@ function _renderDevMenuSheet() {
       <div style="display:flex;align-items:center;gap:10px;">
         <div style="flex:1;">
           <div style="font-size:13px;font-weight:700;color:var(--ink-2);">헤더 종 아이콘 사용</div>
-          <div style="font-size:11px;color:var(--ink-3);margin-top:2px;">OFF 시 종 아이콘 숨김, 세션 변경 자동 기록도 중단</div>
+          <div style="font-size:11px;color:var(--ink-3);margin-top:2px;">모든 교사에게 공통 적용 · OFF 시 종 아이콘 숨김, 세션 변경 자동 기록도 중단</div>
         </div>
         <button id="_devActLogToggle" onclick="_toggleActivityLog()" style="padding:6px 16px;border-radius:var(--radius-pill);border:none;font-family:var(--font);font-size:13px;font-weight:800;cursor:pointer;min-width:52px;transition:background .2s,color .2s;"></button>
       </div>
@@ -3207,13 +3211,22 @@ function _applyActivityLogBtn(btn) {
   btn.style.color = '#fff';
 }
 
-function _toggleActivityLog() {
-  const on = _activityLogEnabled();
-  localStorage.setItem('activityLogEnabled', on ? 'false' : 'true');
+async function _toggleActivityLog() {
+  const prev = _activityLogOn;
+  const next = !prev;
+  _activityLogOn = next;
   const btn = document.getElementById('_devActLogToggle');
   if (btn) _applyActivityLogBtn(btn);
   _applyActivityBellVisibility();
-  showSuccessToast('활동 로그 ' + (!on ? 'ON' : 'OFF'));
+  try {
+    await API.saveActivityLogEnabled(next);
+    showSuccessToast('활동 로그 ' + (next ? 'ON' : 'OFF'), '모든 교사에게 적용됩니다');
+  } catch (err) {
+    _activityLogOn = prev;
+    if (btn) _applyActivityLogBtn(btn);
+    _applyActivityBellVisibility();
+    Swal.fire('오류', err?.message || '설정을 저장하지 못했습니다.', 'error');
+  }
 }
 
 function _renderReasonList(sheet) {
@@ -3403,7 +3416,9 @@ window.onload = () => {
         API.getReasonTypes()
           .then(types => { _reasonTypes = types; })
           .catch(() => {});
-        checkActivityBadge();
+        API.getActivityLogEnabled()
+          .then(on => { _activityLogOn = on; _applyActivityBellVisibility(); checkActivityBadge(); })
+          .catch(() => { checkActivityBadge(); });
         if (!_rosterLoaded) {
           API.getAllMemberList()
             .then(data => { _rosterData=data||[]; _rosterLoaded=true; })
