@@ -3,7 +3,9 @@
 ════════════════════════════════ */
 const GROUPS = ['청운반','백운 A반','백운 B반','백운 C반','백운 D반'];
 
-const VIOLATION_TYPES = [
+// 위반 유형 — 개발자 메뉴에서 편집 가능(결석 사유와 동일한 방식).
+// 마지막 '직접 입력'은 고정 항목이며 관리 UI에는 노출되지 않음(항상 자동으로 붙임).
+let _violationTypes = [
   '무단 지각', '무단 결석', '전자기기 무단 사용',
   '졸음', '취침', '자습 방해', '직접 입력'
 ];
@@ -14,8 +16,9 @@ const VIOLATION_ACTIONS = ['경고', '벌금', '직접 입력'];
    n.0.0 대규모 업데이트 · 0.n.0 기능/디자인 개선 · 0.0.n 버그 수정
    최신순 — 새 배포 때마다 맨 위에 추가할 것
 ════════════════════════════════ */
-const APP_VERSION = '2.7.0';
+const APP_VERSION = '2.8.0';
 const CHANGELOG = [
+  { v:'2.8.0', d:'2026-08-18', t:'minor', title:'위반 유형 관리, 삭제 전 기록 건수 확인, 벌금 현황 자습반별 소계+텍스트 복사 추가' },
   { v:'2.7.0', d:'2026-08-18', t:'minor', title:'개발자 메뉴에 개발 로그(버전 히스토리) 뷰어 추가' },
   { v:'2.6.0', d:'2026-08-18', t:'minor', title:'대시보드 탭 신설 — 오늘의 결석 현황 + 학생별 인사이트(출석률·사유별 결석·연속결석 경고 등)' },
   { v:'2.5.0', d:'2026-08-18', t:'minor', title:'설치된 앱(PWA)에서 새로고침 버튼 + 당겨서 새로고침 제스처 지원' },
@@ -2001,7 +2004,7 @@ function openViolSheet(student, preselect = {}) {
   const sheet    = document.createElement('div'); sheet.className    = 'custom-sheet';
   sheet.style.paddingBottom = '40px';
 
-  const violOpts = VIOLATION_TYPES.map(v => `<option value="${v}">${v}</option>`).join('');
+  const violOpts = _violationTypes.map(v => `<option value="${v}">${v}</option>`).join('');
   const actOpts  = VIOLATION_ACTIONS.map(a => `<option value="${a}">${a}</option>`).join('');
 
   sheet.innerHTML = `
@@ -3032,11 +3035,19 @@ function _teacherChangeRoom(student) {
 }
 
 async function _teacherDeleteStudent(student) {
+  showLoading('삭제될 기록 확인 중...');
+  let counts = { attendanceCount: '—', violationCount: '—' };
+  try { counts = await API.getStudentRecordCounts(student.id); } catch (_) {}
+  hideLoading();
+
   const result = await Swal.fire({
     title: `${student.name} 삭제`,
-    html:  `<b style="color:var(--red);">${student.ban}반 ${student.num}번 ${student.name}</b>의 출석 기록과 위반 이력이 모두 삭제됩니다.<br><br>정말 삭제할까요?`,
+    html:  `<b style="color:var(--red);">${student.ban}반 ${student.num}번 ${student.name}</b>을 삭제하면 아래 기록도 함께 영구 삭제됩니다.<br><br>
+      출석 기록 <b>${counts.attendanceCount}건</b> · 위반 기록 <b>${counts.violationCount}건</b><br><br>
+      <span style="color:var(--red);font-weight:700;">되돌릴 수 없습니다.</span> 정말 삭제할까요?`,
     icon:  'warning', showCancelButton: true,
     confirmButtonText: '삭제', cancelButtonText: '취소',
+    confirmButtonColor: '#ef4444',
   });
   if (!result.isConfirmed) return;
   try {
@@ -3277,6 +3288,33 @@ function _teacherViewFines() {
     .catch(() => { hideLoading(); Swal.fire('오류', '벌금 현황을 불러오지 못했습니다.', 'error'); });
 }
 
+// 자습반별로 묶은 벌금 현황을 공유하기 좋은 텍스트로 변환
+function _buildFineReportText(visible, filterState) {
+  const fmt = n => n.toLocaleString('ko-KR') + '원';
+  const total  = visible.reduce((s, v) => s + _parseFine(v.action), 0);
+  const paid   = visible.filter(v => v.paid).reduce((s, v) => s + _parseFine(v.action), 0);
+  const unpaid = total - paid;
+
+  let report = `[자습반별 벌금 현황${filterState === 'unpaid' ? ' · 미납만' : ''}]\n`;
+  report += `▪ 총 부과: ${fmt(total)} · 납부: ${fmt(paid)} · 미납: ${fmt(unpaid)}\n`;
+  report += '----------------------------------\n';
+
+  const byGroup = {};
+  for (const v of visible) (byGroup[v.student.group || '기타'] ??= []).push(v);
+
+  for (const [group, vs] of Object.entries(byGroup)) {
+    const groupTotal  = vs.reduce((s, v) => s + _parseFine(v.action), 0);
+    const groupUnpaid = vs.filter(v => !v.paid).reduce((s, v) => s + _parseFine(v.action), 0);
+    report += `\n[${group}] 소계 ${fmt(groupTotal)}${groupUnpaid > 0 ? ` (미납 ${fmt(groupUnpaid)})` : ''}\n`;
+    vs.forEach(v => {
+      const fine = _parseFine(v.action);
+      report += `- ${v.student.ban}반 ${v.student.num}번 ${v.student.name} · ${v.violType}${v.detail ? `(${v.detail})` : ''} · ${fmt(fine)} [${v.paid ? '납부' : '미납'}]\n`;
+    });
+  }
+  report += '----------------------------------';
+  return report;
+}
+
 function _renderFineSheet(fines) {
   const backdrop = document.createElement('div');
   backdrop.className = 'custom-sheet-backdrop';
@@ -3298,9 +3336,14 @@ function _renderFineSheet(fines) {
     <div class="custom-sheet-handle"></div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
       <div style="font-size:15px;font-weight:800;color:var(--ink);letter-spacing:-0.4px;">전체 벌금 현황</div>
-      <button id="_fshClose" aria-label="닫기" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--sh-xs);">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
+      <div style="display:flex;gap:6px;">
+        <button id="_fshCopy" aria-label="텍스트로 복사" title="텍스트로 복사" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--blue-dim);color:var(--blue);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--sh-xs);">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+        <button id="_fshClose" aria-label="닫기" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--sh-xs);">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
     </div>
     <!-- 요약 바 -->
     <div style="display:flex;gap:6px;margin-bottom:12px;">
@@ -3332,6 +3375,12 @@ function _renderFineSheet(fines) {
   const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
   backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
   sheet.querySelector('#_fshClose').addEventListener('click', close);
+  sheet.querySelector('#_fshCopy').addEventListener('click', () => {
+    const visible = filterState === 'unpaid' ? fines.filter(v => !v.paid) : fines;
+    if (!visible.length) { showSuccessToast('복사할 내용이 없습니다'); return; }
+    const text = _buildFineReportText(visible, filterState);
+    navigator.clipboard.writeText(text).then(() => showSuccessToast('클립보드에 복사됐어요'));
+  });
 
   const refreshSummary = () => {
     const { total, paid, unpaid } = calcSummary();
@@ -3358,7 +3407,12 @@ function _renderFineSheet(fines) {
 
     let html = '';
     for (const [group, vs] of Object.entries(byGroup)) {
-      html += `<div style="font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--ink-4);padding:6px 2px 4px;">${group}</div>`;
+      const groupTotal  = vs.reduce((s, v) => s + _parseFine(v.action), 0);
+      const groupUnpaid = vs.filter(v => !v.paid).reduce((s, v) => s + _parseFine(v.action), 0);
+      html += `<div style="display:flex;align-items:baseline;justify-content:space-between;padding:6px 2px 4px;">
+        <span style="font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--ink-4);">${group}</span>
+        <span style="font-size:11px;font-weight:700;color:var(--ink-3);">소계 ${fmt(groupTotal)}${groupUnpaid > 0 ? ` · 미납 ${fmt(groupUnpaid)}` : ''}</span>
+      </div>`;
       for (const v of vs) {
         const fine = _parseFine(v.action);
         const isPaid = v.paid;
@@ -3462,7 +3516,7 @@ function _renderFineSheet(fines) {
 // ── 벌금 기록 수정 시트 ─────────────────────────────
 function _editFineRecord(viol, onSaved) {
   const origFine = _parseFine(viol.action);
-  const isCustomType = !VIOLATION_TYPES.slice(0, -1).includes(viol.violType);
+  const isCustomType = !_violationTypes.slice(0, -1).includes(viol.violType);
 
   const backdrop = document.createElement('div');
   backdrop.className = 'custom-sheet-backdrop';
@@ -3471,7 +3525,7 @@ function _editFineRecord(viol, onSaved) {
   sheet.className = 'custom-sheet';
   sheet.style.paddingBottom = '32px';
 
-  const violOpts = VIOLATION_TYPES.map(v => {
+  const violOpts = _violationTypes.map(v => {
     const sel = (v === viol.violType) || (v === '직접 입력' && isCustomType);
     return `<option value="${v}"${sel ? ' selected' : ''}>${v}</option>`;
   }).join('');
@@ -3744,6 +3798,16 @@ function _renderDevMenuSheet() {
         <input type="text" id="_reasonInput" class="cd-input" placeholder="새 사유 입력" style="flex:1;" onkeydown="if(event.key==='Enter')_addReasonType()">
         <button onclick="_addReasonType()" style="padding:8px 16px;border-radius:var(--radius-pill);border:none;background:var(--blue);color:#fff;font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;box-shadow:var(--sh-blue);">+ 추가</button>
       </div>
+    </div>
+
+    <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin:20px 0 10px;">⚠️ 위반 유형 관리</div>
+    <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px;box-shadow:var(--sh-pressed);">
+      <div id="_violTypeList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;"></div>
+      <div style="display:flex;gap:8px;">
+        <input type="text" id="_violTypeInput" class="cd-input" placeholder="새 위반 유형 입력" style="flex:1;" onkeydown="if(event.key==='Enter')_addViolationType()">
+        <button onclick="_addViolationType()" style="padding:8px 16px;border-radius:var(--radius-pill);border:none;background:var(--blue);color:#fff;font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;box-shadow:var(--sh-blue);">+ 추가</button>
+      </div>
+      <div style="font-size:10.5px;color:var(--ink-4);margin-top:8px;line-height:1.5;">'직접 입력'은 항상 마지막에 고정으로 붙어서 목록에 표시되지 않습니다.</div>
     </div>`;
 
   backdrop.appendChild(sheet);
@@ -3759,6 +3823,7 @@ function _renderDevMenuSheet() {
   sheet.querySelector('#_resetDateInput').value = _todayStr();
   _renderHolidayList(sheet);
   _renderReasonList(sheet);
+  _renderViolationTypeList(sheet);
   const pwBtn = sheet.querySelector('#_devPwToggle');
   if (pwBtn) _applyTeacherPwBtn(pwBtn);
   const actLogBtn = sheet.querySelector('#_devActLogToggle');
@@ -3852,6 +3917,64 @@ async function _moveReasonType(idx, dir) {
   catch (e) { showSuccessToast('저장 실패: ' + e.message); }
 }
 
+// ── 위반 유형 관리 (결석 사유와 동일한 패턴) ──
+// _violationTypes의 마지막 '직접 입력'은 고정 항목이라 관리 목록에는 안 보여주고,
+// 저장할 때도 편집 가능한 부분만 서버에 저장한다.
+function _violEditable() { return _violationTypes.slice(0, -1); }
+
+function _renderViolationTypeList(sheet) {
+  const list = sheet ? sheet.querySelector('#_violTypeList') : document.getElementById('_violTypeList');
+  if (!list) return;
+  const editable = _violEditable();
+  if (!editable.length) {
+    list.innerHTML = '<div style="text-align:center;padding:12px;color:var(--ink-3);font-size:13px;font-weight:600;">등록된 유형이 없습니다.</div>';
+    return;
+  }
+  list.innerHTML = editable.map((v, i) => `
+    <div style="display:flex;align-items:center;gap:6px;padding:8px 10px;background:var(--surface);border-radius:var(--radius-sm);box-shadow:var(--sh-sm);">
+      <span style="flex:1;font-size:13px;font-weight:600;color:var(--ink);">${v}</span>
+      <button onclick="_moveViolationType(${i},-1)" title="위로" aria-label="위로 이동" style="width:28px;height:28px;border:none;border-radius:6px;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;font-size:13px;line-height:1;">↑</button>
+      <button onclick="_moveViolationType(${i},1)"  title="아래로" aria-label="아래로 이동" style="width:28px;height:28px;border:none;border-radius:6px;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;font-size:13px;line-height:1;">↓</button>
+      <button onclick="_deleteViolationType(${i})" title="삭제" aria-label="유형 삭제" style="width:28px;height:28px;border:none;border-radius:6px;background:var(--red-dim);color:var(--red,#ef4444);cursor:pointer;font-size:16px;font-weight:900;line-height:1;">×</button>
+    </div>`).join('');
+}
+
+async function _addViolationType() {
+  const input = document.getElementById('_violTypeInput');
+  const val = (input?.value || '').trim();
+  if (!val || val === '직접 입력') return;
+  const editable = _violEditable();
+  if (editable.includes(val)) { showSuccessToast('이미 있는 유형입니다'); return; }
+  const next = [...editable, val];
+  _violationTypes = [...next, '직접 입력'];
+  input.value = '';
+  _renderViolationTypeList(null);
+  try { await API.saveViolationTypes(next); showSuccessToast('저장 완료'); }
+  catch (e) { showSuccessToast('저장 실패: ' + e.message); }
+}
+
+async function _deleteViolationType(idx) {
+  const editable = _violEditable();
+  const removed = editable[idx];
+  const next = editable.filter((_, i) => i !== idx);
+  _violationTypes = [...next, '직접 입력'];
+  _renderViolationTypeList(null);
+  try { await API.saveViolationTypes(next); showSuccessToast(`"${removed}" 삭제됨`); }
+  catch (e) { showSuccessToast('저장 실패: ' + e.message); }
+}
+
+async function _moveViolationType(idx, dir) {
+  const editable = _violEditable();
+  const next = idx + dir;
+  if (next < 0 || next >= editable.length) return;
+  const arr = [...editable];
+  [arr[idx], arr[next]] = [arr[next], arr[idx]];
+  _violationTypes = [...arr, '직접 입력'];
+  _renderViolationTypeList(null);
+  try { await API.saveViolationTypes(arr); }
+  catch (e) { showSuccessToast('저장 실패: ' + e.message); }
+}
+
 function _renderHolidayList(sheet) {
   const list = sheet ? sheet.querySelector('#_holList') : document.getElementById('_holList');
   if (!list) return;
@@ -3906,26 +4029,33 @@ function _saveHolidays() {
 function _devResetAttendance() {
   const date = document.getElementById('_resetDateInput')?.value;
   if (!date) { Swal.fire('알림','날짜를 선택해 주세요.','warning'); return; }
-  Swal.fire({
-    title: `${date} 출석 기록 삭제`,
-    text: '해당 날짜의 모든 출석 기록이 삭제됩니다. 되돌릴 수 없습니다.',
-    icon: 'warning',
-    showCancelButton: true,
-    confirmButtonText: '삭제',
-    cancelButtonText: '취소',
-    confirmButtonColor: '#ef4444',
-  }).then(r => {
-    if (!r.isConfirmed) return;
-    showLoading('출석 기록 삭제 중...');
-    API.resetAttendanceByDate(date)
-      .then(() => {
-        hideLoading();
-        showSuccessToast('출석 기록 삭제됨', date);
-        _cache.stats = null;
-        if (loadedDate === date) loadStudents(false, true);
-      })
-      .catch(() => { hideLoading(); Swal.fire('오류','삭제하지 못했습니다.','error'); });
-  });
+  showLoading('삭제될 기록 확인 중...');
+  API.getAttendanceCountByDate(date)
+    .then(count => {
+      hideLoading();
+      if (count === 0) { Swal.fire('알림', `${date}에는 삭제할 출석 기록이 없습니다.`, 'info'); return; }
+      Swal.fire({
+        title: `${date} 출석 기록 삭제`,
+        html: `해당 날짜의 출석 기록 <b style="color:var(--red);">${count}건</b>이 영구 삭제됩니다.<br><span style="color:var(--red);font-weight:700;">되돌릴 수 없습니다.</span>`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: '삭제',
+        cancelButtonText: '취소',
+        confirmButtonColor: '#ef4444',
+      }).then(r => {
+        if (!r.isConfirmed) return;
+        showLoading('출석 기록 삭제 중...');
+        API.resetAttendanceByDate(date)
+          .then(() => {
+            hideLoading();
+            showSuccessToast('출석 기록 삭제됨', date);
+            _cache.stats = null;
+            if (loadedDate === date) loadStudents(false, true);
+          })
+          .catch(() => { hideLoading(); Swal.fire('오류','삭제하지 못했습니다.','error'); });
+      });
+    })
+    .catch(() => { hideLoading(); Swal.fire('오류', '확인하지 못했습니다.', 'error'); });
 }
 
 /* ════════════════════════════════
@@ -3998,6 +4128,9 @@ window.onload = () => {
           .catch(() => {});
         API.getReasonTypes()
           .then(types => { _reasonTypes = types; })
+          .catch(() => {});
+        API.getViolationTypes()
+          .then(types => { _violationTypes = [...types, '직접 입력']; })
           .catch(() => {});
         API.getActivityLogEnabled()
           .then(on => { _activityLogOn = on; _applyActivityBellVisibility(); checkActivityBadge(); })

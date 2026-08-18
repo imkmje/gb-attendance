@@ -713,6 +713,38 @@ const API = (() => {
       { Prefer: 'resolution=merge-duplicates,return=minimal' });
   }
 
+  async function getViolationTypes() {
+    try {
+      const rows = await _get('settings?key=eq.violation_types&select=value');
+      if (rows.length && Array.isArray(rows[0].value)) return rows[0].value;
+    } catch (_) {}
+    return ['무단 지각', '무단 결석', '전자기기 무단 사용', '졸음', '취침', '자습 방해'];
+  }
+
+  async function saveViolationTypes(types) {
+    await _req('POST', 'settings', { key: 'violation_types', value: types },
+      { Prefer: 'resolution=merge-duplicates,return=minimal' });
+  }
+
+  /**
+   * 삭제 전 확인용 — 학생 한 명의 출석/위반 기록 건수
+   */
+  async function getStudentRecordCounts(studentId) {
+    const [attendance, violations] = await Promise.all([
+      _get(`attendance?student_id=eq.${studentId}&select=id`),
+      _get(`violations?student_id=eq.${studentId}&select=id`).catch(() => []),
+    ]);
+    return { attendanceCount: attendance.length, violationCount: violations.length };
+  }
+
+  /**
+   * 삭제 전 확인용 — 특정 날짜의 출석 기록 건수
+   */
+  async function getAttendanceCountByDate(date) {
+    const rows = await _get(`attendance?record_date=eq.${date}&select=id`);
+    return rows.length;
+  }
+
   // 날짜별 결석 여부(하루 1개 대표값) — _calcAbsentCounts와 동일한 규칙으로
   // "그 날 결석으로 칠지"를 판정한다. 연속 결석 스트릭 계산에 재사용.
   function _dailyAbsentFlags(records) {
@@ -908,5 +940,9 @@ const API = (() => {
     saveActivityLogEnabled,
     getTodayAbsences,
     getStudentInsight,
+    getViolationTypes,
+    saveViolationTypes,
+    getStudentRecordCounts,
+    getAttendanceCountByDate,
   };
 })();
