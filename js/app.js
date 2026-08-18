@@ -16,8 +16,9 @@ const VIOLATION_ACTIONS = ['경고', '벌금', '직접 입력'];
    n.0.0 대규모 업데이트 · 0.n.0 기능/디자인 개선 · 0.0.n 버그 수정
    최신순 — 새 배포 때마다 맨 위에 추가할 것
 ════════════════════════════════ */
-const APP_VERSION = '2.8.0';
+const APP_VERSION = '2.8.1';
 const CHANGELOG = [
+  { v:'2.8.1', d:'2026-08-18', t:'patch', title:'저장된 결석 사유가 재조회 시 복원되지 않아 결과보기·재저장에서 사라지던 버그 수정' },
   { v:'2.8.0', d:'2026-08-18', t:'minor', title:'위반 유형 관리, 삭제 전 기록 건수 확인, 벌금 현황 자습반별 소계+텍스트 복사 추가' },
   { v:'2.7.0', d:'2026-08-18', t:'minor', title:'개발자 메뉴에 개발 로그(버전 히스토리) 뷰어 추가' },
   { v:'2.6.0', d:'2026-08-18', t:'minor', title:'대시보드 탭 신설 — 오늘의 결석 현황 + 학생별 인사이트(출석률·사유별 결석·연속결석 경고 등)' },
@@ -687,9 +688,20 @@ function loadStudents(withLoading=true, forceLoad=false) {
     .catch(()=>{ hideLoading(); Swal.fire('오류','명단을 불러오지 못했습니다.','error'); });
 }
 
+// 서버에서 불러온 raw reason 문자열을 드롭다운 상태(reasonType/reasonText)로 복원한다.
+// ⚠ 기존엔 이 변환이 아예 없어서, 이미 저장된 결석 사유가 있는 학생이어도
+//   새로고침/재조회 시 사유 선택란이 빈 채로 보였고, 그 상태로 결과보기를 열면
+//   사유가 안 보이고, 그대로 재저장하면 저장돼 있던 사유가 지워지는 문제가 있었음.
+function _deriveReasonFields(s) {
+  if (s.status !== '결석' || !s.reason) return { reasonType: '', reasonText: '' };
+  if (_reasonTypes.includes(s.reason)) return { reasonType: s.reason, reasonText: '' };
+  return { reasonType: '직접 입력', reasonText: s.reason };
+}
+
 function _applyStudentResult(res,group,opt,date) {
   if(!res||!res.list){ document.getElementById('studentContainer').innerHTML='<div class="col-12 text-center py-5" style="color:var(--red);font-weight:600;">서버 오류가 발생했습니다.</div>'; return; }
-  currentStudents=res.list; isAlreadySaved=res.isAlreadySaved;
+  currentStudents=res.list.map(s => ({ ...s, ..._deriveReasonFields(s) }));
+  isAlreadySaved=res.isAlreadySaved;
   loadedGroup=group; loadedSessionText=opt.text; loadedDate=date; hasUnsavedChanges=false;
   const txt=document.getElementById('saveBtnText'); if(txt)txt.textContent=isAlreadySaved?'출석 수정':'출석 저장';
   renderStudents();
