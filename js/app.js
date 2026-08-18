@@ -71,6 +71,12 @@ function _bindPillFade(id) {
   window.addEventListener('resize', () => _updatePillFade(id));
 }
 
+// 빈 상태(empty state) 공통 마크업 — 아이콘 + 안내 문구
+const _EMPTY_ICON_INBOX = '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>';
+function _emptyState(text, iconSvg) {
+  return `<div class="cd-empty"><div class="cd-empty-icon">${iconSvg || _EMPTY_ICON_INBOX}</div><div class="cd-empty-text">${text}</div></div>`;
+}
+
 // 로컬 타임존 기준 오늘 날짜 (YYYY-MM-DD)
 // ⚠ toISOString().slice(0,10) / valueAsDate=new Date() 는 UTC 기준이라
 //   한국시간(UTC+9) 자정~오전 9시 사이에는 어제 날짜가 나오는 버그가 있었음 — 절대 쓰지 말 것
@@ -84,10 +90,14 @@ function _todayStr() {
 ════════════════════════════════ */
 function updateThemeIcon() {
   const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-  const sun = document.getElementById('iconSun'), moon = document.getElementById('iconMoon');
-  if (!sun || !moon) return;
-  if (isDark) { sun.style.opacity='0'; sun.style.transform='rotate(-90deg) scale(0.3)'; moon.style.opacity='1'; moon.style.transform='none'; }
-  else        { sun.style.opacity='1'; sun.style.transform='none'; moon.style.opacity='0'; moon.style.transform='rotate(90deg) scale(0.3)'; }
+  document.querySelectorAll('.icon-sun').forEach(sun => {
+    sun.style.opacity  = isDark ? '0' : '1';
+    sun.style.transform = isDark ? 'rotate(-90deg) scale(0.3)' : 'none';
+  });
+  document.querySelectorAll('.icon-moon').forEach(moon => {
+    moon.style.opacity  = isDark ? '1' : '0';
+    moon.style.transform = isDark ? 'none' : 'rotate(90deg) scale(0.3)';
+  });
 }
 function toggleTheme(e) {
   const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
@@ -167,6 +177,7 @@ function executeSwitchTab(tabName) {
 
   document.querySelectorAll('.nav-tab').forEach(el=>el.classList.remove('active'));
   document.querySelectorAll(`.nav-tab[data-tab="${tabName}"]`).forEach(el=>el.classList.add('active'));
+  _movePcNavIndicator(tabName);
   document.querySelectorAll('.tab-view').forEach(el=>el.classList.remove('active'));
   document.getElementById('view-'+tabName).classList.add('active');
 
@@ -196,6 +207,32 @@ function goBack() {
   executeSwitchTab('home');
 }
 
+// PC 사이드바의 슬라이딩 활성 인디케이터를 해당 탭 버튼 위치로 이동
+function _movePcNavIndicator(tabName) {
+  const ind = document.getElementById('pcNavIndicator');
+  const btn = document.getElementById('pcTab-' + tabName);
+  if (!ind || !btn) return;
+  ind.style.height    = btn.offsetHeight + 'px';
+  ind.style.transform = 'translateY(' + btn.offsetTop + 'px)';
+}
+window.addEventListener('resize', () => {
+  const active = document.querySelector('.pc-nav-item.nav-tab.active');
+  if (active) _movePcNavIndicator(active.dataset.tab);
+});
+
+// 출석체크 탭: 스크롤 내리면 상단 필터 영역(날짜·세션·확인자)이 자연스럽게 줄어듦
+let _scrollTicking = false;
+window.addEventListener('scroll', () => {
+  if (_scrollTicking) return;
+  _scrollTicking = true;
+  requestAnimationFrame(() => {
+    const homeActive = document.getElementById('view-home')?.classList.contains('active');
+    const fs = document.querySelector('.filter-section');
+    if (fs) fs.classList.toggle('scrolled', !!homeActive && window.scrollY > 24);
+    _scrollTicking = false;
+  });
+}, { passive: true });
+
 /* ════════════════════════════════
    날짜 / 세션
 ════════════════════════════════ */
@@ -218,7 +255,7 @@ function handleDateChange(forceLoad=false) {
 
   if (day===0) {
     document.getElementById('sessionPillWrap').innerHTML='';
-    document.getElementById('studentContainer').innerHTML='<div class="col-12 text-center py-5" style="color:var(--ink-3);font-weight:600;">일요일은 자습이 없습니다.</div>';
+    document.getElementById('studentContainer').innerHTML=_emptyState('일요일은 자습이 없습니다.');
     document.getElementById('dashboardWidget').classList.remove('visible'); return;
   }
 
@@ -227,7 +264,7 @@ function handleDateChange(forceLoad=false) {
     if (holiday.pm) sessionOptions.push({text:'오후 자율학습(공휴일)', value:'HOL_PM', isHoliday:true});
     if (!sessionOptions.length) {
       document.getElementById('sessionPillWrap').innerHTML='';
-      document.getElementById('studentContainer').innerHTML='<div class="col-12 text-center py-5" style="color:var(--ink-3);font-weight:600;">설정된 세션이 없습니다.</div>';
+      document.getElementById('studentContainer').innerHTML=_emptyState('설정된 세션이 없습니다.');
       document.getElementById('dashboardWidget').classList.remove('visible'); return;
     }
   } else if (day===6) {
@@ -398,7 +435,7 @@ function _applyStudentResult(res,group,opt,date) {
 function renderStudents() {
   const container=document.getElementById('studentContainer');
   if(!currentStudents.length){
-    container.innerHTML='<div class="col-12 text-center py-5" style="color:var(--ink-3);font-weight:600;">해당 조건에 학생이 없습니다.</div>';
+    container.innerHTML=_emptyState('해당 조건에 학생이 없습니다.');
     return updateDashboard();
   }
   const _clockSvg='<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>';
@@ -675,14 +712,30 @@ async function toggleRecurringLeave(idx) {
 /* ════════════════════════════════
    대시보드
 ════════════════════════════════ */
+// 숫자를 이전 값에서 목표 값까지 부드럽게 굴려서 표시 (대시보드 위젯 등)
+function _animateCount(el, to) {
+  if (!el) return;
+  const from = parseInt(el.textContent, 10) || 0;
+  if (from === to) { el.textContent = to; return; }
+  const dur = 420;
+  const start = performance.now();
+  const ease = t => 1 - Math.pow(1 - t, 3); // ease-out-cubic
+  const step = now => {
+    const p = Math.min((now - start) / dur, 1);
+    el.textContent = Math.round(from + (to - from) * ease(p));
+    if (p < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
 function updateDashboard() {
   const w=document.getElementById('dashboardWidget');
   if(!currentStudents||!currentStudents.length){w.classList.remove('visible');return;}
   const total=currentStudents.length;
   const present=currentStudents.filter(s=>s.status==='출석').length;
-  document.getElementById('dashTotal').textContent=total;
-  document.getElementById('dashPresent').textContent=present;
-  document.getElementById('dashAbsent').textContent=total-present;
+  _animateCount(document.getElementById('dashTotal'), total);
+  _animateCount(document.getElementById('dashPresent'), present);
+  _animateCount(document.getElementById('dashAbsent'), total-present);
   w.classList.add('visible');
 }
 
@@ -716,7 +769,7 @@ function submitAttendance(cb) {
     if(!btn||!lbl)return;
     if(success){
       _setSaveBtnState('saved'); btn.classList.remove('rsb-saving'); btn.classList.add('rsb-done');
-      setLabel('<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> 저장 완료');
+      setLabel('<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><polyline class="check-draw" points="20 6 9 17 4 12"/></svg> 저장 완료');
       setTimeout(()=>{
         if(bar){bar.style.transition='none'; bar.style.width='0%';}
         btn.classList.remove('rsb-done'); btn.disabled=false;
@@ -806,20 +859,30 @@ function copyResult(){ const t=document.getElementById('resultBox').innerText; n
 /* ════════════════════════════════
    통계
 ════════════════════════════════ */
+function _renderStatsSkeleton() {
+  const body = document.getElementById('statsBody');
+  if (body) body.innerHTML = Array.from({length:8}).map(() =>
+    `<tr style="border-bottom:1px solid var(--bg-deep);"><td colspan="7" style="padding:11px 6px;"><div class="cd-skeleton" style="height:15px;width:100%;"></div></td></tr>`
+  ).join('');
+  const top3 = document.getElementById('top3Container');
+  if (top3) top3.innerHTML = Array.from({length:3}).map(() =>
+    `<div class="cd-skeleton" style="height:34px;width:160px;border-radius:var(--radius);"></div>`
+  ).join('');
+}
+
 function loadStats() {
   if (_cache.stats && (Date.now() - _cache.statsTs) < _cache.STATS_TTL) {
     _applyStatsData(_cache.stats);
     return;
   }
-  showLoading('정산 중...');
+  _renderStatsSkeleton();
   API.calculateStats()
     .then(data=>{
-      hideLoading();
       _cache.stats  = data;
       _cache.statsTs = Date.now();
       _applyStatsData(data);
     })
-    .catch(()=>{ hideLoading(); Swal.fire('오류','데이터를 가져오지 못했습니다.','error'); });
+    .catch(()=>{ Swal.fire('오류','데이터를 가져오지 못했습니다.','error'); });
 }
 
 function _applyStatsData(data) {
@@ -890,9 +953,7 @@ function _renderSchCards() {
   const dayLabels=['월','화','수','목','금'], sessLabels=['오','야','심'], satLabels=['전','후'];
   const filtered = _schDataFiltered();
   if (!filtered.length) {
-    listEl.innerHTML = _schSearchQuery
-      ? '<div class="text-center py-5" style="color:var(--ink-3);font-weight:600;">검색 결과가 없습니다.</div>'
-      : '<div class="text-center py-5" style="color:var(--ink-3);font-weight:600;">데이터가 없습니다.</div>';
+    listEl.innerHTML = _schSearchQuery ? _emptyState('검색 결과가 없습니다.') : _emptyState('데이터가 없습니다.');
     return;
   }
   listEl.innerHTML = filtered.map(s => {
@@ -918,7 +979,7 @@ function updateGroupScheduleView() {
   const searchEl = document.getElementById('schSearchInput');
   if (searchEl) searchEl.value = '';
   const listEl=document.getElementById('scheduleCardList'), dayContent=document.getElementById('schDayContent');
-  if(listEl)listEl.innerHTML='<div class="text-center py-5" style="color:var(--ink-3);font-weight:600;">불러오는 중...</div>';
+  if(listEl)listEl.innerHTML=Array.from({length:5}).map(()=>`<div class="sch-card-row"><div class="cd-skeleton" style="height:13px;width:40%;"></div><div class="cd-skeleton" style="height:24px;width:100%;"></div></div>`).join('');
 
   API.getGroupSchedule(group)
     .then(data=>{
@@ -1105,7 +1166,7 @@ function _renderRosterCards() {
     : _rosterData.filter(s => s.group === GROUPS[_rosterActivePill - 1]);
 
   if (!filtered.length) {
-    container.innerHTML = '<div class="text-center py-5" style="color:var(--ink-3);font-weight:600;">명단이 없습니다.</div>';
+    container.innerHTML = _emptyState('명단이 없습니다.');
     return;
   }
 
@@ -1393,7 +1454,7 @@ function _vhBodyEl(){
 
 function _renderViolHistoryBody(body){
   const records=window._vhRecords;
-  if(!records||!records.length){body.innerHTML='<div class="vh-empty">위반 내역이 없습니다.</div>';return;}
+  if(!records||!records.length){body.innerHTML=_emptyState('위반 내역이 없습니다.');return;}
   body.innerHTML=records.map((r,idx)=>{
     const fine=_parseFine(r.action),isFine=fine>0;
     const actionCls=isFine?'is-fine':(r.action.includes('경고')?'is-warn':'is-etc');
@@ -1405,7 +1466,7 @@ function _renderViolHistoryBody(body){
 
 function _renderAbsentHistoryBody(body){
   const absents=window._vhAbsents;
-  if(!absents||!absents.length){body.innerHTML='<div class="vh-empty">결석 기록이 없습니다.</div>';return;}
+  if(!absents||!absents.length){body.innerHTML=_emptyState('결석 기록이 없습니다.');return;}
   const ss=s=>s.replace(' 자율학습','');
   body.innerHTML=absents.map(a=>{
     const nc=a.noCount?`<span style="font-size:10px;font-weight:700;color:var(--green);background:var(--green-dim);border-radius:var(--radius-pill);padding:1px 8px;margin-left:6px;">노카운트</span>`:'';
@@ -1673,9 +1734,10 @@ function _activityLogEnabled() {
 }
 
 function _applyActivityBellVisibility() {
-  const btn = document.getElementById('activityBellBtn');
-  if (!btn) return;
-  btn.style.display = _activityLogEnabled() ? 'flex' : 'none';
+  const on = _activityLogEnabled();
+  document.querySelectorAll('#activityBellBtn, .js-bell-btn').forEach(btn => {
+    btn.style.display = on ? 'flex' : 'none';
+  });
 }
 
 function _timeAgo(iso) {
@@ -1691,13 +1753,14 @@ function _timeAgo(iso) {
 }
 
 function checkActivityBadge() {
-  const dot = document.getElementById('activityBellDot');
-  if (!dot || !_activityLogEnabled()) return;
+  const dots = document.querySelectorAll('.bell-dot');
+  if (!dots.length || !_activityLogEnabled()) return;
   API.getActivityLog(1).then(rows => {
     const latest = rows && rows[0];
-    if (!latest) { dot.classList.remove('show'); return; }
+    if (!latest) { dots.forEach(d => d.classList.remove('show')); return; }
     const lastSeen = localStorage.getItem('lastSeenActivityAt');
-    dot.classList.toggle('show', !lastSeen || new Date(latest.created_at) > new Date(lastSeen));
+    const show = !lastSeen || new Date(latest.created_at) > new Date(lastSeen);
+    dots.forEach(d => d.classList.toggle('show', show));
   }).catch(() => {});
 }
 
@@ -1745,13 +1808,12 @@ function openActivityLogSheet() {
 
   // 읽음 처리
   localStorage.setItem('lastSeenActivityAt', new Date().toISOString());
-  const dot = document.getElementById('activityBellDot');
-  if (dot) dot.classList.remove('show');
+  document.querySelectorAll('.bell-dot').forEach(d => d.classList.remove('show'));
 }
 
 function _loadActivityLogBody(body) {
   API.getActivityLog(50).then(rows => {
-    if (!rows || !rows.length) { body.innerHTML = '<div class="vh-empty">활동 내역이 없습니다.</div>'; return; }
+    if (!rows || !rows.length) { body.innerHTML = _emptyState('활동 내역이 없습니다.'); return; }
     body.innerHTML = rows.map(r => {
       const isNotice = r.type === 'notice';
       const dotColor = isNotice ? 'background:var(--amber);' : 'background:var(--blue);';
@@ -3384,6 +3446,7 @@ window.onload = () => {
   const savedChecker = localStorage.getItem('checkerName');
   if (savedChecker) document.getElementById('checkerName').value = savedChecker;
   _applyActivityBellVisibility();
+  _movePcNavIndicator('home');
 
   const splashSafetyTimer = setTimeout(() => {
     const splash = document.getElementById('appSplash');
