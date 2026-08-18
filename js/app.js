@@ -332,7 +332,25 @@ function showLockChip() {
 /* ════════════════════════════════
    탭 전환
 ════════════════════════════════ */
+let _dashboardAuthed = false;
+
 function switchTab(tabName) {
+  if (tabName === 'dashboard' && !_dashboardAuthed) {
+    Swal.fire({
+      title: '대시보드', text: '교사 메뉴 비밀번호를 입력하세요.',
+      input: 'password', inputPlaceholder: '비밀번호를 입력하세요',
+      inputAttributes: { autocomplete: 'off' },
+      showCancelButton: true, confirmButtonText: '확인', cancelButtonText: '취소',
+    }).then(result => {
+      if (result.isConfirmed && result.value === '2821') {
+        _dashboardAuthed = true;
+        switchTab('dashboard');
+      } else if (result.isConfirmed) {
+        Swal.fire({ title: '비밀번호가 틀렸습니다', icon: 'error', confirmButtonText: '확인' });
+      }
+    });
+    return;
+  }
   if (tabName !== 'home' && hasUnsavedChanges) {
     showSheet({ title:'저장하지 않고 이동할까요?', text:'변경한 출석 기록이 저장되지 않아요.',
       buttons:[
@@ -346,7 +364,7 @@ function switchTab(tabName) {
 }
 
 function executeSwitchTab(tabName) {
-  const tabs    = ['home','roster','stats','schedule'];
+  const tabs    = ['home','roster','stats','schedule','dashboard'];
   const idx     = tabs.indexOf(tabName);
   const ind     = document.getElementById('tabIndicatorFluid');
   if (ind) ind.style.transform = `translateX(${idx * 100}%)`;
@@ -374,9 +392,10 @@ function executeSwitchTab(tabName) {
   }
 
   window.scrollTo(0,0);
-  if (tabName === 'stats')    loadStats();
-  if (tabName === 'schedule') updateGroupScheduleView();
-  if (tabName === 'roster')   loadRoster();
+  if (tabName === 'stats')     loadStats();
+  if (tabName === 'schedule')  updateGroupScheduleView();
+  if (tabName === 'roster')    loadRoster();
+  if (tabName === 'dashboard') loadDashboard();
 }
 
 function goBack() {
@@ -1507,6 +1526,175 @@ function _rosterCardHtml(s) {
       ${absentBadge}${violBadge}
     </div>
   </div>`;
+}
+
+/* ════════════════════════════════
+   대시보드 (교사 전용 — 오늘의 결석 현황 + 학생별 인사이트)
+════════════════════════════════ */
+const DASH_GROUPS = ['청운반','백운 A반','백운 B반','백운 C반','백운 D반'];
+
+function loadDashboard() {
+  const dateInput = document.getElementById('dashDateInput');
+  if (!dateInput.value) dateInput.value = _todayStr();
+  const date = dateInput.value;
+
+  const summary = document.getElementById('dashSummary');
+  const list = document.getElementById('dashAbsentList');
+  summary.innerHTML = `<div class="cd-skeleton" style="height:40px;width:220px;margin:0 auto;border-radius:var(--radius-pill);"></div>`;
+  list.innerHTML = Array.from({length:3}).map(() =>
+    `<div style="background:var(--surface);border-radius:var(--radius);box-shadow:var(--sh-md);padding:14px;margin-bottom:10px;">
+      <div class="cd-skeleton" style="height:12px;width:30%;margin-bottom:10px;"></div>
+      <div class="cd-skeleton" style="height:38px;width:100%;"></div>
+    </div>`
+  ).join('');
+
+  API.getTodayAbsences(date)
+    .then(absences => _renderDashboard(absences, date))
+    .catch(() => {
+      summary.innerHTML = '';
+      list.innerHTML = _emptyState('결석 현황을 불러오지 못했습니다.');
+    });
+}
+
+function _renderDashboard(absences, date) {
+  const summary = document.getElementById('dashSummary');
+  const list = document.getElementById('dashAbsentList');
+  const d = new Date(date), dn = ['일','월','화','수','목','금','토'];
+  const dl = `${d.getMonth()+1}월 ${d.getDate()}일 (${dn[d.getDay()]})`;
+
+  summary.innerHTML = `<div style="text-align:center;">
+    <span style="display:inline-flex;align-items:center;gap:8px;background:var(--surface);box-shadow:var(--sh-md);border-radius:var(--radius-pill);padding:10px 22px;font-size:13px;font-weight:700;color:var(--ink-2);">
+      ${dl} 결석 <span style="color:var(--red);font-weight:800;font-size:15px;">${absences.length}명</span>
+    </span>
+  </div>`;
+
+  if (!absences.length) {
+    list.innerHTML = _emptyState('오늘 결석자가 없습니다. 🎉');
+    return;
+  }
+
+  window._dashAbsences = absences;
+  const html = DASH_GROUPS.map(g => {
+    const gs = absences.filter(a => a.group === g)
+      .sort((a,b) => parseInt(a.ban)-parseInt(b.ban) || parseInt(a.num)-parseInt(b.num));
+    if (!gs.length) return '';
+    const rows = gs.map(s => {
+      const tags = s.sessions.map(sess => {
+        const short = sess.session.replace(' 자율학습','').replace(/\(토\)/,'');
+        const label = sess.reason ? `${short} · ${sess.reason}` : short;
+        const bg = sess.noCount ? 'var(--green-dim)' : 'var(--red-dim)';
+        const fg = sess.noCount ? 'var(--green)'      : 'var(--red)';
+        return `<span class="sch-dr-s" style="background:${bg};color:${fg};">${label}${sess.noCount ? ' (노카운트)' : ''}</span>`;
+      }).join('');
+      return `<div class="_dash-student" data-sid="${s.id}" style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--bg-deep);cursor:pointer;">
+        <div style="width:36px;height:36px;border-radius:var(--radius-sm);background:var(--red-dim);color:var(--red);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;">${s.ban}-${s.num}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:14px;font-weight:700;color:var(--ink);">${s.name}</div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">${tags}</div>
+        </div>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ink-4)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>`;
+    }).join('');
+    return `<div class="roster-section-head"><span class="roster-section-title">${g}</span><span class="roster-section-count">${gs.length}명</span><div class="roster-section-line"></div></div>
+      <div style="background:var(--surface);border-radius:var(--radius);box-shadow:var(--sh-md);overflow:hidden;margin-bottom:16px;">${rows}</div>`;
+  }).join('');
+
+  list.innerHTML = html;
+  list.querySelectorAll('._dash-student').forEach((el, i) => {
+    el.style.animationDelay = (i * 20) + 'ms';
+    el.addEventListener('click', () => {
+      const s = window._dashAbsences.find(a => a.id === el.dataset.sid);
+      if (s) _openStudentInsightSheet(s);
+    });
+  });
+}
+
+function _openStudentInsightSheet(student) {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'custom-sheet-backdrop';
+  backdrop.style.zIndex = '2200';
+  const sheet = document.createElement('div');
+  sheet.className = 'vh-sheet';
+  sheet.innerHTML = `
+    <div class="vh-header">
+      <div class="vh-handle"></div>
+      <div class="vh-title-row">
+        <div class="vh-student-info">
+          <div class="vh-name">${student.name}</div>
+          <div class="vh-meta">${student.ban}반 ${student.num}번 · ${student.group}</div>
+        </div>
+        <button class="vh-close-btn" id="_diClose" aria-label="닫기">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="vh-body" id="_diBody">
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        ${Array.from({length:3}).map(() => `<div style="background:var(--surface);border-radius:var(--radius);box-shadow:var(--sh-md);padding:14px;"><div class="cd-skeleton" style="height:14px;width:55%;margin-bottom:8px;"></div><div class="cd-skeleton" style="height:10px;width:35%;"></div></div>`).join('')}
+      </div>
+    </div>`;
+  backdrop.appendChild(sheet);
+  document.body.appendChild(backdrop);
+  requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 420); };
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+  sheet.querySelector('#_diClose').addEventListener('click', close);
+
+  API.getStudentInsight(student.id)
+    .then(insight => _renderStudentInsightBody(sheet.querySelector('#_diBody'), insight))
+    .catch(() => { sheet.querySelector('#_diBody').innerHTML = _emptyState('정보를 불러오지 못했습니다.'); });
+}
+
+function _renderStudentInsightBody(body, ins) {
+  const rateColor = ins.attendRate === null ? 'var(--ink-4)'
+    : ins.attendRate >= 90 ? 'var(--green)' : ins.attendRate >= 70 ? 'var(--amber)' : 'var(--red)';
+
+  const streakWarning = ins.consecutiveAbsentStreak >= 3
+    ? `<div style="display:flex;align-items:center;gap:10px;background:var(--red-dim);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <div style="font-size:13px;font-weight:700;color:var(--red);">최근 ${ins.consecutiveAbsentStreak}일 연속 결석 중이에요</div>
+      </div>` : '';
+
+  const stats = [
+    { n: ins.attendRate === null ? '—' : ins.attendRate + '%', l: '출석률',     c: rateColor },
+    { n: ins.countedAbsent,                                     l: '실질 결석', c: 'var(--red)' },
+    { n: ins.lateCount,                                         l: '지각',      c: 'var(--amber)' },
+    { n: ins.earlyCount,                                        l: '조퇴',      c: 'var(--blue)' },
+    { n: ins.noCountAbsent,                                     l: '노카운트',  c: 'var(--green)' },
+    { n: ins.violationCount,                                    l: '위반',      c: 'var(--purple)' },
+  ];
+  const statsHtml = `<div class="vh-money-bar" style="margin-bottom:14px;">
+    ${stats.map(s => `<div class="vh-money-card"><div class="vh-money-n" style="color:${s.c}">${s.n}</div><div class="vh-money-l">${s.l}</div></div>`).join('')}
+  </div>`;
+
+  const fineWarning = ins.fineUnpaid > 0
+    ? `<div style="display:flex;align-items:center;gap:8px;background:var(--amber-dim);border-radius:var(--radius-sm);padding:9px 12px;margin-bottom:16px;font-size:12px;font-weight:700;color:var(--amber);">💰 미납 벌금 ${ins.fineUnpaid.toLocaleString()}원</div>` : '';
+
+  const reasonEntries = Object.entries(ins.reasonCounts);
+  const reasonHtml = reasonEntries.length
+    ? `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:18px;">
+        ${reasonEntries.map(([reason, count]) => `<div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg-deep);border-radius:var(--radius-sm);padding:9px 12px;">
+          <span style="font-size:13px;color:var(--ink-2);font-weight:600;">${reason}</span>
+          <span style="font-size:13px;font-weight:800;color:var(--ink);">${count}회</span>
+        </div>`).join('')}
+      </div>`
+    : '';
+
+  const ss = s => s.replace(' 자율학습','');
+  const recentHtml = ins.recentAbsences.length
+    ? ins.recentAbsences.map(a => {
+        const nc = a.noCount ? `<span style="font-size:10px;font-weight:700;color:var(--green);background:var(--green-dim);border-radius:var(--radius-pill);padding:1px 8px;margin-left:6px;">노카운트</span>` : '';
+        return `<div class="vh-item"><div class="vh-item-head"><div class="vh-type-dot" style="background:var(--amber);"></div><div class="vh-item-main"><div class="vh-item-type">${a.date}${nc}</div><div class="vh-item-date">${ss(a.session)}</div></div><span class="vh-item-action is-etc">${a.reason || '사유 없음'}</span></div></div>`;
+      }).join('')
+    : _emptyState('결석 기록이 없습니다.');
+
+  body.innerHTML = `
+    ${streakWarning}
+    ${statsHtml}
+    ${fineWarning}
+    ${reasonEntries.length ? `<div style="font-size:12px;font-weight:700;color:var(--ink-3);margin-bottom:8px;">사유별 결석</div>${reasonHtml}` : ''}
+    <div style="font-size:12px;font-weight:700;color:var(--ink-3);margin-bottom:8px;">최근 결석 이력</div>
+    ${recentHtml}`;
 }
 
 /* ════════════════════════════════

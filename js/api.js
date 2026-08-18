@@ -713,6 +713,125 @@ const API = (() => {
       { Prefer: 'resolution=merge-duplicates,return=minimal' });
   }
 
+  // 날짜별 결석 여부(하루 1개 대표값) — _calcAbsentCounts와 동일한 규칙으로
+  // "그 날 결석으로 칠지"를 판정한다. 연속 결석 스트릭 계산에 재사용.
+  function _dailyAbsentFlags(records) {
+    const byDate = {};
+    for (const r of records) {
+      const dateKey = String(r.record_date).slice(0, 10);
+      (byDate[dateKey] ??= []).push(r);
+    }
+    const dates = Object.keys(byDate).sort(); // 오름차순
+    const out = [];
+    for (const date of dates) {
+      const recs = byDate[date];
+      const parts = date.split('-');
+      const dayOfWeek = new Date(+parts[0], +parts[1] - 1, +parts[2]).getDay();
+      const isSat = dayOfWeek === 6;
+      let isAbsent = false, hasRecord = false;
+      if (isSat) {
+        for (const r of recs) { hasRecord = true; if (r.status === '결석' && !r.no_count) isAbsent = true; }
+      } else {
+        for (const sess of WEEKDAY_PRIORITY) {
+          const rec = recs.find(r => r.session === sess);
+          if (rec) { hasRecord = true; isAbsent = (rec.status === '결석' && !rec.no_count); break; }
+        }
+      }
+      if (hasRecord) out.push({ date, isAbsent });
+    }
+    return out;
+  }
+
+  // 가장 최근 날짜부터 거슬러 올라가며 연속 결석 일수를 센다
+  function _consecutiveAbsentStreak(records) {
+    const days = _dailyAbsentFlags(records);
+    let streak = 0;
+    for (let i = days.length - 1; i >= 0; i--) {
+      if (days[i].isAbsent) streak++; else break;
+    }
+    return streak;
+  }
+
+  /**
+   * 대시보드 — 특정 날짜의 전 자습반 결석 현황 (학생당 한 줄로 세션 병합)
+   * GAS 없음 — 신규
+   */
+  async function getTodayAbsences(date) {
+    const [students, records] = await Promise.all([
+      _get('students?select=id,class_num,student_num,name,study_room'),
+      _get(`attendance?record_date=eq.${date}&status=eq.결석&select=student_id,session,reason,no_count`),
+    ]);
+    const studentMap = Object.fromEntries(students.map(s => [s.id, s]));
+    const grouped = {};
+    for (const r of records) {
+      const s = studentMap[r.student_id];
+      if (!s) continue;
+      if (!grouped[r.student_id]) {
+        grouped[r.student_id] = {
+          id: r.student_id, ban: String(s.class_num), num: String(s.student_num),
+          name: s.name, group: s.study_room, sessions: [],
+        };
+      }
+      grouped[r.student_id].sessions.push({ session: r.session, reason: r.reason, noCount: r.no_count });
+    }
+    return Object.values(grouped);
+  }
+
+  /**
+   * 대시보드 — 학생 한 명의 종합 인사이트 (출석률·사유별 결석·지각/조퇴·
+   * 연속결석·벌금현황·최근 결석 이력)
+   * GAS 없음 — 신규
+   */
+  async function getStudentInsight(studentId) {
+    const [records, violations] = await Promise.all([
+      _get(`attendance?student_id=eq.${studentId}&select=record_date,session,status,reason,no_count,early_leave_mins,late_mins&order=record_date.asc,session.asc`),
+      _get(`violations?student_id=eq.${studentId}&select=viol_date,viol_type,action,paid`).catch(() => []),
+    ]);
+
+    const attendCount   = records.filter(r => r.status === '출석').length;
+    const absentRecs    = records.filter(r => r.status === '결석');
+    const countedAbsent = _calcAbsentCounts(records);           // 노카운트 제외 실질 결석
+    const noCountAbsent = absentRecs.filter(r => r.no_count).length;
+    const total         = attendCount + countedAbsent;           // 통계 탭과 동일한 정의
+    const attendRate    = total > 0 ? Math.round((attendCount / total) * 100) : null;
+
+    const reasonCounts = {};
+    absentRecs.forEach(r => {
+      const key = (r.reason || '').trim() || '사유 없음';
+      reasonCounts[key] = (reasonCounts[key] || 0) + 1;
+    });
+
+    const lateRecs  = records.filter(r => (r.late_mins ?? 0) > 0);
+    const earlyRecs = records.filter(r => (r.early_leave_mins ?? 0) > 0);
+
+    let fineTotal = 0, finePaid = 0;
+    violations.forEach(v => {
+      const m = (v.action || '').match(/벌금\s*([\d,]+)원/);
+      if (m) {
+        const f = parseInt(m[1].replace(/,/g, ''));
+        fineTotal += f;
+        if (v.paid) finePaid += f;
+      }
+    });
+
+    return {
+      attendRate, attendCount, total,
+      countedAbsent, noCountAbsent, absentTotal: absentRecs.length,
+      reasonCounts,
+      lateCount: lateRecs.length,
+      lateTotalMins: lateRecs.reduce((s, r) => s + (r.late_mins ?? 0), 0),
+      earlyCount: earlyRecs.length,
+      earlyTotalMins: earlyRecs.reduce((s, r) => s + (r.early_leave_mins ?? 0), 0),
+      consecutiveAbsentStreak: _consecutiveAbsentStreak(records),
+      violationCount: violations.length,
+      fineTotal, finePaid, fineUnpaid: fineTotal - finePaid,
+      recentAbsences: [...absentRecs]
+        .sort((a, b) => b.record_date.localeCompare(a.record_date))
+        .slice(0, 10)
+        .map(r => ({ date: r.record_date, session: r.session, reason: r.reason, noCount: r.no_count })),
+    };
+  }
+
   /**
    * 활동 로그 사용 여부 (전역 설정 — 모든 교사 공통)
    */
@@ -787,5 +906,7 @@ const API = (() => {
     logActivity,
     getActivityLogEnabled,
     saveActivityLogEnabled,
+    getTodayAbsences,
+    getStudentInsight,
   };
 })();
