@@ -10,6 +10,34 @@ const VIOLATION_TYPES = [
 const VIOLATION_ACTIONS = ['경고', '벌금', '직접 입력'];
 
 /* ════════════════════════════════
+   버전 히스토리 (개발 로그)
+   n.0.0 대규모 업데이트 · 0.n.0 기능/디자인 개선 · 0.0.n 버그 수정
+   최신순 — 새 배포 때마다 맨 위에 추가할 것
+════════════════════════════════ */
+const APP_VERSION = '2.7.0';
+const CHANGELOG = [
+  { v:'2.7.0', d:'2026-08-18', t:'minor', title:'개발자 메뉴에 개발 로그(버전 히스토리) 뷰어 추가' },
+  { v:'2.6.0', d:'2026-08-18', t:'minor', title:'대시보드 탭 신설 — 오늘의 결석 현황 + 학생별 인사이트(출석률·사유별 결석·연속결석 경고 등)' },
+  { v:'2.5.0', d:'2026-08-18', t:'minor', title:'설치된 앱(PWA)에서 새로고침 버튼 + 당겨서 새로고침 제스처 지원' },
+  { v:'2.4.1', d:'2026-08-18', t:'patch', title:'활동 로그 종 아이콘이 로드마다 잠깐 보였다 사라지는 깜빡임 버그 수정' },
+  { v:'2.4.0', d:'2026-08-18', t:'minor', title:'앱 설치 안내 시트, 명단 탭 총 인원 표시, 결과보기 모달 디자인 통일' },
+  { v:'2.3.0', d:'2026-08-18', t:'minor', title:'PWA 설치 지원(홈 화면 추가) + PC Ctrl+S 출석 저장 단축키' },
+  { v:'2.2.0', d:'2026-08-18', t:'minor', title:'ESC·뒤로가기로 열린 시트 닫기, 다크모드 표면 크로스페이드 통일' },
+  { v:'2.1.1', d:'2026-08-18', t:'patch', title:'PC 팝업 상단 잘림, 공휴일 안내 문구, 세그먼트 슬라이더 등 버그 수정' },
+  { v:'2.1.0', d:'2026-08-18', t:'minor', title:'카드 등장·대시보드 숫자·사이드바 인디케이터 애니메이션, 빈 상태·스켈레톤 UI 다듬기' },
+  { v:'2.0.0', d:'2026-08-18', t:'major', title:'PC 전용 레이아웃 대규모 개편 — 사이드바 내비게이션 + 중앙 모달로 전환' },
+  { v:'1.5.1', d:'2026-08-18', t:'patch', title:'활동 로그 on/off 설정을 기기별 저장에서 전역(Supabase) 설정으로 전환' },
+  { v:'1.5.0', d:'2026-08-18', t:'minor', title:'활동 로그·공지사항 기능 신설 (자습 세션 변경 자동 기록 + 교사 수동 공지)' },
+  { v:'1.4.1', d:'2026-08-17', t:'patch', title:'공휴일 저장 오류, 세그먼트 슬라이더 초기 폭, 반복설정 409 오류 등 버그 다수 수정' },
+  { v:'1.4.0', d:'2026-08-17', t:'minor', title:'교사 메뉴 평일 공휴일 설정, 명단 탭 자습 세션 조회/수정 기능 추가' },
+  { v:'1.3.0', d:'2026-07-20', t:'minor', title:'조기 퇴실·지각 기능 + 벌금 자동 연동, 필터 상태 유지, 헤더 뒤로가기 버튼' },
+  { v:'1.2.0', d:'2026-06-30', t:'minor', title:'토요일 세션 분리, 결석 사유 관리, 시간표 탭 편집·전체보기·검색 기능' },
+  { v:'1.1.1', d:'2026-06-29', t:'patch', title:'출석 저장·자습 세션 편성 관련 버그 다수 수정' },
+  { v:'1.1.0', d:'2026-06-29', t:'minor', title:'교사 메뉴, 벌금 관리, 학생 일괄 등록, 데이터 내보내기 등 핵심 관리 기능 추가' },
+  { v:'1.0.0', d:'2026-06-29', t:'major', title:'GAS(Google Apps Script) → Supabase 전환, 프레임워크 없는 순수 HTML/CSS/JS로 전면 재구축' },
+];
+
+/* ════════════════════════════════
    상태
 ════════════════════════════════ */
 let currentStudents    = [];
@@ -3577,6 +3605,61 @@ function _openDevMenu() {
   });
 }
 
+function _openChangelogSheet() {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'custom-sheet-backdrop';
+  backdrop.style.zIndex = '3200';
+  const sheet = document.createElement('div');
+  sheet.className = 'custom-sheet';
+  sheet.style.cssText = 'padding-bottom:40px;max-height:88vh;overflow-y:auto;';
+
+  const TYPE_META = {
+    major: { label:'MAJOR', bg:'var(--purple-dim)', fg:'var(--purple)' },
+    minor: { label:'MINOR', bg:'var(--blue-dim)',   fg:'var(--blue)' },
+    patch: { label:'PATCH', bg:'var(--bg-deep)',    fg:'var(--ink-3)' },
+  };
+  const rows = CHANGELOG.map(e => {
+    const m = TYPE_META[e.t];
+    const isMajor = e.t === 'major';
+    return `<div style="display:flex;gap:12px;padding:${isMajor ? '14px' : '11px'} 2px;${isMajor ? 'border-top:1px solid var(--bg-deep);border-bottom:1px solid var(--bg-deep);' : ''}">
+      <div style="flex-shrink:0;width:60px;text-align:center;">
+        <div style="font-size:${isMajor ? '14px' : '12px'};font-weight:800;color:${m.fg};">${e.v}</div>
+        <div style="font-size:9px;font-weight:700;letter-spacing:0.4px;color:${m.fg};background:${m.bg};border-radius:var(--radius-pill);padding:1px 6px;margin-top:3px;display:inline-block;">${m.label}</div>
+      </div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:${isMajor ? '13.5px' : '13px'};font-weight:${isMajor ? '800' : '600'};color:var(--ink);line-height:1.5;">${e.title}</div>
+        <div style="font-size:10.5px;color:var(--ink-4);margin-top:3px;">${e.d}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  sheet.innerHTML = `
+    <div class="custom-sheet-handle"></div>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+      <div style="width:42px;height:42px;border-radius:var(--radius-sm);background:var(--purple-dim);display:flex;align-items:center;justify-content:center;box-shadow:var(--sh-sm);flex-shrink:0;">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      </div>
+      <div style="flex:1;">
+        <div style="font-size:16px;font-weight:800;color:var(--ink);letter-spacing:-0.4px;">개발 로그</div>
+        <div style="font-size:11px;color:var(--ink-3);margin-top:1px;">현재 버전 v${APP_VERSION}</div>
+      </div>
+      <button id="_clClose" aria-label="닫기" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--sh-xs);flex-shrink:0;">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div style="font-size:10px;color:var(--ink-4);line-height:1.6;margin-bottom:6px;">
+      <b style="color:var(--purple);">MAJOR</b> 대규모 업데이트 · <b style="color:var(--blue);">MINOR</b> 기능·디자인 개선 · <b style="color:var(--ink-3);">PATCH</b> 버그 수정
+    </div>
+    <div style="display:flex;flex-direction:column;">${rows}</div>`;
+
+  backdrop.appendChild(sheet);
+  document.body.appendChild(backdrop);
+  requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+  sheet.querySelector('#_clClose').addEventListener('click', close);
+}
+
 function _renderDevMenuSheet() {
   const backdrop = document.createElement('div');
   backdrop.className = 'custom-sheet-backdrop';
@@ -3595,6 +3678,17 @@ function _renderDevMenuSheet() {
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
+
+    <button id="_devChangelogBtn" style="all:unset;box-sizing:border-box;display:flex;align-items:center;gap:12px;background:var(--purple-dim);border-radius:var(--radius);padding:12px 14px;cursor:pointer;width:100%;margin-bottom:22px;-webkit-tap-highlight-color:transparent;">
+      <div style="width:34px;height:34px;border-radius:var(--radius-sm);background:var(--surface);display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:var(--sh-sm);">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      </div>
+      <div style="flex:1;text-align:left;">
+        <div style="font-size:13px;font-weight:800;color:var(--purple);">개발 로그</div>
+        <div style="font-size:11px;color:var(--ink-3);margin-top:1px;">현재 버전 v${APP_VERSION} · 전체 업데이트 내역 보기</div>
+      </div>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+    </button>
 
     <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;">📅 평일 공휴일 설정</div>
     <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px;box-shadow:var(--sh-pressed);margin-bottom:12px;">
@@ -3659,6 +3753,7 @@ function _renderDevMenuSheet() {
   const close = () => { backdrop.classList.remove('show'); setTimeout(()=>backdrop.remove(), 420); };
   backdrop.addEventListener('click', e=>{ if(e.target===backdrop) close(); });
   sheet.querySelector('#_devClose').addEventListener('click', close);
+  sheet.querySelector('#_devChangelogBtn').addEventListener('click', () => { close(); setTimeout(_openChangelogSheet, 370); });
 
   sheet.querySelector('#_holDateInput').value = _todayStr();
   sheet.querySelector('#_resetDateInput').value = _todayStr();
