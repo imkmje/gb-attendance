@@ -3676,7 +3676,10 @@ window.onload = () => {
 
   const savedChecker = localStorage.getItem('checkerName');
   if (savedChecker) document.getElementById('checkerName').value = savedChecker;
-  _applyActivityBellVisibility();
+  // 활동 로그 버튼은 HTML 기본값이 이미 숨김(display:none)이고, 실제 표시 여부는
+  // 서버에서 activity_log_enabled를 받아온 뒤(아래 API.getActivityLogEnabled) 결정한다.
+  // 여기서 미리 호출하면 _activityLogOn의 기본값(true)으로 잠깐 보였다가
+  // 응답이 오면 다시 숨겨지는 깜빡임이 생겨서 제거함.
   _applyInstallBtnVisibility();
   _applyRefreshBtnVisibility();
   _initPullToRefresh();
