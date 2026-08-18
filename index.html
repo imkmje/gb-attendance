@@ -21,6 +21,41 @@
 
   <div id="toast-container"></div>
 
+  <!-- PC 사이드바 (960px 이상에서만 표시) -->
+  <nav class="pc-sidebar" id="pcSidebar">
+    <div class="pc-sidebar-brand">
+      <div class="pc-sidebar-brand-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/>
+          <rect x="9" y="3" width="6" height="4" rx="1"/>
+          <line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/>
+        </svg>
+      </div>
+      <div>
+        <div class="pc-sidebar-brand-text">청·백운반 출석부</div>
+        <div class="pc-sidebar-brand-sub">강북고등학교</div>
+      </div>
+    </div>
+    <button class="pc-nav-item nav-tab" id="pcTab-home" data-tab="home" onclick="switchTab('home')">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>
+      출석체크
+    </button>
+    <button class="pc-nav-item nav-tab" id="pcTab-roster" data-tab="roster" onclick="switchTab('roster')">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+      명단
+    </button>
+    <button class="pc-nav-item nav-tab" id="pcTab-stats" data-tab="stats" onclick="switchTab('stats')">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      통계
+    </button>
+    <button class="pc-nav-item nav-tab" id="pcTab-schedule" data-tab="schedule" onclick="switchTab('schedule')">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      시간표
+    </button>
+    <div class="pc-sidebar-spacer"></div>
+    <div class="pc-sidebar-hint">헤더 아이콘으로 활동 로그·교사 메뉴·테마를 전환할 수 있어요</div>
+  </nav>
+
   <!-- 스플래시 -->
   <div id="appSplash">
     <div class="splash-icon-wrap">
@@ -247,10 +282,10 @@
   <div class="bottom-tab-bar-wrap">
     <div class="bottom-tab-bar">
       <div class="tab-indicator-fluid" id="tabIndicatorFluid"></div>
-      <div class="tab-item active" id="tab-home"     onclick="switchTab('home')">출석체크</div>
-      <div class="tab-item"        id="tab-roster"   onclick="switchTab('roster')">명단</div>
-      <div class="tab-item"        id="tab-stats"    onclick="switchTab('stats')">통계</div>
-      <div class="tab-item"        id="tab-schedule" onclick="switchTab('schedule')">시간표</div>
+      <div class="tab-item nav-tab active" id="tab-home"     data-tab="home"     onclick="switchTab('home')">출석체크</div>
+      <div class="tab-item nav-tab" id="tab-roster"   data-tab="roster"   onclick="switchTab('roster')">명단</div>
+      <div class="tab-item nav-tab" id="tab-stats"    data-tab="stats"    onclick="switchTab('stats')">통계</div>
+      <div class="tab-item nav-tab" id="tab-schedule" data-tab="schedule" onclick="switchTab('schedule')">시간표</div>
     </div>
   </div>
 
@@ -283,7 +318,7 @@
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script src="js/config.js?v=20260720d"></script>
   <script src="js/api.js?v=20260818b"></script>
-  <script src="js/app.js?v=20260818c"></script>
+  <script src="js/app.js?v=20260818d"></script>
 
 </body>
 </html>

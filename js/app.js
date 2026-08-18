@@ -165,8 +165,8 @@ function executeSwitchTab(tabName) {
   const ind     = document.getElementById('tabIndicatorFluid');
   if (ind) ind.style.transform = `translateX(${idx * 100}%)`;
 
-  document.querySelectorAll('.tab-item').forEach(el=>el.classList.remove('active'));
-  const at = document.getElementById('tab-'+tabName); if(at)at.classList.add('active');
+  document.querySelectorAll('.nav-tab').forEach(el=>el.classList.remove('active'));
+  document.querySelectorAll(`.nav-tab[data-tab="${tabName}"]`).forEach(el=>el.classList.add('active'));
   document.querySelectorAll('.tab-view').forEach(el=>el.classList.remove('active'));
   document.getElementById('view-'+tabName).classList.add('active');
 
