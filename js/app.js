@@ -107,6 +107,118 @@ function toggleTheme(e) {
 }
 
 /* ════════════════════════════════
+   앱 설치 안내 (PWA)
+════════════════════════════════ */
+let _deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  _deferredInstallPrompt = e;
+});
+window.addEventListener('appinstalled', () => { _deferredInstallPrompt = null; _applyInstallBtnVisibility(); });
+
+function _isStandaloneApp() {
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+
+// 이미 앱으로 설치되어 실행 중이면 설치 안내 아이콘은 숨김
+function _applyInstallBtnVisibility() {
+  const show = !_isStandaloneApp();
+  document.querySelectorAll('.js-install-btn').forEach(btn => {
+    btn.style.display = show ? 'flex' : 'none';
+  });
+}
+
+function openInstallGuideSheet() {
+  const ua = navigator.userAgent;
+  const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+  const isAndroid = /Android/.test(ua);
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'custom-sheet-backdrop';
+  backdrop.style.zIndex = '3000';
+  const sheet = document.createElement('div');
+  sheet.className = 'custom-sheet';
+  sheet.style.cssText = 'padding-bottom:40px;';
+
+  let bodyHtml;
+  if (_isStandaloneApp()) {
+    bodyHtml = `<div style="text-align:center;padding:12px 0 4px;">
+      <div style="font-size:32px;margin-bottom:10px;">✅</div>
+      <div style="font-size:14px;font-weight:700;color:var(--ink);">이미 앱으로 설치되어 있어요</div>
+    </div>`;
+  } else if (_deferredInstallPrompt) {
+    bodyHtml = `
+      <div style="font-size:13px;color:var(--ink-2);line-height:1.7;margin-bottom:18px;">
+        아래 버튼을 누르면 바로 설치할 수 있어요. 설치하면 브라우저 주소창 없이
+        앱처럼 홈 화면·바탕화면에서 바로 실행할 수 있습니다.
+      </div>
+      <button id="_installNowBtn" style="width:100%;padding:14px;border:none;border-radius:var(--radius);background:var(--blue);color:#fff;font-family:var(--font);font-size:14px;font-weight:700;cursor:pointer;box-shadow:var(--sh-blue);">지금 설치하기</button>`;
+  } else if (isIOS) {
+    bodyHtml = `
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        ${_installStep('1', '하단(또는 상단) 공유 버튼을 탭하세요', '⬆️')}
+        ${_installStep('2', `메뉴에서 <b>"홈 화면에 추가"</b>를 선택하세요`, '➕')}
+        ${_installStep('3', `우측 상단 <b>"추가"</b>를 탭하면 완료!`, '✅')}
+      </div>`;
+  } else if (isAndroid) {
+    bodyHtml = `
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        ${_installStep('1', '우측 상단 브라우저 메뉴(⋮)를 여세요', '⋮')}
+        ${_installStep('2', `<b>"앱 설치"</b> 또는 <b>"홈 화면에 추가"</b>를 선택하세요`, '📲')}
+      </div>`;
+  } else {
+    bodyHtml = `
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        ${_installStep('1', '주소창 우측의 설치 아이콘을 클릭하세요', '⊕')}
+        ${_installStep('2', `없다면 브라우저 메뉴에서 <b>"앱 설치"</b>를 찾아보세요`, '💻')}
+      </div>`;
+  }
+
+  sheet.innerHTML = `
+    <div class="custom-sheet-handle"></div>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
+      <div style="width:42px;height:42px;border-radius:var(--radius-sm);background:var(--blue-dim);display:flex;align-items:center;justify-content:center;box-shadow:var(--sh-sm);flex-shrink:0;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M12 8v6"/><path d="M9.5 11.5 12 14l2.5-2.5"/></svg>
+      </div>
+      <div style="flex:1;">
+        <div style="font-size:16px;font-weight:800;color:var(--ink);letter-spacing:-0.4px;">앱으로 설치</div>
+        <div style="font-size:11px;color:var(--ink-3);margin-top:1px;">홈 화면·바탕화면에서 바로 실행</div>
+      </div>
+      <button id="_installClose" aria-label="닫기" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--sh-xs);flex-shrink:0;">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    ${bodyHtml}`;
+
+  backdrop.appendChild(sheet);
+  document.body.appendChild(backdrop);
+  requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+  sheet.querySelector('#_installClose').addEventListener('click', close);
+
+  const installBtn = sheet.querySelector('#_installNowBtn');
+  if (installBtn) {
+    installBtn.addEventListener('click', async () => {
+      if (!_deferredInstallPrompt) return;
+      installBtn.disabled = true; installBtn.textContent = '설치 중...';
+      _deferredInstallPrompt.prompt();
+      const { outcome } = await _deferredInstallPrompt.userChoice;
+      _deferredInstallPrompt = null;
+      if (outcome === 'accepted') { showSuccessToast('설치 완료!'); close(); }
+      else { installBtn.disabled = false; installBtn.textContent = '지금 설치하기'; }
+    });
+  }
+}
+
+function _installStep(num, text, emoji) {
+  return `<div style="display:flex;align-items:center;gap:12px;background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px 14px;">
+    <div style="width:30px;height:30px;border-radius:50%;background:var(--surface);box-shadow:var(--sh-sm);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;">${emoji}</div>
+    <div style="font-size:13px;color:var(--ink-2);line-height:1.5;flex:1;">${text}</div>
+  </div>`;
+}
+
+/* ════════════════════════════════
    토스트
 ════════════════════════════════ */
 const TOAST_DOTS = { blue:'var(--blue)', green:'var(--green)', red:'var(--red)', amber:'var(--amber)', purple:'var(--purple)' };
@@ -863,16 +975,24 @@ function viewAllResults() {
   report += '----------------------------------';
 
   document.getElementById('resultBox').innerText = report;
-  _renderReportFromStudents(absentees, date, opt.text);
+  _renderReportFromStudents(absentees, date, opt.text, currentStudents.length);
   new bootstrap.Modal(document.getElementById('resultModal')).show();
 }
 
-function _renderReportFromStudents(absentees, date, session) {
+function _renderReportFromStudents(absentees, date, session, total) {
   const d = new Date(date), dn = ['일','월','화','수','목','금','토'];
   const dl = `${d.getMonth()+1}월 ${d.getDate()}일 (${dn[d.getDay()]})`;
-  let html = `<div style="margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--bg-deep);"><div style="font-size:14px;font-weight:700;color:var(--ink);display:flex;align-items:center;gap:8px;">📋 ${dl} <span style="color:var(--blue);">${session.replace(' 자율학습','')}</span></div></div>`;
+  const sub = document.getElementById('resultModalSub');
+  if (sub) sub.innerHTML = `${dl} · <span style="color:var(--blue);font-weight:700;">${session.replace(' 자율학습','')}</span>`;
+
+  const presentCount = total - absentees.length;
+  let html = `<div class="vh-money-bar" style="margin-bottom:16px;">
+    <div class="vh-money-card"><div class="vh-money-n" style="color:var(--ink-2)">${total}</div><div class="vh-money-l">총원</div></div>
+    <div class="vh-money-card"><div class="vh-money-n" style="color:var(--green)">${presentCount}</div><div class="vh-money-l">출석</div></div>
+    <div class="vh-money-card"><div class="vh-money-n" style="color:var(--red)">${absentees.length}</div><div class="vh-money-l">결석</div></div>
+  </div>`;
   if (!absentees.length) {
-    html += '<div style="text-align:center;padding:24px 0;color:var(--green);font-weight:700;font-size:15px;">✅ 전원 출석하였습니다!</div>';
+    html += `<div class="cd-empty"><div class="cd-empty-icon" style="background:var(--green-dim);color:var(--green);"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div><div class="cd-empty-text" style="color:var(--green);font-weight:700;font-size:14px;">전원 출석하였습니다!</div></div>`;
   } else {
     const grouped = {};
     absentees.forEach(s => {
@@ -1209,7 +1329,11 @@ function _renderRosterCards() {
     return;
   }
 
-  let html = '';
+  let html = `<div style="text-align:center;margin-bottom:14px;">
+    <span style="display:inline-flex;align-items:center;gap:7px;background:var(--surface);box-shadow:var(--sh-md);border-radius:var(--radius-pill);padding:9px 20px;font-size:13px;font-weight:700;color:var(--ink-2);">
+      총 인원 <span style="color:var(--blue);font-weight:800;">${filtered.length}명</span>
+    </span>
+  </div>`;
   if (_rosterActivePill === 0) {
     GROUPS.forEach(g => {
       const gs = filtered.filter(s => s.group === g);
@@ -3489,6 +3613,7 @@ window.onload = () => {
   const savedChecker = localStorage.getItem('checkerName');
   if (savedChecker) document.getElementById('checkerName').value = savedChecker;
   _applyActivityBellVisibility();
+  _applyInstallBtnVisibility();
   _movePcNavIndicator('home');
 
   const splashSafetyTimer = setTimeout(() => {
