@@ -148,10 +148,14 @@ const API = (() => {
     const attMap = Object.fromEntries(attendance.map(a => [a.student_id, a]));
     const isAlreadySaved = attendance.length > 0;
 
-    // 결석 횟수 + 조기퇴실 반복규칙
+    // 결석 횟수 + 조기퇴실 반복규칙 + 오늘 날짜의 세션별 저장 현황
+    // (todaySessionMap: "오늘 남은 세션도 결석" 토글이 실제 저장 상태를 그대로
+    //  보여주도록 하기 위함 — 다른 세션으로 이동해도 이미 적용된 게 보여야
+    //  '켰는데 다른 세션 가면 꺼져 보인다'는 불일치가 안 생김)
     const studentIds = students.map(s => s.id);
     let absentCountMap = {};
     let recurringMap = {};
+    let todaySessionMap = {};
     if (studentIds.length > 0) {
       const idList = studentIds.join(',');
       const [allAtt, recurringRules] = await Promise.all([
@@ -162,6 +166,8 @@ const API = (() => {
       for (const s of students) {
         const recs = allAtt.filter(a => a.student_id === s.id);
         absentCountMap[s.id] = _calcAbsentCounts(recs);
+        const todayRecs = recs.filter(r => String(r.record_date).slice(0, 10) === date);
+        todaySessionMap[s.id] = Object.fromEntries(todayRecs.map(r => [r.session, r.status]));
       }
       recurringMap = Object.fromEntries(recurringRules.map(r => [r.student_id, r.early_leave_mins]));
     }
@@ -191,6 +197,7 @@ const API = (() => {
           earlyLeaveMins: savedEarly ?? recurringEarly ?? 0,
           isRecurring:    recurringEarly != null,
           lateMins:       att?.late_mins ?? 0,
+          todaySessions:  todaySessionMap[s.id] ?? {},
         };
       });
 

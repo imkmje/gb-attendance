@@ -16,8 +16,9 @@ const VIOLATION_ACTIONS = ['경고', '벌금', '직접 입력'];
    n.0.0 대규모 업데이트 · 0.n.0 기능/디자인 개선 · 0.0.n 버그 수정
    최신순 — 새 배포 때마다 맨 위에 추가할 것
 ════════════════════════════════ */
-const APP_VERSION = '2.9.1';
+const APP_VERSION = '2.9.2';
 const CHANGELOG = [
+  { v:'2.9.2', d:'2026-08-18', t:'patch', title:'"일괄 적용"(구 오늘 남은 세션도 결석) 토글이 실제 저장 상태를 반영하도록 수정 + 명칭 변경' },
   { v:'2.9.1', d:'2026-08-18', t:'patch', title:'서비스워커 캐시 전략을 network-first로 변경 — 배포 후에도 예전 버전이 계속 보이던 문제 해결' },
   { v:'2.9.0', d:'2026-08-18', t:'minor', title:'결석 체크 시 "오늘 남은 세션도 결석" 옵션 추가 — 시간표 대조해 야간·심야 등 일괄 적용' },
   { v:'2.8.1', d:'2026-08-18', t:'patch', title:'저장된 결석 사유가 재조회 시 복원되지 않아 결과보기·재저장에서 사라지던 버그 수정' },
@@ -700,9 +701,24 @@ function _deriveReasonFields(s) {
   return { reasonType: '직접 입력', reasonText: s.reason };
 }
 
+// "오늘 남은 세션도 결석" 토글의 초기 상태를 실제 저장 결과로 판단한다.
+// — 노카운트처럼 서버 데이터를 그대로 반영해야, 저장 후 다른 세션으로
+//   갔다가 돌아와도(혹은 처음부터 다른 세션을 봐도) 계속 켜진 채로 보여서
+//   "켰는데 다른 세션 가면 꺼져 보인다"는 불일치가 사라진다.
+// 판단 기준: 이후 세션들 중 실제로 오늘 자 기록이 있는 세션이 하나 이상이고,
+// 그 기록들이 전부 '결석'이면 이미 적용된 것으로 보고 ON.
+function _deriveRestOfDayFlag(s) {
+  if (s.status !== '결석') return false;
+  const laterOpts = sessionOptions.slice(selectedSessionIdx + 1).filter(o => !o.isHoliday);
+  if (!laterOpts.length) return false;
+  const recorded = laterOpts.map(o => s.todaySessions?.[o.text]).filter(v => v !== undefined);
+  if (!recorded.length) return false;
+  return recorded.every(v => v === '결석');
+}
+
 function _applyStudentResult(res,group,opt,date) {
   if(!res||!res.list){ document.getElementById('studentContainer').innerHTML='<div class="col-12 text-center py-5" style="color:var(--red);font-weight:600;">서버 오류가 발생했습니다.</div>'; return; }
-  currentStudents=res.list.map(s => ({ ...s, ..._deriveReasonFields(s) }));
+  currentStudents=res.list.map(s => ({ ...s, ..._deriveReasonFields(s), applyRestOfDay: _deriveRestOfDayFlag(s) }));
   isAlreadySaved=res.isAlreadySaved;
   loadedGroup=group; loadedSessionText=opt.text; loadedDate=date; hasUnsavedChanges=false;
   const txt=document.getElementById('saveBtnText'); if(txt)txt.textContent=isAlreadySaved?'출석 수정':'출석 저장';
@@ -753,10 +769,10 @@ function renderStudents() {
             </div>
             ${_hasLaterSessionToday() ? `
             <div class="nocount-row" onclick="event.stopPropagation()" onpointerdown="event.stopPropagation()" onpointerup="event.stopPropagation()">
-              <button class="nocount-sw${s.applyRestOfDay?' on':''}" id="rest-sw-${idx}" onclick="toggleApplyRestOfDay(${idx},this)" aria-label="오늘 남은 세션도 결석 처리 전환" aria-pressed="${s.applyRestOfDay?'true':'false'}">
+              <button class="nocount-sw${s.applyRestOfDay?' on':''}" id="rest-sw-${idx}" onclick="toggleApplyRestOfDay(${idx},this)" aria-label="일괄 적용 전환" aria-pressed="${s.applyRestOfDay?'true':'false'}">
                 <div class="nocount-sw-thumb"></div>
               </button>
-              <span class="nocount-label${s.applyRestOfDay?' on':''}" id="rest-lbl-${idx}">오늘 남은 세션도 결석 <span style="font-weight:500;opacity:0.7;">(저장 시 야간·심야 등 일괄 적용)</span></span>
+              <span class="nocount-label${s.applyRestOfDay?' on':''}" id="rest-lbl-${idx}">일괄 적용 <span style="font-weight:500;opacity:0.7;">(선택 시, 오늘 자습 전체 적용)</span></span>
             </div>` : ''}
           </div></div>
         </div>
