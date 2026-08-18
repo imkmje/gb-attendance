@@ -16,8 +16,9 @@ const VIOLATION_ACTIONS = ['경고', '벌금', '직접 입력'];
    n.0.0 대규모 업데이트 · 0.n.0 기능/디자인 개선 · 0.0.n 버그 수정
    최신순 — 새 배포 때마다 맨 위에 추가할 것
 ════════════════════════════════ */
-const APP_VERSION = '2.8.1';
+const APP_VERSION = '2.9.0';
 const CHANGELOG = [
+  { v:'2.9.0', d:'2026-08-18', t:'minor', title:'결석 체크 시 "오늘 남은 세션도 결석" 옵션 추가 — 시간표 대조해 야간·심야 등 일괄 적용' },
   { v:'2.8.1', d:'2026-08-18', t:'patch', title:'저장된 결석 사유가 재조회 시 복원되지 않아 결과보기·재저장에서 사라지던 버그 수정' },
   { v:'2.8.0', d:'2026-08-18', t:'minor', title:'위반 유형 관리, 삭제 전 기록 건수 확인, 벌금 현황 자습반별 소계+텍스트 복사 추가' },
   { v:'2.7.0', d:'2026-08-18', t:'minor', title:'개발자 메뉴에 개발 로그(버전 히스토리) 뷰어 추가' },
@@ -749,6 +750,13 @@ function renderStudents() {
               </button>
               <span class="nocount-label${s.noCount?' on':''}" id="nocount-lbl-${idx}">노카운트 <span style="font-weight:500;opacity:0.7;">(결석 횟수 미산입)</span></span>
             </div>
+            ${_hasLaterSessionToday() ? `
+            <div class="nocount-row" onclick="event.stopPropagation()" onpointerdown="event.stopPropagation()" onpointerup="event.stopPropagation()">
+              <button class="nocount-sw${s.applyRestOfDay?' on':''}" id="rest-sw-${idx}" onclick="toggleApplyRestOfDay(${idx},this)" aria-label="오늘 남은 세션도 결석 처리 전환" aria-pressed="${s.applyRestOfDay?'true':'false'}">
+                <div class="nocount-sw-thumb"></div>
+              </button>
+              <span class="nocount-label${s.applyRestOfDay?' on':''}" id="rest-lbl-${idx}">오늘 남은 세션도 결석 <span style="font-weight:500;opacity:0.7;">(저장 시 야간·심야 등 일괄 적용)</span></span>
+            </div>` : ''}
           </div></div>
         </div>
         <div class="early-leave-drop" onclick="event.stopPropagation()" onpointerdown="event.stopPropagation()" onpointerup="event.stopPropagation()">
@@ -842,7 +850,7 @@ function toggleStatus(idx,card,clientX,clientY) {
   s.status=s.status==='출석'?'결석':'출석';
   hasUnsavedChanges=true;
   if(s.status==='출석'){
-    s.reasonType='';s.reasonText='';s.noCount=false;s.reason='';
+    s.reasonType='';s.reasonText='';s.noCount=false;s.reason='';s.applyRestOfDay=false;
     // DOM에서 ⚠ 사유 경고 텍스트 즉시 제거
     const rt=card.querySelector('.reason-text');
     if(rt)rt.remove();
@@ -1019,6 +1027,72 @@ function updateDashboard() {
 ════════════════════════════════ */
 function _setSaveBtnState(state){ const btn=document.getElementById('btnSave'); if(btn)btn.dataset.saveState=state; }
 
+// 오늘 현재 세션 뒤에 세션이 더 남아있는지 (공휴일 세션은 제외 — 순차 세션 개념이 약함)
+function _hasLaterSessionToday() {
+  const opt = sessionOptions[selectedSessionIdx];
+  if (!opt || opt.isHoliday) return false;
+  return sessionOptions.slice(selectedSessionIdx + 1).some(o => !o.isHoliday);
+}
+
+function toggleApplyRestOfDay(idx, btn) {
+  const s = currentStudents[idx];
+  s.applyRestOfDay = !s.applyRestOfDay;
+  btn.classList.toggle('on', s.applyRestOfDay);
+  btn.setAttribute('aria-pressed', s.applyRestOfDay ? 'true' : 'false');
+  const lbl = document.getElementById('rest-lbl-' + idx);
+  if (lbl) lbl.classList.toggle('on', s.applyRestOfDay);
+}
+
+// 세션명 → 학생 주간 스케줄(schedule) 조회용 [요일키, 인덱스] 매핑
+// api.js 내부 _schedKey와 동일한 규칙(토요일 오후1/오후2는 같은 스케줄 칸을 공유)
+function _scheduleSlotForSession(sessionText, dayKey) {
+  if (dayKey === 'sat') {
+    if (sessionText.startsWith('오전')) return ['sat', 0];
+    if (sessionText.startsWith('오후')) return ['sat', 1];
+    return null;
+  }
+  if (sessionText.startsWith('오후')) return [dayKey, 0];
+  if (sessionText.startsWith('야간')) return [dayKey, 1];
+  if (sessionText.startsWith('심야')) return [dayKey, 2];
+  return null;
+}
+
+// "오늘 남은 세션도 결석" 체크된 학생들을, 각자 시간표상 참여 대상인
+// 이후 세션(들)에도 결석으로 미리 저장한다. (요청한 세션이 없으면 조용히 스킵)
+async function _applyRestOfDayAbsences(group, date, checkerName) {
+  const targets = currentStudents.filter(s => s.status === '결석' && s.applyRestOfDay);
+  const laterOpts = sessionOptions.slice(selectedSessionIdx + 1).filter(o => !o.isHoliday);
+  if (!targets.length || !laterOpts.length) return { applied: 0, sessions: [] };
+
+  const parts = date.split('-');
+  const dayIdx = new Date(+parts[0], +parts[1] - 1, +parts[2]).getDay();
+  const dayKey = dayIdx === 6 ? 'sat' : ['sun','mon','tue','wed','thu','fri','sat'][dayIdx];
+
+  const schedules = await Promise.all(targets.map(s => API.getStudentSchedule(s.id).catch(() => null)));
+
+  let appliedCount = 0;
+  const touchedSessions = [];
+  for (const opt of laterOpts) {
+    const slot = _scheduleSlotForSession(opt.text, dayKey);
+    if (!slot) continue;
+    const studentsForThis = [];
+    targets.forEach((s, i) => {
+      const sched = schedules[i];
+      const val = sched?.[slot[0]]?.[slot[1]];
+      if (val === 'O' || val === '방과후') {
+        const reason = s.reasonType === '직접 입력' ? s.reasonText : s.reasonType;
+        studentsForThis.push({ student_id: s.id, type: '결석', reason: reason || '', noCount: s.noCount || false });
+      }
+    });
+    if (studentsForThis.length) {
+      await API.saveAttendance({ group, sessionName: opt.text, date, checkerName, students: studentsForThis });
+      appliedCount += studentsForThis.length;
+      touchedSessions.push(opt.text.replace(' 자율학습','').replace(/\(토\)/,''));
+    }
+  }
+  return { applied: appliedCount, sessions: touchedSessions };
+}
+
 function submitAttendance(cb) {
   const checkerName=document.getElementById('checkerName').value.trim();
   if(!checkerName){ Swal.fire('알림','출결 확인자 성명을 입력해 주세요.','warning'); return; }
@@ -1064,10 +1138,19 @@ function submitAttendance(cb) {
   const payload={group:loadedGroup,sessionName:loadedSessionText,date:loadedDate,checkerName,students:studentsToSave};
 
   API.saveAttendance(payload)
-    .then(()=>{
+    .then(async ()=>{
       hasUnsavedChanges=false; resetBtn(true);
-      showSuccessToast('저장 완료',loadedGroup+' · '+loadedSessionText);
       _cache.stats = null;
+
+      let restInfo = null;
+      try { restInfo = await _applyRestOfDayAbsences(loadedGroup, loadedDate, checkerName); }
+      catch (_) { /* 이후 세션 일괄 적용은 실패해도 본 저장은 이미 끝났으므로 조용히 무시 */ }
+
+      if (restInfo && restInfo.applied > 0) {
+        showSuccessToast('저장 완료', `${loadedGroup} · ${loadedSessionText} + ${restInfo.sessions.join('/')} 결석 ${restInfo.applied}건 적용`);
+      } else {
+        showSuccessToast('저장 완료',loadedGroup+' · '+loadedSessionText);
+      }
       setTimeout(()=>{if(cb)cb(); else loadStudents(false,true);},1800);
     })
     .catch(()=>{ resetBtn(false); Swal.fire('오류 발생','저장하지 못했습니다.','error'); });
