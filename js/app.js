@@ -1667,6 +1667,16 @@ function handleTeacherMenuClick() {
 }
 
 // ── 활동 로그 / 공지사항 ──────────────────────────────
+function _activityLogEnabled() {
+  return localStorage.getItem('activityLogEnabled') !== 'false';
+}
+
+function _applyActivityBellVisibility() {
+  const btn = document.getElementById('activityBellBtn');
+  if (!btn) return;
+  btn.style.display = _activityLogEnabled() ? 'flex' : 'none';
+}
+
 function _timeAgo(iso) {
   const diffMs = Date.now() - new Date(iso).getTime();
   const min = Math.floor(diffMs / 60000);
@@ -1681,7 +1691,7 @@ function _timeAgo(iso) {
 
 function checkActivityBadge() {
   const dot = document.getElementById('activityBellDot');
-  if (!dot) return;
+  if (!dot || !_activityLogEnabled()) return;
   API.getActivityLog(1).then(rows => {
     const latest = rows && rows[0];
     if (!latest) { dot.classList.remove('show'); return; }
@@ -2127,6 +2137,7 @@ function _teacherLoadSchedule(student) {
 
 // 자습 세션 변경분을 비교해 활동 로그에 기록 (실패해도 저장 흐름은 막지 않음)
 function _logScheduleChange(student, before, after) {
+  if (!_activityLogEnabled()) return;
   const DAYS_KR = { mon:'월', tue:'화', wed:'수', thu:'목', fri:'금' };
   const SESS_WD = ['오후','야간','심야'];
   const SESS_SAT = ['오전','오후'];
@@ -3127,6 +3138,17 @@ function _renderDevMenuSheet() {
       </div>
     </div>
 
+    <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;">🔔 활동 로그 / 공지사항</div>
+    <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px 14px;box-shadow:var(--sh-pressed);margin-bottom:24px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:700;color:var(--ink-2);">헤더 종 아이콘 사용</div>
+          <div style="font-size:11px;color:var(--ink-3);margin-top:2px;">OFF 시 종 아이콘 숨김, 세션 변경 자동 기록도 중단</div>
+        </div>
+        <button id="_devActLogToggle" onclick="_toggleActivityLog()" style="padding:6px 16px;border-radius:var(--radius-pill);border:none;font-family:var(--font);font-size:13px;font-weight:800;cursor:pointer;min-width:52px;transition:background .2s,color .2s;"></button>
+      </div>
+    </div>
+
     <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;">🗑️ 출석 기록 초기화</div>
     <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px;box-shadow:var(--sh-pressed);margin-bottom:24px;">
       <div style="font-size:11px;color:var(--red,#ef4444);font-weight:600;margin-bottom:8px;">지정한 날짜의 모든 출석 기록이 삭제됩니다.</div>
@@ -3159,6 +3181,8 @@ function _renderDevMenuSheet() {
   _renderReasonList(sheet);
   const pwBtn = sheet.querySelector('#_devPwToggle');
   if (pwBtn) _applyTeacherPwBtn(pwBtn);
+  const actLogBtn = sheet.querySelector('#_devActLogToggle');
+  if (actLogBtn) _applyActivityLogBtn(actLogBtn);
 }
 
 function _applyTeacherPwBtn(btn) {
@@ -3174,6 +3198,22 @@ function _toggleTeacherPw() {
   const btn = document.getElementById('_devPwToggle');
   if (btn) _applyTeacherPwBtn(btn);
   showSuccessToast('교사 메뉴 잠금 ' + (!on ? 'ON' : 'OFF'));
+}
+
+function _applyActivityLogBtn(btn) {
+  const on = _activityLogEnabled();
+  btn.textContent = on ? 'ON' : 'OFF';
+  btn.style.background = on ? 'var(--green,#22c55e)' : 'var(--red,#ef4444)';
+  btn.style.color = '#fff';
+}
+
+function _toggleActivityLog() {
+  const on = _activityLogEnabled();
+  localStorage.setItem('activityLogEnabled', on ? 'false' : 'true');
+  const btn = document.getElementById('_devActLogToggle');
+  if (btn) _applyActivityLogBtn(btn);
+  _applyActivityBellVisibility();
+  showSuccessToast('활동 로그 ' + (!on ? 'ON' : 'OFF'));
 }
 
 function _renderReasonList(sheet) {
@@ -3330,6 +3370,7 @@ window.onload = () => {
 
   const savedChecker = localStorage.getItem('checkerName');
   if (savedChecker) document.getElementById('checkerName').value = savedChecker;
+  _applyActivityBellVisibility();
 
   const splashSafetyTimer = setTimeout(() => {
     const splash = document.getElementById('appSplash');
