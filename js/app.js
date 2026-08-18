@@ -238,6 +238,16 @@ document.addEventListener('keydown', (e) => {
   _closeTopmostSheet();
 });
 
+// Ctrl+S / Cmd+S: 출석체크 탭에서 바로 저장 (브라우저 기본 "페이지 저장"은 막음)
+document.addEventListener('keydown', (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 's') return;
+  const homeActive = document.getElementById('view-home')?.classList.contains('active');
+  if (!homeActive) return;
+  e.preventDefault();
+  const btn = document.getElementById('btnSave');
+  if (btn && !btn.disabled) submitAttendance();
+});
+
 // 브라우저 뒤로가기: 시트가 열려있으면 탭 전환 대신 시트부터 닫는다
 // (기존엔 시트가 열린 채로 뒷단 탭만 바뀌어버려 시트가 엉뚱한 화면 위에 떠 있었음)
 window.addEventListener('popstate', (e) => {
