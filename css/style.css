@@ -80,7 +80,7 @@ a { color:var(--blue); }
 body { font-family:var(--font); background:var(--bg); color:var(--ink); padding-bottom:300px; word-break:keep-all; transition:background var(--dur-normal) var(--ease), color var(--dur-normal) var(--ease); }
 /* 다크모드 전환 시 주요 표면들이 함께 크로스페이드되도록 통일 */
 .app-header, .filter-section, .view-filter-bar, .pc-sidebar, .bottom-tab-bar,
-.student-card, .roster-card, .sch-day-card, .sch-card-row, .top3-card, .custom-table-container,
+.student-card, .roster-card, .sch-day-card, .sch-card-row, .top3-card, .stat-row,
 .custom-sheet, .vh-sheet, .vh-header, .vh-item, .modal-glass .modal-content, .cd-toast,
 .custom-sheet-btn, .swal2-popup, .cd-input, .cd-select, .cd-empty-icon, #dashboardWidget,
 .viol-select, .viol-input, .viol-textarea, .lock-banner {
@@ -355,11 +355,15 @@ html[data-theme="dark"] .modal-glass .modal-content::after { background:linear-g
 .report-student-chip { display:inline-block; background:var(--bg-deep); border-radius:var(--radius-pill); padding:3px 10px; font-size:12px; font-weight:600; margin:2px; color:var(--ink-2); }
 .report-student-chip.has-reason { background:var(--red-dim); color:var(--red); }
 
-.custom-table-container { background:var(--surface) !important; border-color:var(--bg-deep) !important; border-radius:var(--radius) !important; box-shadow:var(--sh-md) !important; overflow:hidden; }
-.table { --bs-table-bg:transparent; --bs-table-color:var(--ink); --bs-table-border-color:var(--bg-deep); --bs-table-hover-bg:var(--bg-deep); color:var(--ink) !important; }
-.table th, .table td { color:var(--ink) !important; border-color:var(--bg-deep) !important; background-color:transparent !important; }
-.table thead th { background:var(--bg-deep) !important; color:var(--ink-2) !important; font-weight:700 !important; font-size:12px !important; border-bottom:none !important; }
-.table tbody tr:hover td { background:var(--bg-deep) !important; }
+.stat-row {
+  display:flex; align-items:center; gap:10px; padding:11px 14px;
+  border-bottom:1px solid var(--bg-deep); cursor:pointer;
+  animation:rosterCardIn var(--dur-normal) var(--ease) both;
+  transition:background var(--dur-fast) var(--ease);
+}
+.stat-row:last-child { border-bottom:none; }
+.stat-row:hover  { background:var(--bg-deep); }
+.stat-row:active { transform:scale(0.99); }
 .top3-card { margin-bottom:16px; padding:16px; background:var(--surface); box-shadow:var(--sh-md); border-radius:var(--radius); border-left:3px solid var(--amber); position:relative; overflow:hidden; }
 .top3-card::before { content:''; position:absolute; inset:0; border-radius:inherit; background:linear-gradient(158deg, rgba(255,255,255,0.44) 0%, rgba(255,255,255,0.08) 35%, transparent 55%); pointer-events:none; z-index:0; }
 html[data-theme="dark"] .top3-card::before { background:linear-gradient(158deg, rgba(255,255,255,0.05) 0%, transparent 40%); }

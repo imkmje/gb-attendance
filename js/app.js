@@ -16,8 +16,9 @@ const VIOLATION_ACTIONS = ['경고', '벌금', '직접 입력'];
    n.0.0 대규모 업데이트 · 0.n.0 기능/디자인 개선 · 0.0.n 버그 수정
    최신순 — 새 배포 때마다 맨 위에 추가할 것
 ════════════════════════════════ */
-const APP_VERSION = '2.9.3';
+const APP_VERSION = '2.10.0';
 const CHANGELOG = [
+  { v:'2.10.0', d:'2026-08-19', t:'minor', title:'통계 탭 디자인을 다른 탭과 통일 (카드형 리스트로 개편) + 이름 클릭 시 명단과 동일한 상세 팝업 표시' },
   { v:'2.9.3', d:'2026-08-19', t:'patch', title:'대시보드 학생 인사이트의 노카운트 집계를 하루 단위로 변경 (일괄 적용해도 하루 1회)' },
   { v:'2.9.2', d:'2026-08-18', t:'patch', title:'"일괄 적용"(구 오늘 남은 세션도 결석) 토글이 실제 저장 상태를 반영하도록 수정 + 명칭 변경' },
   { v:'2.9.1', d:'2026-08-18', t:'patch', title:'서비스워커 캐시 전략을 network-first로 변경 — 배포 후에도 예전 버전이 계속 보이던 문제 해결' },
@@ -1246,9 +1247,12 @@ function copyResult(){ const t=document.getElementById('resultBox').innerText; n
    통계
 ════════════════════════════════ */
 function _renderStatsSkeleton() {
-  const body = document.getElementById('statsBody');
-  if (body) body.innerHTML = Array.from({length:8}).map(() =>
-    `<tr style="border-bottom:1px solid var(--bg-deep);"><td colspan="7" style="padding:11px 6px;"><div class="cd-skeleton" style="height:15px;width:100%;"></div></td></tr>`
+  const container = document.getElementById('statsListContainer');
+  if (container) container.innerHTML = Array.from({length:3}).map(() =>
+    `<div style="background:var(--surface);border-radius:var(--radius);box-shadow:var(--sh-md);padding:14px;margin-bottom:10px;">
+      <div class="cd-skeleton" style="height:12px;width:30%;margin-bottom:10px;"></div>
+      <div class="cd-skeleton" style="height:38px;width:100%;"></div>
+    </div>`
   ).join('');
   const top3 = document.getElementById('top3Container');
   if (top3) top3.innerHTML = Array.from({length:3}).map(() =>
@@ -1289,7 +1293,24 @@ function _applyStatsData(data) {
   [...new Set(data.map(d => d.ban))].sort((a,b) => a-b).forEach(c => cFil.add(new Option(c+'반', c)));
   filterStats();
 }
+const STATS_SORTS = [
+  { key:'total',       label:'누적 시간' },
+  { key:'attendRate',  label:'출석률' },
+  { key:'absentCount', label:'누적 결석' },
+];
+
+function _renderStatsSortChips() {
+  const wrap = document.getElementById('statsSortChips');
+  if (!wrap) return;
+  wrap.innerHTML = STATS_SORTS.map(s => {
+    const active = sortState.col === s.key;
+    const arrow  = active ? (sortState.asc ? '↑' : '↓') : '↕';
+    return `<button class="ssf-chip${active?' on':''}" onclick="handleSort('${s.key}')">${s.label} ${arrow}</button>`;
+  }).join('');
+}
+
 function handleSort(col){ sortState.asc=(sortState.col===col)?!sortState.asc:true; sortState.col=col; filterStats(); }
+
 function filterStats(){
   const g=document.getElementById('filterStudyGroup').value, c=document.getElementById('filterClass').value;
   let filtered=rawStatsData.filter(d=>(g==='전체'||d.group===g)&&(c==='전체'||d.ban.toString()===c.replace('반','')));
@@ -1299,26 +1320,55 @@ function filterStats(){
     return { ...r, attendRate: rate ?? -1 };
   });
   filtered.sort((a,b)=>{ let vA=a[sortState.col],vB=b[sortState.col]; if(sortState.col==='ban'){vA=parseInt(vA);vB=parseInt(vB);} return sortState.asc?(vA>vB?1:-1):(vA<vB?1:-1); });
-  document.getElementById('statsBody').innerHTML=filtered.map(r=>{
-    const total    = (r.attendCount || 0) + (r.absentCount || 0);
-    const ratePct  = total > 0 ? Math.round((r.attendCount || 0) / total * 100) : null;
-    const rateColor = ratePct === null ? 'var(--ink-4)'
-                    : ratePct >= 90   ? 'var(--green)'
-                    : ratePct >= 70   ? 'var(--amber)'
-                    : 'var(--red)';
-    const rateHtml  = ratePct !== null
-      ? `<span style="font-weight:800;color:${rateColor};">${ratePct}%</span><span style="font-size:10px;color:var(--ink-4);margin-left:3px;">(${r.attendCount}/${total})</span>`
-      : `<span style="color:var(--ink-4);">—</span>`;
-    return `
-    <tr style="border-bottom:1px solid var(--bg-deep);">
-      <td style="color:var(--ink);">${r.ban}반</td><td style="color:var(--ink);">${r.num}번</td>
-      <td style="font-weight:700;color:var(--ink);">${r.name}</td>
-      <td style="font-size:12px;color:var(--ink-3);">${r.group}</td>
-      <td style="font-weight:700;color:var(--blue);">${r.total.toFixed(1)}시간</td>
-      <td>${rateHtml}</td>
-      <td style="font-weight:700;color:var(--red);">${r.absentCount}회</td>
-    </tr>`;
-  }).join('');
+  _renderStatsSortChips();
+  window._statsFiltered = filtered;
+  _renderStatsList(filtered, g);
+}
+
+function _statRowHtml(s) {
+  const ratePct   = s.attendRate === -1 ? null : s.attendRate;
+  const rateColor = ratePct === null ? 'var(--ink-4)' : ratePct >= 90 ? 'var(--green)' : ratePct >= 70 ? 'var(--amber)' : 'var(--red)';
+  const rateDim   = ratePct === null ? 'var(--bg-deep)' : ratePct >= 90 ? 'var(--green-dim)' : ratePct >= 70 ? 'var(--amber-dim)' : 'var(--red-dim)';
+  const rateLabel = ratePct === null ? '—' : ratePct + '%';
+  return `<div class="stat-row" data-sid="${s.id}">
+    <div style="width:36px;height:36px;border-radius:var(--radius-sm);background:var(--blue-dim);color:var(--blue);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;">${s.ban}-${s.num}</div>
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:14px;font-weight:700;color:var(--ink);">${s.name}</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">
+        <span class="sch-dr-s" style="background:var(--blue-dim);color:var(--blue);">${s.total.toFixed(1)}시간</span>
+        <span class="sch-dr-s" style="background:${rateDim};color:${rateColor};">출석률 ${rateLabel}</span>
+        <span class="sch-dr-s" style="background:var(--red-dim);color:var(--red);">결석 ${s.absentCount}회</span>
+      </div>
+    </div>
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ink-4)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="9 18 15 12 9 6"/></svg>
+  </div>`;
+}
+
+function _renderStatsList(filtered, groupFilter) {
+  const container = document.getElementById('statsListContainer');
+  if (!container) return;
+  if (!filtered.length) { container.innerHTML = _emptyState('데이터가 없습니다.'); return; }
+
+  let html;
+  if (groupFilter === '전체') {
+    html = GROUPS.map(g => {
+      const gs = filtered.filter(s => s.group === g);
+      if (!gs.length) return '';
+      return `<div class="roster-section-head"><span class="roster-section-title">${g}</span><span class="roster-section-count">${gs.length}명</span><div class="roster-section-line"></div></div>
+        <div style="background:var(--surface);border-radius:var(--radius);box-shadow:var(--sh-md);overflow:hidden;margin-bottom:16px;">${gs.map(_statRowHtml).join('')}</div>`;
+    }).join('');
+  } else {
+    html = `<div style="background:var(--surface);border-radius:var(--radius);box-shadow:var(--sh-md);overflow:hidden;margin-bottom:16px;">${filtered.map(_statRowHtml).join('')}</div>`;
+  }
+  container.innerHTML = html;
+
+  container.querySelectorAll('.stat-row').forEach((el, i) => {
+    el.style.animationDelay = (i * 20) + 'ms';
+    el.addEventListener('click', () => {
+      const s = (window._statsFiltered || []).find(x => String(x.id) === el.dataset.sid);
+      if (s) openViolHistory(s);
+    });
+  });
 }
 
 /* ════════════════════════════════

@@ -426,6 +426,7 @@ const API = (() => {
         }
       }
       return {
+        id:          s.id,
         ban:         String(s.class_num),
         num:         String(s.student_num),
         name:        s.name,
