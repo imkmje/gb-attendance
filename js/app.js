@@ -1339,6 +1339,10 @@ function openViolHistory(student) {
   sheet.querySelector('#_vhAddBtn').addEventListener('click', ()=>{ closeSheet(); _violTarget=student; setTimeout(()=>openViolSheet(student),370); });
   window._vhStudent=student; window._vhSheet=sheet; window._vhMoneyBar=sheet.querySelector('#_vhMoneyBar');
   window._vhRecords=null; window._vhAbsents=null; window._vhSchedule=null; window._vhActiveSeg='viol';
+  // 세그먼트 개수(3개) 기준 슬라이더 폭을 데이터 로드 전에 즉시 맞춰둠
+  // — API 응답을 기다렸다가 계산하면 그 사이 CSS 기본값(width:50%, 옛 2분할 시절 값)이
+  //   잠깐 보였다가 33%로 스냅되는 게 눈에 띄었음 (특히 PC 중앙 모달에서 두드러짐)
+  _updateVhSegSlider(sheet);
   let loaded=0;
   const checkBoth=()=>{
     if(++loaded<3)return;

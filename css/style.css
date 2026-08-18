@@ -502,7 +502,7 @@ html[data-theme="dark"] .vh-header::after { background:linear-gradient(158deg, r
 .vh-money-n { font-size:16px; font-weight:800; line-height:1.2; }
 .vh-money-l { font-size:10px; font-weight:600; color:var(--ink-3); margin-top:3px; }
 .vh-seg-wrap { padding:3px; background:var(--bg-deep); box-shadow:var(--sh-pressed); border-radius:var(--radius-sm); display:flex; position:relative; isolation:isolate; gap:0; margin-top:14px; }
-.vh-seg-slider { position:absolute; top:3px; left:0; height:calc(100% - 6px); width:50%; background:var(--surface); box-shadow:var(--sh-md); border-radius:calc(var(--radius-sm) - 2px); transition:transform var(--dur-normal) var(--spring); pointer-events:none; z-index:0; will-change:transform; }
+.vh-seg-slider { position:absolute; top:3px; left:0; height:calc(100% - 6px); width:33.333%; background:var(--surface); box-shadow:var(--sh-md); border-radius:calc(var(--radius-sm) - 2px); transition:transform var(--dur-normal) var(--spring); pointer-events:none; z-index:0; will-change:transform; }
 .vh-seg-slider::after { content:''; position:absolute; inset:0; border-radius:inherit; background:linear-gradient(158deg, rgba(255,255,255,0.55) 0%, transparent 50%); pointer-events:none; }
 html[data-theme="dark"] .vh-seg-slider::after { background:linear-gradient(158deg, rgba(255,255,255,0.06) 0%, transparent 40%); }
 .vh-seg-btn { flex:1; text-align:center; cursor:pointer; border-radius:calc(var(--radius-sm) - 2px); padding:8px 0; font-family:var(--font); font-size:13px; font-weight:600; border:none; background:transparent; color:var(--ink-4); transition:color var(--dur-fast) var(--ease); user-select:none; position:relative; z-index:1; display:flex; align-items:center; justify-content:center; gap:5px; }
