@@ -220,6 +220,33 @@ window.addEventListener('resize', () => {
   if (active) _movePcNavIndicator(active.dataset.tab);
 });
 
+// 열려있는 커스텀 시트 중 가장 위(마지막에 연) 것을 찾아 배경 클릭과 동일하게 닫음
+// — 각 시트는 이미 backdrop 클릭 시 닫히도록 되어 있으므로, 그 backdrop에
+//   직접 클릭 이벤트를 발생시켜 기존 close 로직(취소 콜백 포함)을 그대로 재사용한다.
+function _closeTopmostSheet() {
+  const all = document.querySelectorAll('.custom-sheet-backdrop.show');
+  if (!all.length) return false;
+  all[all.length - 1].click();
+  return true;
+}
+
+// ESC로 열려있는 시트 닫기 (SweetAlert가 떠 있으면 그쪽이 이미 자체적으로
+// ESC를 처리하므로 손대지 않음 — 시트 위에 뜬 인증 다이얼로그 등과 충돌 방지)
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (document.querySelector('.swal2-container')) return;
+  _closeTopmostSheet();
+});
+
+// 브라우저 뒤로가기: 시트가 열려있으면 탭 전환 대신 시트부터 닫는다
+// (기존엔 시트가 열린 채로 뒷단 탭만 바뀌어버려 시트가 엉뚱한 화면 위에 떠 있었음)
+window.addEventListener('popstate', (e) => {
+  if (_closeTopmostSheet()) {
+    e.stopImmediatePropagation();
+    history.pushState(e.state, '');
+  }
+}, false);
+
 // 출석체크 탭: 스크롤 내리면 상단 필터 영역(날짜·세션·확인자)이 자연스럽게 줄어듦
 let _scrollTicking = false;
 window.addEventListener('scroll', () => {
@@ -845,10 +872,12 @@ function _renderReportFromStudents(absentees, date, session) {
       const label = `${s.num}번 ${s.name}${reason ? ` (${reason})` : ''}`;
       grouped[ban].push({ label, hasReason: !!reason });
     });
+    let blockIdx = 0;
     for (const [ban, studs] of Object.entries(grouped)) {
-      html += `<div class="report-class-block"><div class="report-class-title">${ban}</div><div>`;
+      html += `<div class="report-class-block" style="animation-delay:${blockIdx*60}ms;"><div class="report-class-title">${ban}</div><div>`;
       studs.forEach(stu => { html += `<span class="report-student-chip ${stu.hasReason?'has-reason':''}">${stu.label}</span>`; });
       html += `</div></div>`;
+      blockIdx++;
     }
   }
   document.getElementById('reportPreview').innerHTML = html;

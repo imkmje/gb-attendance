@@ -349,7 +349,8 @@ html[data-theme="dark"] .modal-glass .modal-content::after { background:linear-g
 .copy-btn-report::after { content:''; position:absolute; inset:0; background:linear-gradient(155deg, rgba(255,255,255,0.20) 0%, transparent 50%); pointer-events:none; }
 .copy-btn-report:hover  { transform:translateY(-1px) !important; }
 .copy-btn-report:active { transform:scale(0.97) !important; }
-.report-class-block { border-radius:var(--radius); background:var(--surface-hi); box-shadow:var(--sh-sm); padding:12px 14px; margin-bottom:8px; border-left:3px solid var(--blue); }
+@keyframes reportBlockIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+.report-class-block { border-radius:var(--radius); background:var(--surface-hi); box-shadow:var(--sh-sm); padding:12px 14px; margin-bottom:8px; border-left:3px solid var(--blue); animation:reportBlockIn var(--dur-normal) var(--ease) both; }
 .report-class-title { font-weight:800; color:var(--ink); font-size:14px; margin-bottom:6px; }
 .report-student-chip { display:inline-block; background:var(--bg-deep); border-radius:var(--radius-pill); padding:3px 10px; font-size:12px; font-weight:600; margin:2px; color:var(--ink-2); }
 .report-student-chip.has-reason { background:var(--red-dim); color:var(--red); }
@@ -515,7 +516,7 @@ html[data-theme="dark"] .vh-seg-slider::after { background:linear-gradient(158de
 .vh-body { flex:1; overflow-y:auto; padding:14px 18px 24px; }
 .vh-empty { text-align:center; padding:48px 0; color:var(--ink-3); font-size:14px; font-weight:600; }
 .cd-empty { text-align:center; padding:44px 16px; }
-.cd-empty-icon { width:50px; height:50px; border-radius:50%; background:var(--bg-deep); box-shadow:var(--sh-pressed); display:flex; align-items:center; justify-content:center; margin:0 auto 14px; color:var(--ink-4); }
+.cd-empty-icon { width:50px; height:50px; border-radius:50%; background:var(--bg-deep); box-shadow:var(--sh-pressed); display:flex; align-items:center; justify-content:center; margin:0 auto 14px; color:var(--ink-3); }
 .cd-empty-text { font-size:13.5px; font-weight:600; color:var(--ink-3); line-height:1.6; }
 .vh-item { background:var(--surface); border-radius:var(--radius); box-shadow:var(--sh-md); margin-bottom:10px; overflow:hidden; position:relative; transition:box-shadow var(--dur-fast) var(--ease); }
 .vh-item::after { content:''; position:absolute; inset:0; border-radius:inherit; background:linear-gradient(158deg, rgba(255,255,255,0.44) 0%, transparent 44%); pointer-events:none; z-index:0; }
@@ -615,7 +616,13 @@ html[data-theme="dark"] .viol-select { background-image:url("data:image/svg+xml,
     position:fixed; top:0; left:0; bottom:0; width:var(--pc-sidebar-w);
     background:var(--surface); box-shadow:var(--sh-md);
     padding:22px 14px; z-index:500; overflow-y:auto;
+    scrollbar-width:thin; scrollbar-color:var(--bg-deep) transparent;
   }
+  /* 기본 브라우저 스크롤바가 메뉴 글자에 바짝 붙어 보이던 걸 얇고 은은한 스크롤바로 교체 */
+  .pc-sidebar::-webkit-scrollbar { width:6px; }
+  .pc-sidebar::-webkit-scrollbar-track { background:transparent; }
+  .pc-sidebar::-webkit-scrollbar-thumb { background:var(--bg-deep); border-radius:99px; }
+  .pc-sidebar::-webkit-scrollbar-thumb:hover { background:var(--ink-4); }
   .pc-sidebar-brand { display:flex; align-items:center; gap:10px; padding:2px 8px 22px; }
   .pc-sidebar-brand-icon { width:34px; height:34px; border-radius:var(--radius-sm); background:var(--blue-dim); color:var(--blue); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
   .pc-sidebar-brand-text { font-size:13.5px; font-weight:800; color:var(--ink); letter-spacing:-0.3px; line-height:1.3; }
@@ -628,8 +635,9 @@ html[data-theme="dark"] .viol-select { background-image:url("data:image/svg+xml,
     font-family:var(--font); font-size:13.5px; font-weight:700; text-align:left; cursor:pointer;
     transition:background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
   }
-  .pc-nav-item svg { flex-shrink:0; }
+  .pc-nav-item svg { flex-shrink:0; transition:transform var(--dur-fast) var(--spring); }
   .pc-nav-item:hover { background:var(--bg-deep); color:var(--ink); }
+  .pc-nav-item:hover svg { transform:scale(1.1); }
   .pc-nav-item.active { color:var(--blue); }
   .pc-nav-item:focus-visible { outline:none; box-shadow:var(--sh-focus); }
 
@@ -655,9 +663,11 @@ html[data-theme="dark"] .viol-select { background-image:url("data:image/svg+xml,
   /* ── 헤더 / 필터바: 사이드바만큼 이미 밀려났으니 여백만 넉넉히 ── */
   .app-header, .filter-section, .view-filter-bar { padding-left:26px; padding-right:26px; }
 
-  /* ── 콘텐츠 폭 제한 + 중앙 정렬 ── */
+  /* ── 콘텐츠 폭 제한 + 중앙 정렬 ──
+     Bootstrap .container는 기본 좌우 패딩(0.75rem=12px)이 .main-container(26px)와
+     달라서 탭을 넘나들 때 여백이 미묘하게 안 맞았음 — 패딩까지 동일하게 맞춤 */
   .main-container { max-width:1180px; margin:0 auto; padding:22px 26px 0; }
-  .container.py-4 { max-width:1180px !important; }
+  .container.py-4 { max-width:1180px !important; padding-left:26px !important; padding-right:26px !important; }
 
   /* ── 카드 그리드: 넓은 화면 활용 ── */
   .student-grid { grid-template-columns:repeat(5,1fr); gap:12px; }
