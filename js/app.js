@@ -772,7 +772,7 @@ function renderStudents() {
               <button class="nocount-sw${s.applyRestOfDay?' on':''}" id="rest-sw-${idx}" onclick="toggleApplyRestOfDay(${idx},this)" aria-label="일괄 적용 전환" aria-pressed="${s.applyRestOfDay?'true':'false'}">
                 <div class="nocount-sw-thumb"></div>
               </button>
-              <span class="nocount-label${s.applyRestOfDay?' on':''}" id="rest-lbl-${idx}">일괄 적용 <span style="font-weight:500;opacity:0.7;">(선택 시, 오늘 자습 전체 적용)</span></span>
+              <span class="nocount-label${s.applyRestOfDay?' on':''}" id="rest-lbl-${idx}">일괄 적용 <span style="font-weight:500;opacity:0.7;">(선택 시 오늘 자습 전체 결석 적용)</span></span>
             </div>` : ''}
           </div></div>
         </div>
