@@ -104,6 +104,8 @@ html[data-theme="dark"] .splash-icon-wrap::after { background:linear-gradient(15
 .header-btn:hover  { box-shadow:var(--sh-hover); transform:translateY(-1px); }
 .header-btn:active { transform:scale(0.90); box-shadow:var(--sh-pressed); }
 .header-btn:focus-visible { outline:none; box-shadow:var(--sh-focus); }
+.bell-dot { display:none; position:absolute; top:6px; right:6px; width:7px; height:7px; border-radius:50%; background:var(--red); box-shadow:0 0 0 2px var(--bg-deep); }
+.bell-dot.show { display:block; }
 
 .back-btn { display:inline-flex; align-items:center; gap:3px; padding:6px 10px; border-radius:var(--radius-pill); border:none; background:var(--bg-deep); color:var(--ink-3); font-family:var(--font); font-size:12px; font-weight:700; cursor:pointer; white-space:nowrap; box-shadow:var(--sh-xs); opacity:0; pointer-events:none; transform:translateX(-6px); transition:opacity 0.2s var(--ease), transform 0.22s var(--spring), box-shadow var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease); }
 .back-btn.visible { opacity:1; pointer-events:auto; transform:translateX(0); }

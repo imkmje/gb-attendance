@@ -713,6 +713,26 @@ const API = (() => {
       { Prefer: 'resolution=merge-duplicates,return=minimal' });
   }
 
+  /**
+   * 활동 로그 / 공지사항 조회 (최신순)
+   */
+  async function getActivityLog(limit = 50) {
+    return _get(`activity_log?select=*&order=created_at.desc&limit=${limit}`);
+  }
+
+  /**
+   * 활동 로그 / 공지사항 기록
+   * type: 'schedule'(자습 세션 변경 자동 기록) | 'notice'(교사 수동 공지)
+   */
+  async function logActivity({ actor = '', type = 'schedule', studentId = null, message }) {
+    await _post('activity_log', {
+      actor,
+      type,
+      student_id: studentId,
+      message,
+    });
+  }
+
   return {
     getGroupList,
     getStudentList,
@@ -747,5 +767,7 @@ const API = (() => {
     exportScheduleData,
     getReasonTypes,
     saveReasonTypes,
+    getActivityLog,
+    logActivity,
   };
 })();

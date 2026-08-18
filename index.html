@@ -47,6 +47,13 @@
     </div>
     <div class="header-title" onclick="handleHeaderClick()" style="cursor:default;">청·백운반 자율학습 출석부</div>
     <div style="display:flex;align-items:center;gap:2px;flex-shrink:0;">
+    <button class="header-btn" id="activityBellBtn" onclick="openActivityLogSheet()" aria-label="활동 로그" style="position:relative;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/>
+        <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
+      </svg>
+      <span id="activityBellDot" class="bell-dot"></span>
+    </button>
     <button class="header-btn" id="teacherMenuBtn" onclick="handleTeacherMenuClick()" aria-label="교사 메뉴">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="position:absolute;">
         <circle cx="12" cy="12" r="3"/>
@@ -275,8 +282,8 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script src="js/config.js?v=20260720d"></script>
-  <script src="js/api.js?v=20260817f"></script>
-  <script src="js/app.js?v=20260817f"></script>
+  <script src="js/api.js?v=20260818a"></script>
+  <script src="js/app.js?v=20260818a"></script>
 
 </body>
 </html>

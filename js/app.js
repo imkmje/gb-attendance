@@ -1666,6 +1666,108 @@ function handleTeacherMenuClick() {
   _requireTeacherAuth(_openTeacherMenu, { title: '교사 메뉴' });
 }
 
+// ── 활동 로그 / 공지사항 ──────────────────────────────
+function _timeAgo(iso) {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const min = Math.floor(diffMs / 60000);
+  if (min < 1) return '방금 전';
+  if (min < 60) return `${min}분 전`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}시간 전`;
+  const day = Math.floor(hr / 24);
+  if (day < 7) return `${day}일 전`;
+  return new Date(iso).toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' });
+}
+
+function checkActivityBadge() {
+  const dot = document.getElementById('activityBellDot');
+  if (!dot) return;
+  API.getActivityLog(1).then(rows => {
+    const latest = rows && rows[0];
+    if (!latest) { dot.classList.remove('show'); return; }
+    const lastSeen = localStorage.getItem('lastSeenActivityAt');
+    dot.classList.toggle('show', !lastSeen || new Date(latest.created_at) > new Date(lastSeen));
+  }).catch(() => {});
+}
+
+function openActivityLogSheet() {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'custom-sheet-backdrop';
+  backdrop.style.zIndex = '3000';
+  const sheet = document.createElement('div');
+  sheet.className = 'custom-sheet';
+  sheet.style.cssText = 'padding-bottom:48px;max-height:90dvh;display:flex;flex-direction:column;';
+
+  sheet.innerHTML = `
+    <div class="custom-sheet-handle"></div>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+      <div style="width:42px;height:42px;border-radius:var(--radius-sm);background:var(--blue-dim);display:flex;align-items:center;justify-content:center;box-shadow:var(--sh-sm);flex-shrink:0;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+      </div>
+      <div style="flex:1;">
+        <div style="font-size:16px;font-weight:800;color:var(--ink);letter-spacing:-0.4px;">활동 로그</div>
+        <div style="font-size:11px;color:var(--ink-3);margin-top:1px;">세션 변경 내역 · 공지사항</div>
+      </div>
+      <button id="_alPost" aria-label="공지 작성" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--blue-dim);color:var(--blue);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--sh-xs);flex-shrink:0;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+      <button id="_alClose" aria-label="닫기" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--sh-xs);flex-shrink:0;">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div id="_alBody" style="overflow-y:auto;flex:1;margin:0 -16px;padding:0 16px;">
+      <div class="text-center py-5" style="color:var(--ink-3);font-weight:600;">불러오는 중...</div>
+    </div>`;
+
+  backdrop.appendChild(sheet);
+  document.body.appendChild(backdrop);
+  requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
+
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+  sheet.querySelector('#_alClose').addEventListener('click', close);
+  sheet.querySelector('#_alPost').addEventListener('click', () => {
+    _requireTeacherAuth(() => _postNotice(() => _loadActivityLogBody(sheet.querySelector('#_alBody'))), { title: '교사 인증', text: '공지사항을 작성하려면 교사 메뉴 비밀번호를 입력하세요.' });
+  });
+
+  _loadActivityLogBody(sheet.querySelector('#_alBody'));
+
+  // 읽음 처리
+  localStorage.setItem('lastSeenActivityAt', new Date().toISOString());
+  const dot = document.getElementById('activityBellDot');
+  if (dot) dot.classList.remove('show');
+}
+
+function _loadActivityLogBody(body) {
+  API.getActivityLog(50).then(rows => {
+    if (!rows || !rows.length) { body.innerHTML = '<div class="vh-empty">활동 내역이 없습니다.</div>'; return; }
+    body.innerHTML = rows.map(r => {
+      const isNotice = r.type === 'notice';
+      const dotColor = isNotice ? 'background:var(--amber);' : 'background:var(--blue);';
+      const actorTxt = r.actor ? `${r.actor} · ` : '';
+      return `<div class="vh-item"><div class="vh-item-head"><div class="vh-type-dot" style="${dotColor}"></div><div class="vh-item-main"><div class="vh-item-type">${r.message}</div><div class="vh-item-date">${actorTxt}${_timeAgo(r.created_at)}</div></div></div></div>`;
+    }).join('');
+  }).catch(() => { body.innerHTML = '<div class="vh-empty">불러오지 못했습니다.</div>'; });
+}
+
+function _postNotice(onDone) {
+  Swal.fire({
+    title: '공지사항 작성',
+    input: 'textarea',
+    inputPlaceholder: '모든 교사가 볼 수 있는 공지 내용을 입력하세요',
+    showCancelButton: true,
+    confirmButtonText: '등록',
+    cancelButtonText: '취소',
+  }).then(result => {
+    const text = result.value && result.value.trim();
+    if (!result.isConfirmed || !text) return;
+    const actor = (document.getElementById('checkerName')?.value || localStorage.getItem('checkerName') || '').trim();
+    API.logActivity({ actor, type: 'notice', message: text })
+      .then(() => { showSuccessToast('공지 등록됨'); if (typeof onDone === 'function') onDone(); })
+      .catch(err => Swal.fire('오류', err?.message || '등록하지 못했습니다.', 'error'));
+  });
+}
+
 function _openTeacherMenu() {
   const backdrop = document.createElement('div');
   backdrop.className = 'custom-sheet-backdrop';
@@ -2023,6 +2125,35 @@ function _teacherLoadSchedule(student) {
     .catch(() => { hideLoading(); Swal.fire('오류', '시간표를 불러오지 못했습니다.', 'error'); });
 }
 
+// 자습 세션 변경분을 비교해 활동 로그에 기록 (실패해도 저장 흐름은 막지 않음)
+function _logScheduleChange(student, before, after) {
+  const DAYS_KR = { mon:'월', tue:'화', wed:'수', thu:'목', fri:'금' };
+  const SESS_WD = ['오후','야간','심야'];
+  const SESS_SAT = ['오전','오후'];
+  const norm = obj => {
+    const o = obj || {}, r = {};
+    ['mon','tue','wed','thu','fri'].forEach(d => { r[d] = Array.isArray(o[d]) && o[d].length ? o[d] : ['-','-','-']; });
+    r.sat = Array.isArray(o.sat) && o.sat.length ? o.sat : ['-','-'];
+    return r;
+  };
+  const b = norm(before), a = norm(after);
+  const changes = [];
+  ['mon','tue','wed','thu','fri'].forEach(d => {
+    SESS_WD.forEach((label, i) => {
+      const bv = b[d][i] ?? '-', av = a[d][i] ?? '-';
+      if (bv !== av) changes.push(`${DAYS_KR[d]} ${label} ${bv}→${av}`);
+    });
+  });
+  SESS_SAT.forEach((label, i) => {
+    const bv = b.sat[i] ?? '-', av = a.sat[i] ?? '-';
+    if (bv !== av) changes.push(`토 ${label} ${bv}→${av}`);
+  });
+  if (!changes.length) return;
+  const actor = (document.getElementById('checkerName')?.value || localStorage.getItem('checkerName') || '').trim();
+  const message = `${student.name}(${student.ban}반 ${student.num}번) 자습 세션 변경: ${changes.join(', ')}`;
+  API.logActivity({ actor, type: 'schedule', studentId: student.id, message }).catch(() => {});
+}
+
 function _renderScheduleEditor(student, rawSchedule, onSaved) {
   const sched = JSON.parse(JSON.stringify(rawSchedule || {}));
   ['mon','tue','wed','thu','fri'].forEach(d => { if (!Array.isArray(sched[d])) sched[d] = ['-','-','-']; });
@@ -2125,6 +2256,7 @@ function _renderScheduleEditor(student, rawSchedule, onSaved) {
     saveBtn.textContent = '저장 중...';
     try {
       await API.updateStudentSchedule(student.id, sched);
+      _logScheduleChange(student, rawSchedule, sched);
       close();
       showSuccessToast('세션 편성 저장됨', student.name);
       _cache.stats = null;
@@ -3230,6 +3362,7 @@ window.onload = () => {
         API.getReasonTypes()
           .then(types => { _reasonTypes = types; })
           .catch(() => {});
+        checkActivityBadge();
         if (!_rosterLoaded) {
           API.getAllMemberList()
             .then(data => { _rosterData=data||[]; _rosterLoaded=true; })
