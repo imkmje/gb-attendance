@@ -17,8 +17,9 @@ const VIOLATION_ACTIONS = ['경고', '벌금', '직접 입력'];
    n.0.0 대규모 업데이트 · 0.n.0 기능/디자인 개선 · 0.0.n 버그 수정
    최신순 — 새 배포 때마다 맨 위에 추가할 것
 ════════════════════════════════ */
-const APP_VERSION = '2.15.0';
+const APP_VERSION = '2.15.1';
 const CHANGELOG = [
+  { v:'2.15.1', d:'2026-08-19', t:'patch', title:'스크롤 시 세션 흰색 필(슬라이더)이 불안정하게 떨리던 버그 수정' },
   { v:'2.15.0', d:'2026-08-19', t:'minor', title:'출석체크 상단 필터 영역이 아이폰처럼 스크롤에 비례해 자연스럽게 축소되도록 개선' },
   { v:'2.14.0', d:'2026-08-19', t:'minor', title:'네트워크 요청 타임아웃 추가, 모바일 터치 시 hover 스타일 안 풀리던 문제 수정, 아이폰 안전영역 대응, 흐린 회색 텍스트 가독성 개선' },
   { v:'2.13.0', d:'2026-08-19', t:'minor', title:'개발자 메뉴에 학기 설정(1학기/2학기 시작일) 추가 — 통계 탭 학기 표시를 직접 조정 가능' },
@@ -556,7 +557,7 @@ function _applyScrollCollapse() {
   // 슬라이더가 줄어든 버튼과 안 맞고 따로 노는 게 방지된다.
   if (homeActive) {
     const activePill = document.querySelector('#sessionPillWrap .session-pill.active');
-    if (activePill) _movePillSlider(activePill);
+    if (activePill) _movePillSlider(activePill, true);
   }
 }
 window.addEventListener('scroll', () => {
@@ -620,13 +621,29 @@ function handleDateChange(forceLoad=false) {
   renderSessionPills(); loadStudents();
 }
 
-function _movePillSlider(activeBtn) {
+// instant=true: 스크롤 중처럼 매 프레임 위치가 바뀔 때 쓰는 모드.
+// 슬라이더에 걸린 스프링 트랜지션(탭 클릭 시 부드럽게 슥 이동하는 용도)을
+// 그대로 둔 채 계속 값을 갱신하면, 목표 지점이 프레임마다 바뀌면서
+// 트랜지션이 계속 새로 시작→덧씌워지길 반복해 슬라이더가 불안정하게
+// 떨리는 버그가 있었음 — 스크롤 중엔 트랜지션을 잠깐 꺼서 즉시 스냅되게
+// 하고, 스크롤이 멎으면 다음 프레임에 다시 켜서 탭 클릭 시엔 여전히
+// 부드럽게 슬라이드하도록 한다.
+function _movePillSlider(activeBtn, instant) {
   const wrap   = document.getElementById('sessionPillWrap');
   const slider = document.getElementById('sessionPillSlider');
   if (!slider||!activeBtn||!wrap) return;
   const btnLeft=activeBtn.offsetLeft, btnW=activeBtn.offsetWidth;
   if (btnW===0) return;
+  if (instant) slider.style.transition = 'none';
   slider.style.width=btnW+'px'; slider.style.transform='translateX('+btnLeft+'px)';
+  if (instant) {
+    // rAF가 지연될 수 있는 상황(탭 백그라운드 전환 등)에도 트랜지션이
+    // 계속 꺼진 채로 남지 않도록 setTimeout을 함께 건다 — 둘 중 먼저
+    // 오는 쪽이 복구.
+    const restore = () => { slider.style.transition = ''; };
+    requestAnimationFrame(() => requestAnimationFrame(restore));
+    setTimeout(restore, 120);
+  }
 }
 
 function renderSessionPills() {
