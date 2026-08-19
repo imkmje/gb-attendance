@@ -216,6 +216,12 @@ html[data-theme="dark"] .lock-banner::after { background:linear-gradient(158deg,
 #lockChip.show { opacity:1; transform:translateX(-50%) translateY(0) scale(1); }
 #lockChip span { font-size:13px; font-weight:700; color:#fff; }
 
+/* 오프라인 저장 대기 칩 — 네트워크 없이 출석 저장을 큐에 넣었을 때 상시 노출.
+   lockChip과 같은 자리를 쓰되(둘이 동시에 뜰 일은 거의 없음) 탭하면 즉시 재전송을 시도한다. */
+#offlineQueueChip { position:fixed; top:64px; left:50%; transform:translateX(-50%) translateY(-8px) scale(0.9); z-index:9997; cursor:pointer; background:var(--amber); border-radius:var(--radius-pill); padding:9px 18px; display:flex; align-items:center; gap:7px; box-shadow:var(--sh-amber); opacity:0; pointer-events:none; white-space:nowrap; transition:opacity var(--dur-fast) var(--ease), transform var(--dur-normal) var(--spring); }
+#offlineQueueChip.show { opacity:1; pointer-events:auto; transform:translateX(-50%) translateY(0) scale(1); }
+#offlineQueueChip span { font-size:13px; font-weight:700; color:#fff; }
+
 @keyframes shimmer { 0% { background-position:-800px 0; } 100% { background-position:800px 0; } }
 .cd-skeleton { background:linear-gradient(90deg, var(--bg-deep) 20%, var(--surface-hi) 50%, var(--bg-deep) 80%); background-size:1600px 100%; animation:shimmer 1.4s ease-in-out infinite; border-radius:var(--radius-sm); }
 .skeleton-student-card { background:var(--surface); box-shadow:var(--sh-md); border-radius:var(--radius); padding:14px; display:flex; flex-direction:column; gap:10px; position:relative; overflow:hidden; }
@@ -546,6 +552,9 @@ html[data-theme="dark"] .vh-item::after { background:linear-gradient(158deg, rgb
 @media (hover:hover) { .vh-add-btn:hover  { transform:translateY(-1px); box-shadow:0 8px 24px rgba(155,135,196,0.40), 0 1px 0 rgba(255,255,255,0.28) inset; } }
 .vh-add-btn:active { transform:scale(0.97); }
 .vh-add-btn.is-green { background:var(--green); box-shadow:var(--sh-green); }
+.vh-add-btn.is-blue { background:var(--blue); box-shadow:var(--sh-blue); }
+.vh-add-btn-row { display:flex; gap:10px; margin:0 18px 32px; }
+.vh-add-btn-row .vh-add-btn { margin:0; flex:1; }
 .viol-student-header { display:flex; align-items:center; gap:12px; padding:0 0 16px; border-bottom:1px solid var(--bg-deep); margin-bottom:16px; }
 .viol-student-avatar { width:44px; height:44px; border-radius:var(--radius); background:var(--purple-dim); box-shadow:var(--sh-sm); display:flex; align-items:center; justify-content:center; flex-shrink:0; position:relative; overflow:hidden; }
 .viol-student-avatar::after { content:''; position:absolute; inset:0; background:linear-gradient(158deg, rgba(255,255,255,0.40) 0%, transparent 50%); pointer-events:none; }
@@ -692,8 +701,9 @@ html[data-theme="dark"] .viol-select { background-image:url("data:image/svg+xml,
   }
 
   /* ── 토스트 / 잠금칩: 콘텐츠 영역 기준으로 재중앙정렬 ── */
-  #toast-container { left:calc(var(--pc-sidebar-w) + (100% - var(--pc-sidebar-w)) / 2); }
-  #lockChip         { left:calc(var(--pc-sidebar-w) + (100% - var(--pc-sidebar-w)) / 2); }
+  #toast-container   { left:calc(var(--pc-sidebar-w) + (100% - var(--pc-sidebar-w)) / 2); }
+  #lockChip          { left:calc(var(--pc-sidebar-w) + (100% - var(--pc-sidebar-w)) / 2); }
+  #offlineQueueChip  { left:calc(var(--pc-sidebar-w) + (100% - var(--pc-sidebar-w)) / 2); }
 
   /* ── FAB: 하단 탭바가 없으니 여백 축소 ── */
   .roster-fab { bottom:28px; }

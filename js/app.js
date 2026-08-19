@@ -17,8 +17,11 @@ const VIOLATION_ACTIONS = ['경고', '벌금', '직접 입력'];
    n.0.0 대규모 업데이트 · 0.n.0 기능/디자인 개선 · 0.0.n 버그 수정
    최신순 — 새 배포 때마다 맨 위에 추가할 것
 ════════════════════════════════ */
-const APP_VERSION = '2.21.0';
+const APP_VERSION = '2.24.0';
 const CHANGELOG = [
+  { v:'2.24.0', d:'2026-08-19', t:'minor', title:'출석 저장 실패 시(네트워크 끊김) 자동 오프라인 큐잉 — 연결되면 자동 재전송, 화면 상단에 대기 건수 칩 표시' },
+  { v:'2.23.0', d:'2026-08-19', t:'minor', title:'평일 저녁(19시)/토요일 오후(13시) 넘도록 그날 출석체크가 하나도 없으면 알림 — 자습 없는 날(공휴일 설정에서 세션 미등록)은 자동 제외' },
+  { v:'2.22.0', d:'2026-08-19', t:'minor', title:'출석체크 "결과보기"에 공유하기 버튼 추가 — 지원 기기(모바일)에서 카톡/문자로 바로 전송, 텍스트 복사와 나란히 표시' },
   { v:'2.21.0', d:'2026-08-19', t:'minor', title:'기간 결산 "학생 전달용/교사용" 모드 구분을 없애고 체크박스 하나로 통일, 미납 벌금 0원인 학생은 태그·문구 자동 숨김, 텍스트 복사 전 미리보기 추가' },
   { v:'2.20.0', d:'2026-08-19', t:'minor', title:'기간 결산 팝업 화면 목록이 체크박스 선택에 실시간으로 반영되도록 개선(부드러운 페이드), 학생 전달용 항목에 "기간 중 지각"·"미납 벌금" 추가' },
   { v:'2.19.0', d:'2026-08-19', t:'minor', title:'기간 결산에 "학생 전달용"/"교사용" 모드 추가 — 교사용은 지각·조퇴·위반·미납 벌금까지 체크박스로 골라 복사 가능, 부드러운 슬라이드+페이드 전환' },
@@ -1240,6 +1243,71 @@ async function _applyRestOfDayAbsences(group, date, checkerName) {
   return { applied: appliedCount, sessions: touchedSessions };
 }
 
+/* ════════════════════════════════
+   오프라인 저장 큐
+   와이파이가 끊긴 교실에서 "출석 저장"을 눌러도 실패로 끝내지 않고
+   payload를 localStorage에 쌓아뒀다가, 온라인 복귀 시(또는 앱 재실행 시)
+   자동으로 순서대로 재전송한다. 서비스워커가 앱 셸을 오프라인에도 열어주므로
+   교실에서 그대로 출석체크를 계속할 수 있다.
+════════════════════════════════ */
+const OFFLINE_QUEUE_KEY = 'gbAttOfflineQueue';
+let _flushingOfflineQueue = false;
+
+function _getOfflineQueue() {
+  try { return JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY)) || []; }
+  catch { return []; }
+}
+function _setOfflineQueue(arr) {
+  localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(arr));
+  _updateOfflineQueueChip();
+}
+function _queueAttendanceOffline(payload) {
+  const queue = _getOfflineQueue();
+  queue.push({ payload, queuedAt: new Date().toISOString() });
+  _setOfflineQueue(queue);
+}
+function _isNetworkError(err) {
+  const msg = err?.message || '';
+  return msg.includes('네트워크 연결에 실패') || msg.includes('요청 시간이 초과');
+}
+function _updateOfflineQueueChip() {
+  const chip = document.getElementById('offlineQueueChip');
+  if (!chip) return;
+  const n = _getOfflineQueue().length;
+  if (n > 0) {
+    document.getElementById('offlineQueueChipText').textContent = `오프라인 저장 대기 ${n}건 · 탭하여 재시도`;
+    chip.classList.add('show');
+  } else {
+    chip.classList.remove('show');
+  }
+}
+// silent=true면 재전송할 게 없거나 여전히 실패해도 토스트를 띄우지 않는다
+// (온라인 이벤트·주기적 재시도처럼 사용자가 직접 누른 게 아닌 경우).
+async function _flushOfflineQueue(manual) {
+  if (_flushingOfflineQueue) return;
+  const queue = _getOfflineQueue();
+  if (!queue.length) { if (manual) showSuccessToast('대기 중인 기록이 없어요'); return; }
+  _flushingOfflineQueue = true;
+  let flushed = 0;
+  while (queue.length) {
+    try {
+      await API.saveAttendance(queue[0].payload);
+      queue.shift();
+      _setOfflineQueue(queue);
+      flushed++;
+    } catch (err) {
+      if (manual && flushed === 0) showSuccessToast('아직 연결이 안 됐어요', '잠시 후 자동으로 다시 시도할게요');
+      break; // 여전히 오프라인이거나 실패 — 다음 online 이벤트/재시도를 기다린다
+    }
+  }
+  _flushingOfflineQueue = false;
+  if (flushed > 0) {
+    _cache.stats = null;
+    showSuccessToast('오프라인 저장 동기화 완료', `${flushed}건 서버에 반영됐어요`);
+    if (document.getElementById('view-home')?.classList.contains('active')) loadStudents(false, true);
+  }
+}
+
 function submitAttendance(cb) {
   const checkerName=document.getElementById('checkerName').value.trim();
   if(!checkerName){ Swal.fire('알림','출결 확인자 성명을 입력해 주세요.','warning'); return; }
@@ -1300,7 +1368,19 @@ function submitAttendance(cb) {
       }
       setTimeout(()=>{if(cb)cb(); else loadStudents(false,true);},1800);
     })
-    .catch(()=>{ resetBtn(false); Swal.fire('오류 발생','저장하지 못했습니다.','error'); });
+    .catch((err)=>{
+      // 네트워크 문제로 실패한 경우 — 오류로 끝내지 않고 로컬 큐에 쌓아둔다.
+      // (서버가 거부한 경우, 즉 실제 오류는 그대로 안내한다.)
+      if (_isNetworkError(err)) {
+        _queueAttendanceOffline(payload);
+        hasUnsavedChanges = false;
+        resetBtn(true);
+        const el = _cdToast({ type:'amber', title:'오프라인 저장됨', sub:'연결되면 자동으로 서버에 저장할게요' });
+        setTimeout(()=>{ el.classList.add('out'); setTimeout(()=>el.remove(),280); }, 2600);
+        return;
+      }
+      resetBtn(false); Swal.fire('오류 발생','저장하지 못했습니다.','error');
+    });
 }
 
 /* ════════════════════════════════
@@ -1358,10 +1438,16 @@ function _openResultSheet(reportText, absentees, date, session, total) {
       </div>
     </div>
     <div class="vh-body" id="_rsBody"></div>
-    <button class="vh-add-btn is-green" id="_rsCopyBtn">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-      텍스트 복사
-    </button>`;
+    <div class="vh-add-btn-row">
+      <button class="vh-add-btn is-green" id="_rsCopyBtn">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        텍스트 복사
+      </button>
+      <button class="vh-add-btn is-blue" id="_rsShareBtn" style="display:none;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+        공유하기
+      </button>
+    </div>`;
   backdrop.appendChild(sheet);
   document.body.appendChild(backdrop);
   requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
@@ -1371,6 +1457,19 @@ function _openResultSheet(reportText, absentees, date, session, total) {
   sheet.querySelector('#_rsCopyBtn').addEventListener('click', () => {
     navigator.clipboard.writeText(reportText).then(() => showSuccessToast('클립보드에 복사됐어요'));
   });
+  // 모바일(카톡/문자 앱 대상 Web Share API 지원 브라우저)에서만 공유 버튼 노출.
+  // 미지원 환경(대부분의 PC 브라우저)은 기존 복사 버튼만 그대로 보인다.
+  const shareBtn = sheet.querySelector('#_rsShareBtn');
+  if (navigator.share) {
+    shareBtn.style.display = '';
+    shareBtn.addEventListener('click', async () => {
+      try { await navigator.share({ text: reportText }); }
+      catch (err) {
+        if (err?.name === 'AbortError') return; // 사용자가 공유 취소 — 조용히 무시
+        navigator.clipboard.writeText(reportText).then(() => showSuccessToast('공유에 실패해 클립보드에 복사했어요'));
+      }
+    });
+  }
 
   _renderReportFromStudents(sheet.querySelector('#_rsBody'), absentees, total);
 }
@@ -4877,10 +4976,47 @@ window.addEventListener('beforeunload', (e) => {
   e.returnValue = '';
 });
 
+// 온라인 복귀 시 오프라인 큐 자동 재전송
+window.addEventListener('online', () => _flushOfflineQueue(false));
+
+// 출석체크 미완료 알림 — 오늘 자율학습이 있는 날인데(일요일·"세션 없음"으로
+// 등록된 날 제외) 특정 시각이 지나도록 어떤 그룹도 출석 저장을 안 했으면
+// 한 번 알려준다. 시험 기간·모의고사처럼 자습이 아예 없는 날은 개발자 메뉴 →
+// 공휴일 설정에서 해당 날짜의 오전/오후 체크를 모두 해제해두면 세션 자체가
+// 없는 날로 처리되어 이 알림도 자동으로 뜨지 않는다.
+function _maybeShowAttendanceReminder() {
+  const todayStr = _todayStr();
+  const day = new Date(todayStr).getDay();
+  if (day === 0) return; // 일요일 — 자습 없음
+
+  const holiday = _holidays.find(h => h.date === todayStr);
+  const hasSession = holiday ? !!(holiday.am || holiday.pm) : true; // 평일/토요일 기본값: 세션 있음
+  if (!hasSession) return;
+
+  const now = new Date();
+  const hm = now.getHours() * 100 + now.getMinutes();
+  const cutoff = (day === 6) ? 1300 : 1900; // 세션 자동선택과 동일한 기준(오후 자습이 시작됐을 시각)
+  if (hm < cutoff) return;
+
+  const flagKey = `attnReminderShown_${todayStr}`;
+  if (localStorage.getItem(flagKey)) return;
+
+  API.getAttendanceCountByDate(todayStr).then(count => {
+    if (count > 0) return; // 이미 어딘가 저장된 기록이 있음
+    localStorage.setItem(flagKey, '1');
+    const el = _cdToast({ type:'amber', title:'오늘 출석체크가 아직 없어요', sub:'출석체크 탭에서 저장해 주세요' });
+    el.style.cursor = 'pointer';
+    el.addEventListener('click', () => { switchTab('home'); el.classList.add('out'); setTimeout(()=>el.remove(),280); });
+    setTimeout(()=>{ el.classList.add('out'); setTimeout(()=>el.remove(),280); }, 6000);
+  }).catch(() => {});
+}
+
 window.onload = () => {
   updateThemeIcon();
   _bindPillFade('sessionPillWrap');
   _bindPillFade('rosterPillWrap');
+  _updateOfflineQueueChip();
+  if (navigator.onLine) _flushOfflineQueue(false); // 오프라인 상태로 앱을 껐다 켠 경우 대비
 
   // 날짜: sessionStorage 복원 (없으면 오늘)
   const _ssDate = sessionStorage.getItem('ss_date');
@@ -4934,7 +5070,7 @@ window.onload = () => {
       hideSplash();
       setTimeout(() => {
         API.getHolidays()
-          .then(h => { _holidays = h || []; handleDateChange(true); })
+          .then(h => { _holidays = h || []; handleDateChange(true); _maybeShowAttendanceReminder(); })
           .catch(() => {});
         API.getReasonTypes()
           .then(types => { _reasonTypes = types; })
