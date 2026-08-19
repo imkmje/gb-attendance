@@ -838,6 +838,33 @@ const API = (() => {
     return streak;
   }
 
+  // 연속 출석 스트릭 — _dailyAbsentFlags가 "기록이 있는 날(=그 학생이
+  // 자습하기로 되어있던 날)"만 담고 있으므로, 화·목·금·토처럼 자기
+  // 세션이 있는 날만 골라 연속으로 쳐진다(그 사이 월·수·일은 자동으로
+  // 건너뜀). 노카운트 결석은 실질결석과 마찬가지로 학생에게 불리하게
+  // 잡지 않으므로(isAbsent=false) 스트릭이 안 끊긴다.
+  function _consecutivePresentStreak(records) {
+    const days = _dailyAbsentFlags(records);
+    let streak = 0;
+    for (let i = days.length - 1; i >= 0; i--) {
+      if (!days[i].isAbsent) streak++; else break;
+    }
+    return streak;
+  }
+
+  // 최대 연속 출석 — 지금 이어지는 중인 스트릭(_consecutivePresentStreak)과
+  // 달리, 기록 전체를 훑어서 "역대 가장 길었던" 연속 구간을 찾는다.
+  // 기간 결산에서 "이 기간 중 최대"/"학기 전체 최대" 둘 다에 재사용.
+  function _maxPresentStreak(records) {
+    const days = _dailyAbsentFlags(records);
+    let max = 0, cur = 0;
+    for (const d of days) {
+      if (!d.isAbsent) { cur++; if (cur > max) max = cur; }
+      else cur = 0;
+    }
+    return max;
+  }
+
   /**
    * 대시보드 — 특정 날짜의 전 자습반 결석 현황 (학생당 한 줄로 세션 병합)
    * GAS 없음 — 신규
@@ -933,6 +960,7 @@ const API = (() => {
       earlyCount: earlyRecs.length,
       earlyTotalMins: earlyRecs.reduce((s, r) => s + (r.early_leave_mins ?? 0), 0),
       consecutiveAbsentStreak: _consecutiveAbsentStreak(records),
+      consecutivePresentStreak: _consecutivePresentStreak(records),
       violationCount: violations.length,
       fineTotal, finePaid, fineUnpaid: fineTotal - finePaid,
       recentAbsences: [...absentRecs]
@@ -940,6 +968,43 @@ const API = (() => {
         .slice(0, 10)
         .map(r => ({ date: r.record_date, session: r.session, reason: r.reason, noCount: r.no_count })),
     };
+  }
+
+  /**
+   * 대시보드 — 기간 결산. 지정한 기간(startDate~endDate) 동안의
+   * 출석률·결석 횟수·기간 내 최대 연속 출석과, 전체 누적 기록 기준
+   * 최대 연속 출석(학기 전체)을 학생 전원에 대해 함께 계산해서 반환.
+   * GAS 없음 — 신규
+   */
+  async function getPeriodSummary(startDate, endDate) {
+    const [students, attendance] = await Promise.all([
+      _get('students?select=id,class_num,student_num,name,study_room&order=study_room,class_num,student_num'),
+      _get('attendance?select=student_id,session,status,record_date,no_count'),
+    ]);
+    const attByStudent = {};
+    for (const a of attendance) (attByStudent[a.student_id] ??= []).push(a);
+
+    return students.map(s => {
+      const allRecs    = attByStudent[s.id] ?? [];
+      const periodRecs = allRecs.filter(r => r.record_date >= startDate && r.record_date <= endDate);
+
+      const attendCount   = periodRecs.filter(r => r.status === '출석').length;
+      const countedAbsent = _calcAbsentCounts(periodRecs);
+      const total          = attendCount + countedAbsent;
+      const attendRate      = total > 0 ? Math.round((attendCount / total) * 100) : null;
+
+      return {
+        id:    s.id,
+        ban:   String(s.class_num),
+        num:   String(s.student_num),
+        name:  s.name,
+        group: s.study_room,
+        attendRate,
+        absentCount:       countedAbsent,
+        periodMaxStreak:   _maxPresentStreak(periodRecs),
+        semesterMaxStreak: _maxPresentStreak(allRecs),
+      };
+    });
   }
 
   /**
@@ -1019,6 +1084,7 @@ const API = (() => {
     getTodayAbsences,
     getDayRoster,
     getStudentInsight,
+    getPeriodSummary,
     getViolationTypes,
     saveViolationTypes,
     getSemesterConfig,

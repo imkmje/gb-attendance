@@ -17,8 +17,9 @@ const VIOLATION_ACTIONS = ['경고', '벌금', '직접 입력'];
    n.0.0 대규모 업데이트 · 0.n.0 기능/디자인 개선 · 0.0.n 버그 수정
    최신순 — 새 배포 때마다 맨 위에 추가할 것
 ════════════════════════════════ */
-const APP_VERSION = '2.15.2';
+const APP_VERSION = '2.16.0';
 const CHANGELOG = [
+  { v:'2.16.0', d:'2026-08-19', t:'minor', title:'연속 출석 스트릭 표시 + 대시보드에 "기간 결산" 추가 (출석률·결석·최대연속, 카톡 공지용 텍스트 복사)' },
   { v:'2.15.2', d:'2026-08-19', t:'patch', title:'출석체크 스크롤 축소 애니메이션이 끊기던 문제 수정 (강제 리플로우 제거)' },
   { v:'2.15.1', d:'2026-08-19', t:'patch', title:'스크롤 시 세션 흰색 필(슬라이더)이 불안정하게 떨리던 버그 수정' },
   { v:'2.15.0', d:'2026-08-19', t:'minor', title:'출석체크 상단 필터 영역이 아이폰처럼 스크롤에 비례해 자연스럽게 축소되도록 개선' },
@@ -2089,6 +2090,14 @@ function _renderStudentInsightBody(body, ins) {
   const rateColor = ins.attendRate === null ? 'var(--ink-4)'
     : ins.attendRate >= 90 ? 'var(--green)' : ins.attendRate >= 70 ? 'var(--amber)' : 'var(--red)';
 
+  // 연속 출석/결석은 동시에 3 이상일 수 없으므로(둘 다 _dailyAbsentFlags의
+  // 같은 마지막 구간을 바라봄) 서로 배타적으로 뜬다 — 긍정적인 쪽을 먼저 배치.
+  const streakGood = ins.consecutivePresentStreak >= 3
+    ? `<div style="display:flex;align-items:center;gap:10px;background:var(--green-dim);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;">
+        <span style="font-size:18px;line-height:1;flex-shrink:0;">🔥</span>
+        <div style="font-size:13px;font-weight:700;color:var(--green);">${ins.consecutivePresentStreak}일 연속 출석 중이에요</div>
+      </div>` : '';
+
   const streakWarning = ins.consecutiveAbsentStreak >= 3
     ? `<div style="display:flex;align-items:center;gap:10px;background:var(--red-dim);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
@@ -2129,12 +2138,190 @@ function _renderStudentInsightBody(body, ins) {
     : _emptyState('결석 기록이 없습니다.');
 
   body.innerHTML = `
+    ${streakGood}
     ${streakWarning}
     ${statsHtml}
     ${fineWarning}
     ${reasonEntries.length ? `<div style="font-size:12px;font-weight:700;color:var(--ink-3);margin-bottom:8px;">사유별 결석</div>${reasonHtml}` : ''}
     <div style="font-size:12px;font-weight:700;color:var(--ink-3);margin-bottom:8px;">최근 결석 이력</div>
     ${recentHtml}`;
+}
+
+/* ════════════════════════════════
+   기간 결산 — 대시보드 📊 버튼
+   지정한 기간의 출석률·결석 횟수·최대 연속 출석(기간/학기 전체)을
+   자습반별로 모아 보여주고, 카톡 공지용 텍스트로 복사할 수 있게 함.
+════════════════════════════════ */
+
+// 학기 시작일(MM-DD)을 올해 또는 작년 기준 실제 날짜(YYYY-MM-DD)로 환산.
+// 1/2월처럼 "작년 9월에 시작한 2학기가 이어지는 중"인 경우까지 처리.
+function _currentSemesterStartDate() {
+  const cfg = _semesterConfig || _SEMESTER_DEFAULT;
+  const now = new Date();
+  const mmdd = _mmdd(now);
+  const year = now.getFullYear();
+  if (mmdd >= cfg.s1 && mmdd < cfg.s2) return `${year}-${cfg.s1}`;
+  if (mmdd >= cfg.s2) return `${year}-${cfg.s2}`;
+  return `${year - 1}-${cfg.s2}`;
+}
+
+function _mondayOf(date) {
+  const d = new Date(date);
+  const day = d.getDay(); // 0=일 ... 6=토
+  const diff = day === 0 ? -6 : 1 - day; // 월요일로 이동
+  d.setDate(d.getDate() + diff);
+  return d;
+}
+
+function openPeriodSummarySheet() {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'custom-sheet-backdrop';
+  backdrop.style.zIndex = '3100';
+  const sheet = document.createElement('div');
+  sheet.className = 'custom-sheet';
+  sheet.style.cssText = 'max-height:90dvh;display:flex;flex-direction:column;padding-bottom:20px;';
+
+  const today = _todayStr();
+  const weekStart = _fmtYMD(_mondayOf(new Date()));
+
+  sheet.innerHTML = `
+    <div class="custom-sheet-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:18px;line-height:1;">📊</span>
+        <div style="font-size:15px;font-weight:800;color:var(--ink);letter-spacing:-0.4px;">기간 결산</div>
+      </div>
+      <button id="_psClose" aria-label="닫기" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--sh-xs);">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;">
+      <input type="date" id="_psStart" class="cd-input" style="flex:1;min-width:0;" value="${weekStart}">
+      <span style="color:var(--ink-4);font-size:12px;flex-shrink:0;">~</span>
+      <input type="date" id="_psEnd" class="cd-input" style="flex:1;min-width:0;" value="${today}">
+    </div>
+    <div class="ssf-chips" style="margin-bottom:14px;">
+      <button class="ssf-chip" id="_psPresetWeek">이번 주</button>
+      <button class="ssf-chip" id="_psPresetMonth">이번 달</button>
+      <button class="ssf-chip" id="_psPresetSemester">학기 전체</button>
+    </div>
+    <div id="_psSummary" style="text-align:center;margin-bottom:14px;"></div>
+    <div id="_psList" style="overflow-y:auto;flex:1;">
+      ${Array.from({length:3}).map(() => `<div style="background:var(--surface);border-radius:var(--radius);box-shadow:var(--sh-md);padding:14px;margin-bottom:10px;"><div class="cd-skeleton" style="height:12px;width:30%;margin-bottom:10px;"></div><div class="cd-skeleton" style="height:38px;width:100%;"></div></div>`).join('')}
+    </div>
+    <button class="vh-add-btn is-green" id="_psCopy" style="margin:14px 0 0;flex-shrink:0;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+      텍스트 복사
+    </button>`;
+  backdrop.appendChild(sheet);
+  document.body.appendChild(backdrop);
+  requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+  sheet.querySelector('#_psClose').addEventListener('click', close);
+
+  let summary = [];
+  const startInput = sheet.querySelector('#_psStart');
+  const endInput   = sheet.querySelector('#_psEnd');
+  const listEl      = sheet.querySelector('#_psList');
+  const summaryEl   = sheet.querySelector('#_psSummary');
+
+  const runQuery = () => {
+    const start = startInput.value, end = endInput.value;
+    if (!start || !end) return;
+    listEl.innerHTML = Array.from({length:3}).map(() => `<div style="background:var(--surface);border-radius:var(--radius);box-shadow:var(--sh-md);padding:14px;margin-bottom:10px;"><div class="cd-skeleton" style="height:12px;width:30%;margin-bottom:10px;"></div><div class="cd-skeleton" style="height:38px;width:100%;"></div></div>`).join('');
+    summaryEl.innerHTML = `<div class="cd-skeleton" style="height:34px;width:200px;margin:0 auto;border-radius:var(--radius-pill);"></div>`;
+    API.getPeriodSummary(start, end)
+      .then(data => {
+        summary = data || [];
+        _renderPeriodSummary(summaryEl, listEl, summary, start, end);
+      })
+      .catch(() => { listEl.innerHTML = _emptyState('결산을 불러오지 못했습니다.'); summaryEl.innerHTML = ''; });
+  };
+
+  startInput.addEventListener('change', runQuery);
+  endInput.addEventListener('change', runQuery);
+  sheet.querySelector('#_psPresetWeek').addEventListener('click', () => {
+    startInput.value = weekStart; endInput.value = today; runQuery();
+  });
+  sheet.querySelector('#_psPresetMonth').addEventListener('click', () => {
+    const d = new Date(); d.setDate(1);
+    startInput.value = _fmtYMD(d); endInput.value = today; runQuery();
+  });
+  sheet.querySelector('#_psPresetSemester').addEventListener('click', () => {
+    startInput.value = _currentSemesterStartDate(); endInput.value = today; runQuery();
+  });
+  sheet.querySelector('#_psCopy').addEventListener('click', () => {
+    if (!summary.length) { showSuccessToast('복사할 내용이 없습니다'); return; }
+    const text = _buildPeriodSummaryText(summary, startInput.value, endInput.value);
+    navigator.clipboard.writeText(text).then(() => showSuccessToast('클립보드에 복사됐어요'));
+  });
+
+  runQuery();
+}
+
+function _renderPeriodSummary(summaryEl, listEl, summary, start, end) {
+  const active = summary.filter(s => s.attendRate !== null); // 기록이 있는 학생만 결산 대상으로 카운트
+  const avgRate = active.length
+    ? Math.round(active.reduce((sum, s) => sum + s.attendRate, 0) / active.length)
+    : null;
+  summaryEl.innerHTML = `<span style="display:inline-flex;align-items:center;gap:8px;background:var(--surface);box-shadow:var(--sh-md);border-radius:var(--radius-pill);padding:10px 22px;font-size:13px;font-weight:700;color:var(--ink-2);">
+    ${_fmtDateShort(start)} ~ ${_fmtDateShort(end)} · 평균 출석률 <span style="color:var(--blue);font-weight:800;">${avgRate===null?'—':avgRate+'%'}</span>
+  </span>`;
+
+  if (!active.length) {
+    listEl.innerHTML = _emptyState('해당 기간에 기록이 없습니다.');
+    return;
+  }
+  const html = GROUPS.map(g => {
+    const gs = active.filter(s => s.group === g);
+    if (!gs.length) return '';
+    const rows = gs.map(s => {
+      const rateColor = s.attendRate >= 90 ? 'var(--green)' : s.attendRate >= 70 ? 'var(--amber)' : 'var(--red)';
+      const rateDim   = s.attendRate >= 90 ? 'var(--green-dim)' : s.attendRate >= 70 ? 'var(--amber-dim)' : 'var(--red-dim)';
+      return `<div class="_ps-row" data-sid="${s.id}" style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--bg-deep);cursor:pointer;">
+        <div style="width:36px;height:36px;border-radius:var(--radius-sm);background:var(--blue-dim);color:var(--blue);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;">${s.ban}-${s.num}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:14px;font-weight:700;color:var(--ink);">${_esc(s.name)}</div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">
+            <span class="sch-dr-s" style="background:${rateDim};color:${rateColor};">출석률 ${s.attendRate}%</span>
+            <span class="sch-dr-s" style="background:var(--red-dim);color:var(--red);">결석 ${s.absentCount}회</span>
+            <span class="sch-dr-s" style="background:var(--green-dim);color:var(--green);">🔥 기간 ${s.periodMaxStreak}일</span>
+            <span class="sch-dr-s" style="background:var(--bg-deep);color:var(--ink-3);">🏆 학기 ${s.semesterMaxStreak}일</span>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+    return `<div class="roster-section-head"><span class="roster-section-title">${g}</span><span class="roster-section-count">${gs.length}명</span><div class="roster-section-line"></div></div>
+      <div style="background:var(--surface);border-radius:var(--radius);box-shadow:var(--sh-md);overflow:hidden;margin-bottom:16px;">${rows}</div>`;
+  }).join('');
+  listEl.innerHTML = html;
+  listEl.querySelectorAll('._ps-row').forEach(el => {
+    el.addEventListener('click', () => {
+      const s = active.find(x => x.id === el.dataset.sid);
+      if (s) _openStudentInsightSheet(s);
+    });
+  });
+}
+
+function _fmtDateShort(dateStr) {
+  const [, m, d] = dateStr.split('-');
+  return `${+m}/${+d}`;
+}
+
+// 반별로 묶어서 카톡 공지에 바로 붙여넣기 좋은 형태의 텍스트로 변환
+function _buildPeriodSummaryText(summary, start, end) {
+  const active = summary.filter(s => s.attendRate !== null);
+  let text = `📊 기간 결산 (${_fmtDateShort(start)}~${_fmtDateShort(end)})\n`;
+  GROUPS.forEach(g => {
+    const gs = active.filter(s => s.group === g);
+    if (!gs.length) return;
+    text += `\n[${g}]\n`;
+    gs.forEach(s => {
+      text += `· ${s.name} - 출석률 ${s.attendRate}% · 결석 ${s.absentCount}회 · 최대연속 ${s.periodMaxStreak}일\n`;
+    });
+  });
+  return text.trim();
 }
 
 /* ════════════════════════════════
