@@ -17,8 +17,9 @@ const VIOLATION_ACTIONS = ['경고', '벌금', '직접 입력'];
    n.0.0 대규모 업데이트 · 0.n.0 기능/디자인 개선 · 0.0.n 버그 수정
    최신순 — 새 배포 때마다 맨 위에 추가할 것
 ════════════════════════════════ */
-const APP_VERSION = '2.15.1';
+const APP_VERSION = '2.15.2';
 const CHANGELOG = [
+  { v:'2.15.2', d:'2026-08-19', t:'patch', title:'출석체크 스크롤 축소 애니메이션이 끊기던 문제 수정 (강제 리플로우 제거)' },
   { v:'2.15.1', d:'2026-08-19', t:'patch', title:'스크롤 시 세션 흰색 필(슬라이더)이 불안정하게 떨리던 버그 수정' },
   { v:'2.15.0', d:'2026-08-19', t:'minor', title:'출석체크 상단 필터 영역이 아이폰처럼 스크롤에 비례해 자연스럽게 축소되도록 개선' },
   { v:'2.14.0', d:'2026-08-19', t:'minor', title:'네트워크 요청 타임아웃 추가, 모바일 터치 시 hover 스타일 안 풀리던 문제 수정, 아이폰 안전영역 대응, 흐린 회색 텍스트 가독성 개선' },
@@ -539,6 +540,7 @@ window.addEventListener('popstate', (e) => {
 // COLLAPSE_DISTANCE(px)만큼 내리면 완전히 축소된 상태(--collapse:1)가 된다.
 const COLLAPSE_DISTANCE = 60;
 let _scrollTicking = false;
+let _lastCollapse = -1; // 직전에 실제로 적용한 --collapse 값 — 변화가 없으면 다시 쓰지 않음
 function _applyScrollCollapse() {
   // rAF와 setTimeout 둘 중 먼저 온 쪽이 실행하고 플래그를 내리는 방식(경쟁) —
   // 탭이 백그라운드로 가는 등 이유로 requestAnimationFrame이 지연/보류되면
@@ -550,14 +552,33 @@ function _applyScrollCollapse() {
   const fs = document.querySelector('.filter-section');
   if (!fs) return;
   const collapse = homeActive ? Math.min(1, Math.max(0, window.scrollY / COLLAPSE_DISTANCE)) : 0;
+  // 값이 눈에 안 띌 만큼(0.5% 미만)만 바뀌었으면 스타일 재계산을 또
+  // 일으키지 않고 건너뜀 — 관성 스크롤 막바지처럼 아주 미세한 스크롤
+  // 델타가 촘촘히 들어올 때 불필요한 레이아웃 재계산이 계속 발생해
+  // 프레임이 밀리는 걸 줄여준다.
+  if (Math.abs(collapse - _lastCollapse) < 0.005 && collapse !== 0 && collapse !== 1) return;
+  _lastCollapse = collapse;
   fs.style.setProperty('--collapse', collapse);
   fs.classList.toggle('scrolled', !!homeActive && window.scrollY > 24);
-  // 세션 탭 배경 슬라이더는 JS가 버튼 크기를 읽어 위치를 잡으므로,
-  // 탭 자체가 --collapse에 맞춰 계속 작아지는 동안 같이 갱신해줘야
-  // 슬라이더가 줄어든 버튼과 안 맞고 따로 노는 게 방지된다.
+  // 세션 탭 배경 슬라이더는 JS가 버튼 크기를 읽어 위치를 잡는데, 방금
+  // 위에서 --collapse를 바꿔놓은 직후 곧바로 offsetLeft/offsetWidth를
+  // 읽으면 브라우저가 그 변경을 강제로 즉시 레이아웃 계산(강제 동기
+  // 리플로우)해야 해서 스크롤이 매 프레임 끊겨 보이는 원인이었음(쓰기
+  // 후 바로 읽기 = layout thrashing). 다음 애니메이션 프레임으로 읽기를
+  // 미뤄서, 브라우저가 원래 자기 렌더링 파이프라인에서 계산해둔 값을
+  // 그냥 읽기만 하도록 한다 — 한 프레임 지연은 육안으로 안 느껴짐.
   if (homeActive) {
-    const activePill = document.querySelector('#sessionPillWrap .session-pill.active');
-    if (activePill) _movePillSlider(activePill, true);
+    // 여기서도 rAF 하나만 믿으면(탭 백그라운드 전환 등으로) 지연될 수
+    // 있으므로 setTimeout을 함께 걸어 둘 중 먼저 오는 쪽이 실행하게 한다.
+    let _ran = false;
+    const updateSlider = () => {
+      if (_ran) return;
+      _ran = true;
+      const activePill = document.querySelector('#sessionPillWrap .session-pill.active');
+      if (activePill) _movePillSlider(activePill, true);
+    };
+    requestAnimationFrame(updateSlider);
+    setTimeout(updateSlider, 32);
   }
 }
 window.addEventListener('scroll', () => {
