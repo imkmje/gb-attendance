@@ -208,8 +208,9 @@
 
   <!-- 명단 탭 -->
   <div id="view-roster" class="tab-view">
-    <div class="view-filter-bar" style="padding:10px 14px;">
-      <div class="roster-pill-wrap" id="rosterPillWrap" style="flex:1;"></div>
+    <div class="view-filter-bar" style="flex-direction:column;align-items:stretch;gap:8px;padding:10px 14px;">
+      <div class="roster-pill-wrap" id="rosterPillWrap"></div>
+      <input type="text" id="rosterSearchInput" class="cd-input" placeholder="학생 이름 검색" style="width:100%;box-sizing:border-box;" oninput="filterRosterByName(this.value)">
     </div>
     <div class="main-container" id="rosterContainer">
       <div class="text-center py-5" style="color:var(--ink-3);font-weight:600;">명단을 불러오는 중...</div>
@@ -218,9 +219,12 @@
 
   <!-- 통계 탭 -->
   <div id="view-stats" class="tab-view">
-    <div class="view-filter-bar">
-      <select id="filterStudyGroup" class="cd-select" onchange="filterStats()"></select>
-      <select id="filterClass"      class="cd-select" onchange="filterStats()"></select>
+    <div class="view-filter-bar" style="flex-direction:column;align-items:stretch;gap:8px;">
+      <div style="display:flex;gap:8px;">
+        <select id="filterStudyGroup" class="cd-select" style="flex:1;" onchange="filterStats()"></select>
+        <select id="filterClass"      class="cd-select" style="flex:1;" onchange="filterStats()"></select>
+      </div>
+      <input type="text" id="statsSearchInput" class="cd-input" placeholder="학생 이름 검색" style="width:100%;box-sizing:border-box;" oninput="filterStatsByName(this.value)">
     </div>
     <div class="container py-4">
       <div class="top3-card">
@@ -381,8 +385,8 @@
 
 
   <script src="js/config.js?v=20260720d"></script>
-  <script src="js/api.js?v=20260819r"></script>
-  <script src="js/app.js?v=20260819r"></script>
+  <script src="js/api.js?v=20260819s"></script>
+  <script src="js/app.js?v=20260819s"></script>
 
 </body>
 </html>

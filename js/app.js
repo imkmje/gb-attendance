@@ -17,8 +17,9 @@ const VIOLATION_ACTIONS = ['경고', '벌금', '직접 입력'];
    n.0.0 대규모 업데이트 · 0.n.0 기능/디자인 개선 · 0.0.n 버그 수정
    최신순 — 새 배포 때마다 맨 위에 추가할 것
 ════════════════════════════════ */
-const APP_VERSION = '2.17.1';
+const APP_VERSION = '2.18.0';
 const CHANGELOG = [
+  { v:'2.18.0', d:'2026-08-19', t:'minor', title:'명단·통계·기간결산 탭에 학생 이름 검색 추가, 기간결산 시작일>종료일 자동 보정, 학생 인사이트 "최근 결석 이력"을 날짜별로 병합(같은 날 여러 세션이어도 카드 하나)' },
   { v:'2.17.1', d:'2026-08-19', t:'patch', title:'기간 결산 버튼 아이콘을 확성기로 원복(텍스트 버튼 대신), 팝업 헤더의 색깔 이모지 제거 — 다른 시트들과 동일하게 텍스트만' },
   { v:'2.17.0', d:'2026-08-19', t:'minor', title:'기간 결산: 최대 연속 자습 하나로 통일, 아이콘을 텍스트 버튼으로 교체, 텍스트 복사에 누적/기간중 결석 분리 표시 + 포함 항목 체크박스 선택 추가' },
   { v:'2.16.1', d:'2026-08-19', t:'patch', title:'기간 결산 아이콘을 통계 탭과 겹치지 않는 확성기 아이콘으로 교체, 기본 조회 기간을 "이번 달"로 변경, 텍스트 복사 시 성과순 정렬+메달 표시' },
@@ -88,6 +89,7 @@ let _lockChipTimer = null;
 let _rosterData        = [];
 let _rosterLoaded      = false;
 let _rosterActivePill  = 0;
+let _rosterSearchQuery = '';
 let _ssRestored        = false;
 let _skipHistory       = false;
 let _violTarget        = null;
@@ -1450,9 +1452,15 @@ function _renderStatsSortChips() {
 
 function handleSort(col){ sortState.asc=(sortState.col===col)?!sortState.asc:true; sortState.col=col; filterStats(); }
 
+let _statsSearchQuery = '';
+function filterStatsByName(val) {
+  _statsSearchQuery = val.trim();
+  filterStats();
+}
+
 function filterStats(){
   const g=document.getElementById('filterStudyGroup').value, c=document.getElementById('filterClass').value;
-  let filtered=rawStatsData.filter(d=>(g==='전체'||d.group===g)&&(c==='전체'||d.ban.toString()===c.replace('반','')));
+  let filtered=rawStatsData.filter(d=>(g==='전체'||d.group===g)&&(c==='전체'||d.ban.toString()===c.replace('반',''))&&(!_statsSearchQuery||d.name.includes(_statsSearchQuery)));
   filtered = filtered.map(r => {
     const total = (r.attendCount || 0) + (r.absentCount || 0);
     const rate  = total > 0 ? Math.round((r.attendCount || 0) / total * 100) : null;
@@ -1497,7 +1505,7 @@ function _statRowHtml(s, showGroup) {
 function _renderStatsList(filtered, groupFilter) {
   const container = document.getElementById('statsListContainer');
   if (!container) return;
-  if (!filtered.length) { container.innerHTML = _emptyState('데이터가 없습니다.'); return; }
+  if (!filtered.length) { container.innerHTML = _emptyState(_statsSearchQuery ? '검색 결과가 없습니다.' : '데이터가 없습니다.'); return; }
 
   let html;
   if (groupFilter === '전체' && _statsFlatView) {
@@ -1753,14 +1761,20 @@ function selectRosterPill(idx) {
   _renderRosterCards();
 }
 
+function filterRosterByName(val) {
+  _rosterSearchQuery = val.trim();
+  _renderRosterCards();
+}
+
 function _renderRosterCards() {
   const container = document.getElementById('rosterContainer');
-  const filtered = _rosterActivePill === 0
+  let filtered = _rosterActivePill === 0
     ? _rosterData
     : _rosterData.filter(s => s.group === GROUPS[_rosterActivePill - 1]);
+  if (_rosterSearchQuery) filtered = filtered.filter(s => s.name.includes(_rosterSearchQuery));
 
   if (!filtered.length) {
-    container.innerHTML = _emptyState('명단이 없습니다.');
+    container.innerHTML = _emptyState(_rosterSearchQuery ? '검색 결과가 없습니다.' : '명단이 없습니다.');
     return;
   }
 
@@ -2133,10 +2147,17 @@ function _renderStudentInsightBody(body, ins) {
     : '';
 
   const ss = s => s.replace(' 자율학습','');
+  // 같은 날짜에 여러 세션(예: 일괄 적용으로 야간+심야)이 결석이어도 날짜
+  // 카드를 두 번 반복하지 않고, 그 날의 세션들을 태그로 모아 카드 하나로.
   const recentHtml = ins.recentAbsences.length
     ? ins.recentAbsences.map(a => {
-        const nc = a.noCount ? `<span style="font-size:10px;font-weight:700;color:var(--green);background:var(--green-dim);border-radius:var(--radius-pill);padding:1px 8px;margin-left:6px;">노카운트</span>` : '';
-        return `<div class="vh-item"><div class="vh-item-head"><div class="vh-type-dot" style="background:var(--amber);"></div><div class="vh-item-main"><div class="vh-item-type">${a.date}${nc}</div><div class="vh-item-date">${ss(a.session)}</div></div><span class="vh-item-action is-etc">${_esc(a.reason) || '사유 없음'}</span></div></div>`;
+        const tags = a.sessions.map(sess => {
+          const label = sess.reason ? `${ss(sess.session)} · ${_esc(sess.reason)}` : ss(sess.session);
+          const cls   = sess.noCount ? '' : 'is-etc';
+          const style = sess.noCount ? 'background:var(--green-dim);color:var(--green);' : '';
+          return `<span class="vh-item-action ${cls}" style="${style}">${label}${sess.noCount ? ' (노카운트)' : ''}</span>`;
+        }).join('');
+        return `<div class="vh-item"><div class="vh-item-head" style="align-items:flex-start;"><div class="vh-type-dot" style="background:var(--amber);"></div><div class="vh-item-main"><div class="vh-item-type">${a.date}</div><div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;">${tags}</div></div></div></div>`;
       }).join('')
     : _emptyState('결석 기록이 없습니다.');
 
@@ -2201,11 +2222,12 @@ function openPeriodSummarySheet() {
       <span style="color:var(--ink-4);font-size:12px;flex-shrink:0;">~</span>
       <input type="date" id="_psEnd" class="cd-input" style="flex:1;min-width:0;" value="${today}">
     </div>
-    <div class="ssf-chips" style="margin-bottom:14px;">
+    <div class="ssf-chips" style="margin-bottom:8px;">
       <button class="ssf-chip" id="_psPresetWeek">이번 주</button>
       <button class="ssf-chip on" id="_psPresetMonth">이번 달</button>
       <button class="ssf-chip" id="_psPresetSemester">학기 전체</button>
     </div>
+    <input type="text" id="_psSearch" class="cd-input" placeholder="학생 이름 검색" style="width:100%;box-sizing:border-box;margin-bottom:14px;">
     <div id="_psSummary" style="text-align:center;margin-bottom:14px;"></div>
     <div id="_psList" style="overflow-y:auto;flex:1;">
       ${Array.from({length:3}).map(() => `<div style="background:var(--surface);border-radius:var(--radius);box-shadow:var(--sh-md);padding:14px;margin-bottom:10px;"><div class="cd-skeleton" style="height:12px;width:30%;margin-bottom:10px;"></div><div class="cd-skeleton" style="height:38px;width:100%;"></div></div>`).join('')}
@@ -2228,23 +2250,39 @@ function openPeriodSummarySheet() {
   sheet.querySelector('#_psClose').addEventListener('click', close);
 
   let summary = [];
-  const startInput = sheet.querySelector('#_psStart');
-  const endInput   = sheet.querySelector('#_psEnd');
-  const listEl      = sheet.querySelector('#_psList');
-  const summaryEl   = sheet.querySelector('#_psSummary');
+  const startInput  = sheet.querySelector('#_psStart');
+  const endInput    = sheet.querySelector('#_psEnd');
+  const listEl       = sheet.querySelector('#_psList');
+  const summaryEl    = sheet.querySelector('#_psSummary');
+  const searchInput = sheet.querySelector('#_psSearch');
 
   const runQuery = () => {
-    const start = startInput.value, end = endInput.value;
+    let start = startInput.value, end = endInput.value;
     if (!start || !end) return;
+    // 시작일을 종료일보다 늦게 잡으면 필터에 걸리는 날짜가 하나도 없어서
+    // 조용히 빈 결과만 뜨고 왜 그런지 알 수 없었음 — 자동으로 바꿔주고 안내.
+    if (start > end) {
+      [start, end] = [end, start];
+      startInput.value = start; endInput.value = end;
+      showSuccessToast('시작일이 종료일보다 늦어 순서를 바꿨어요');
+    }
     listEl.innerHTML = Array.from({length:3}).map(() => `<div style="background:var(--surface);border-radius:var(--radius);box-shadow:var(--sh-md);padding:14px;margin-bottom:10px;"><div class="cd-skeleton" style="height:12px;width:30%;margin-bottom:10px;"></div><div class="cd-skeleton" style="height:38px;width:100%;"></div></div>`).join('');
     summaryEl.innerHTML = `<div class="cd-skeleton" style="height:34px;width:200px;margin:0 auto;border-radius:var(--radius-pill);"></div>`;
     API.getPeriodSummary(start, end)
       .then(data => {
         summary = data || [];
-        _renderPeriodSummary(summaryEl, listEl, summary, start, end);
+        _renderPeriodSummary(summaryEl, listEl, summary, start, end, searchInput.value.trim());
       })
       .catch(() => { listEl.innerHTML = _emptyState('결산을 불러오지 못했습니다.'); summaryEl.innerHTML = ''; });
   };
+
+  // 검색은 재조회 없이 이미 받아온 summary를 그 자리에서 다시 필터링만 함.
+  // 텍스트 복사는 검색과 무관하게 항상 전체를 대상으로 하도록 유지
+  // (검색 중인 걸 깜빡하고 복사하면 몇 명 빠진 채로 공지가 나갈 위험 방지).
+  searchInput.addEventListener('input', () => {
+    if (!summary.length) return;
+    _renderPeriodSummary(summaryEl, listEl, summary, startInput.value, endInput.value, searchInput.value.trim());
+  });
 
   const chips = {
     week:     sheet.querySelector('#_psPresetWeek'),
@@ -2277,21 +2315,24 @@ function openPeriodSummarySheet() {
   runQuery();
 }
 
-function _renderPeriodSummary(summaryEl, listEl, summary, start, end) {
+function _renderPeriodSummary(summaryEl, listEl, summary, start, end, searchQuery) {
   const active = summary.filter(s => s.attendRate !== null); // 기록이 있는 학생만 결산 대상으로 카운트
   const avgRate = active.length
     ? Math.round(active.reduce((sum, s) => sum + s.attendRate, 0) / active.length)
     : null;
+  // 평균 출석률 요약은 검색 여부와 무관하게 항상 전체 기준 유지 — 검색은
+  // 순수 "찾기" 보조 기능이라 결산 요약치 자체를 바꾸면 혼동될 수 있음.
   summaryEl.innerHTML = `<span style="display:inline-flex;align-items:center;gap:8px;background:var(--surface);box-shadow:var(--sh-md);border-radius:var(--radius-pill);padding:10px 22px;font-size:13px;font-weight:700;color:var(--ink-2);">
     ${_fmtDateShort(start)} ~ ${_fmtDateShort(end)} · 평균 출석률 <span style="color:var(--blue);font-weight:800;">${avgRate===null?'—':avgRate+'%'}</span>
   </span>`;
 
-  if (!active.length) {
-    listEl.innerHTML = _emptyState('해당 기간에 기록이 없습니다.');
+  const visible = searchQuery ? active.filter(s => s.name.includes(searchQuery)) : active;
+  if (!visible.length) {
+    listEl.innerHTML = _emptyState(searchQuery ? '검색 결과가 없습니다.' : '해당 기간에 기록이 없습니다.');
     return;
   }
   const html = GROUPS.map(g => {
-    const gs = active.filter(s => s.group === g);
+    const gs = visible.filter(s => s.group === g);
     if (!gs.length) return '';
     const rows = gs.map(s => {
       const rateColor = s.attendRate >= 90 ? 'var(--green)' : s.attendRate >= 70 ? 'var(--amber)' : 'var(--red)';

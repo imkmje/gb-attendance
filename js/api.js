@@ -963,11 +963,23 @@ const API = (() => {
       consecutivePresentStreak: _consecutivePresentStreak(records),
       violationCount: violations.length,
       fineTotal, finePaid, fineUnpaid: fineTotal - finePaid,
-      recentAbsences: [...absentRecs]
-        .sort((a, b) => b.record_date.localeCompare(a.record_date))
-        .slice(0, 10)
-        .map(r => ({ date: r.record_date, session: r.session, reason: r.reason, noCount: r.no_count })),
+      recentAbsences: _groupRecentAbsences(absentRecs, 10),
     };
+  }
+
+  // 최근 결석 이력을 날짜별로 묶는다 — 일괄 적용 등으로 하루에 야간·심야가
+  // 둘 다 결석 처리돼도 같은 날짜 카드가 두 번 나오지 않고, 그 날의
+  // 세션들을 태그로 모아 한 카드에 보여준다. limit은 세션 수가 아니라
+  // "표시할 날짜 수" 기준.
+  function _groupRecentAbsences(absentRecs, limit) {
+    const byDate = {};
+    for (const r of absentRecs) {
+      (byDate[r.record_date] ??= []).push({ session: r.session, reason: r.reason, noCount: r.no_count });
+    }
+    return Object.entries(byDate)
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .slice(0, limit)
+      .map(([date, sessions]) => ({ date, sessions }));
   }
 
   /**
