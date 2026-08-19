@@ -17,8 +17,9 @@ const VIOLATION_ACTIONS = ['경고', '벌금', '직접 입력'];
    n.0.0 대규모 업데이트 · 0.n.0 기능/디자인 개선 · 0.0.n 버그 수정
    최신순 — 새 배포 때마다 맨 위에 추가할 것
 ════════════════════════════════ */
-const APP_VERSION = '2.18.0';
+const APP_VERSION = '2.18.1';
 const CHANGELOG = [
+  { v:'2.18.1', d:'2026-08-19', t:'patch', title:'기간 결산 텍스트 복사 항목에 "누적 자습 시간" 추가' },
   { v:'2.18.0', d:'2026-08-19', t:'minor', title:'명단·통계·기간결산 탭에 학생 이름 검색 추가, 기간결산 시작일>종료일 자동 보정, 학생 인사이트 "최근 결석 이력"을 날짜별로 병합(같은 날 여러 세션이어도 카드 하나)' },
   { v:'2.17.1', d:'2026-08-19', t:'patch', title:'기간 결산 버튼 아이콘을 확성기로 원복(텍스트 버튼 대신), 팝업 헤더의 색깔 이모지 제거 — 다른 시트들과 동일하게 텍스트만' },
   { v:'2.17.0', d:'2026-08-19', t:'minor', title:'기간 결산: 최대 연속 자습 하나로 통일, 아이콘을 텍스트 버튼으로 교체, 텍스트 복사에 누적/기간중 결석 분리 표시 + 포함 항목 체크박스 선택 추가' },
@@ -2370,10 +2371,11 @@ function _fmtDateShort(dateStr) {
 // 항목들. openPeriodSummarySheet의 체크박스 목록과 _buildPeriodSummaryText
 // 둘 다 이 정의 하나를 같이 참조한다.
 const PERIOD_SUMMARY_FIELDS = [
-  { key:'rate',   label:'출석률',        get: s => `출석률 ${s.attendRate}%` },
-  { key:'total',  label:'누적 결석',      get: s => `누적결석 ${s.totalAbsentCount}회` },
-  { key:'period', label:'기간 중 결석',   get: s => `기간중결석 ${s.absentCount}회` },
-  { key:'streak', label:'최대 연속 자습', get: s => `최대 연속 자습 ${s.periodMaxStreak}일` },
+  { key:'rate',   label:'출석률',          get: s => `출석률 ${s.attendRate}%` },
+  { key:'hours',  label:'누적 자습 시간',  get: s => `누적 자습 시간 ${s.totalStudyHours.toFixed(1)}시간` },
+  { key:'total',  label:'누적 결석',       get: s => `누적결석 ${s.totalAbsentCount}회` },
+  { key:'period', label:'기간 중 결석',    get: s => `기간중결석 ${s.absentCount}회` },
+  { key:'streak', label:'최대 연속 자습',  get: s => `최대 연속 자습 ${s.periodMaxStreak}일` },
 ];
 
 // 반별로 묶어서 카톡 공지에 바로 붙여넣기 좋은 형태의 텍스트로 변환.

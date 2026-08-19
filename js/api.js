@@ -131,6 +131,21 @@ const API = (() => {
     }
   }
 
+  // 누적 자습 시간 — 통계 탭(calculateStats)과 기간 결산이 동일한 계산을
+  // 공유. 출석한 세션의 가중치(SESSION_WEIGHTS)에서 조퇴·지각 분(分)을
+  // 시간으로 환산해 뺀다.
+  function _calcStudyHours(records) {
+    let total = 0;
+    for (const r of records) {
+      if (r.status === '출석') {
+        const weight    = SESSION_WEIGHTS[r.session] ?? 0;
+        const deduction = ((r.early_leave_mins ?? 0) + (r.late_mins ?? 0)) / 60;
+        total += Math.max(0, weight - deduction);
+      }
+    }
+    return total;
+  }
+
   function _calcAbsentCounts(records) {
     let count = 0;
     _forEachDayRepresentative(records, rec => { if (rec.status === '결석' && !rec.no_count) count++; });
@@ -993,7 +1008,7 @@ const API = (() => {
   async function getPeriodSummary(startDate, endDate) {
     const [students, attendance] = await Promise.all([
       _get('students?select=id,class_num,student_num,name,study_room&order=study_room,class_num,student_num'),
-      _get('attendance?select=student_id,session,status,record_date,no_count'),
+      _get('attendance?select=student_id,session,status,record_date,no_count,early_leave_mins,late_mins'),
     ]);
     const attByStudent = {};
     for (const a of attendance) (attByStudent[a.student_id] ??= []).push(a);
@@ -1016,6 +1031,7 @@ const API = (() => {
         attendRate,
         absentCount:       countedAbsent,             // 기간 중 결석
         totalAbsentCount:  _calcAbsentCounts(allRecs), // 누적(전체) 결석
+        totalStudyHours:   _calcStudyHours(allRecs),   // 누적(전체) 자습 시간 — 통계 탭과 동일한 정의
         periodMaxStreak:   _maxPresentStreak(periodRecs),
       };
     });
