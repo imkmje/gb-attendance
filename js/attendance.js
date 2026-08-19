@@ -834,7 +834,7 @@ function viewAllResults() {
   // 순수 "-" 반복 줄은 마크다운을 지원하는 붙여넣기 대상에서, 바로 위 줄을
   // 제목(Setext heading)으로 오인하거나 구분선(hr)으로 렌더링해버리는
   // 경우가 있어 — 마크다운에 없는 박스 그리기 문자(─)로 바꿔 피한다.
-  report += '────────────────────────────────\n';
+  report += '────────────────\n';
   if (!absentees.length) {
     report += '전원 출석하였습니다.\n';
   } else {
@@ -847,7 +847,7 @@ function viewAllResults() {
       report += `· ${s.ban}반 ${s.num}번 ${s.name} [결석]${reasonSuffix}\n`;
     });
   }
-  report += '────────────────────────────────';
+  report += '────────────────';
 
   _openResultSheet(report, absentees, date, opt.text, currentStudents.length);
 }

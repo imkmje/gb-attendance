@@ -498,7 +498,7 @@ function _renderAttEditor(student, records) {
   });
 }
 
-// ── 2. 자습 세션 변경 ──────────────────────────────────
+// ── 2. 자습 세션 변경 ──────────────────
 function _teacherEditSchedule() {
   showLoading('학생 목록 불러오는 중...');
   API.getAllMemberList()
@@ -727,7 +727,7 @@ function _renderHolidayEditorSheet() {
   _renderHolidayList(sheet);
 }
 
-// ── 3. 출석 기록 초기화 ────────────────────────────────
+// ── 3. 출석 기록 초기화 ────────────────
 function _teacherResetAttendance() {
   const today = _todayStr();
   const backdrop = document.createElement('div');
@@ -787,7 +787,7 @@ function _teacherResetAttendance() {
   });
 }
 
-// ── 4. 학생 추가 ──────────────────────────────────────
+// ── 4. 학생 추가 ──────────────────────
 function _teacherAddStudent() {
   const backdrop = document.createElement('div');
   backdrop.className = 'custom-sheet-backdrop';
@@ -928,7 +928,7 @@ async function _teacherDeleteStudent(student) {
   } catch { Swal.fire('오류', '삭제하지 못했습니다.', 'error'); }
 }
 
-// ── 6. 학생 일괄 등록 ──────────────────────────────────
+// ── 6. 학생 일괄 등록 ──────────────────
 function _downloadStudentTemplate() {
   const HDR = ['반','번호','이름','자습반','월오후','월야간','월심야','화오후','화야간','화심야','수오후','수야간','수심야','목오후','목야간','목심야','금오후','금야간','금심야','토오전','토오후'];
   const ex = [
@@ -1147,7 +1147,7 @@ function _teacherExportData() {
   });
 }
 
-// ── 7. 전체 벌금 현황 ─────────────────────────────────
+// ── 7. 전체 벌금 현황 ─────────────────
 function _teacherViewFines() {
   showLoading('벌금 현황 불러오는 중...');
   API.getAllViolationsWithStudents()
@@ -1170,7 +1170,7 @@ function _buildFineReportText(visible, filterState) {
   report += `▪ 총 부과: ${fmt(total)} · 납부: ${fmt(paid)} · 미납: ${fmt(unpaid)}\n`;
   // attendance.js의 viewAllResults와 동일한 이유로 "-" 반복 대신 박스 그리기
   // 문자(─)를 쓴다 — 마크다운 지원 붙여넣기 대상에서 구분선/제목으로 오인되는 문제 방지.
-  report += '────────────────────────────────\n';
+  report += '────────────────\n';
 
   const byGroup = {};
   for (const v of visible) (byGroup[v.student.group || '기타'] ??= []).push(v);
@@ -1184,7 +1184,7 @@ function _buildFineReportText(visible, filterState) {
       report += `· ${v.student.ban}반 ${v.student.num}번 ${v.student.name} · ${v.violType}${v.detail ? `(${v.detail})` : ''} · ${fmt(fine)} [${v.paid ? '납부' : '미납'}]\n`;
     });
   }
-  report += '────────────────────────────────';
+  report += '────────────────';
   return report;
 }
 

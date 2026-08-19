@@ -7,7 +7,7 @@
 
 const API = (() => {
 
-  // ─── 내부 fetch 헬퍼 ──────────────────────────────────────
+  // ─── 내부 fetch 헬퍼 ──────────────────────
   // 요청이 응답 없이 무한 대기하는 것을 막기 위한 타임아웃(AbortController).
   // 와이파이가 끊기거나 응답이 멈추면 로딩 스피너가 영원히 도는 문제가 있었음 —
   // 타임아웃 시 사용자가 이해할 수 있는 메시지로 잘라서 던진다.
@@ -52,7 +52,7 @@ const API = (() => {
   const _patch = (p, b) => _req('PATCH', p, b, { Prefer: 'return=minimal' });
   const _del  = p       => _req('DELETE', p, null, { Prefer: 'return=minimal' });
 
-  // ─── 세션 관련 상수 ───────────────────────────────────────
+  // ─── 세션 관련 상수 ───────────────────────
   // GAS colIdx → schedule JSON 키·배열 인덱스 매핑
   // 시트1 컬럼 4~20 (1-indexed) = schedule 배열 인덱스 0~16
   // 배열 레이아웃: [월오,월야,월심, 화오,화야,화심, 수오,수야,수심, 목오,목야,목심, 금오,금야,금심, 토오,토오후]
@@ -167,7 +167,7 @@ const API = (() => {
     return count;
   }
 
-  // ─── 공개 API ─────────────────────────────────────────────
+  // ─── 공개 API ─────────────────────────────
 
   /**
    * 자습반 목록
@@ -517,12 +517,12 @@ const API = (() => {
     let report = `[${groupName} 자율학습 현황]\n`;
     report += `▪ 일시: ${date} (${sessionName.replace(' 자율학습','')})\n`;
     if (checkers.length) report += `▪ 확인자: ${checkers.join(', ')}\n`;
-    report += '────────────────────────────────\n';
+    report += '────────────────\n';
     const absentees = studentList
       .filter(s => s.status && s.status !== '출석')
       .map(s => `· ${s.ban}반 ${s.num}번 ${s.name} [${s.status}]${s.reason ? ` (${s.reason})` : ''}`);
     report += absentees.length ? absentees.join('\n') + '\n' : '전원 출석하였습니다.\n';
-    report += '────────────────────────────────';
+    report += '────────────────';
     return report;
   }
 
