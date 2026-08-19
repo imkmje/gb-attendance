@@ -17,8 +17,10 @@ const VIOLATION_ACTIONS = ['경고', '벌금', '직접 입력'];
    n.0.0 대규모 업데이트 · 0.n.0 기능/디자인 개선 · 0.0.n 버그 수정
    최신순 — 새 배포 때마다 맨 위에 추가할 것
 ════════════════════════════════ */
-const APP_VERSION = '2.12.1';
+const APP_VERSION = '2.13.0';
 const CHANGELOG = [
+  { v:'2.13.0', d:'2026-08-19', t:'minor', title:'개발자 메뉴에 학기 설정(1학기/2학기 시작일) 추가 — 통계 탭 학기 표시를 직접 조정 가능' },
+  { v:'2.12.2', d:'2026-08-19', t:'patch', title:'"결과보기" 창 제목 위 아이콘 위치가 어색해 제거 (다른 시트와 통일)' },
   { v:'2.12.1', d:'2026-08-19', t:'patch', title:'학생 이름·결석 사유 등 자유 입력 텍스트가 이스케이프 없이 표시되던 부분 보안 강화(저장형 XSS 방지)' },
   { v:'2.12.0', d:'2026-08-19', t:'minor', title:'"결과보기" 창을 부트스트랩 모달 → 커스텀 시트로 전환하고 불필요해진 부트스트랩 JS 제거, 통계 학기 라벨 자동 계산' },
   { v:'2.11.1', d:'2026-08-19', t:'patch', title:'교사 비밀번호 상수화, GROUPS 중복 정의 정리' },
@@ -135,12 +137,19 @@ function _fmtYMD(d) {
 }
 function _todayStr() { return _fmtYMD(new Date()); }
 
-// 통계 탭 Top3 카드의 "1학년 1학기" 라벨 — 날짜가 지나도 안 틀리도록 월 기준 자동 계산
-// (일반적인 국내 고교 학사일정 기준: 3~8월=1학기, 9~2월=2학기. 학교마다 다르면
-//  나중에 settings 테이블에 override 값을 추가해 여기서 우선 사용하도록 확장 가능)
+// 통계 탭 Top3 카드의 "1학년 N학기" 라벨 — 개발자 메뉴에서 설정한 학기 시작일
+// (매년 반복되는 MM-DD, 예: '03-01'/'08-18') 기준으로 자동 전환된다.
+// 설정 전 기본값은 학교에서 알려준 실제 2학기 시작일(8/18)로 맞춰둠.
+let _semesterConfig = null; // { s1:'MM-DD', s2:'MM-DD' } — window.onload에서 서버 값 로드
+const _SEMESTER_DEFAULT = { s1: '03-01', s2: '08-18' };
+
+function _mmdd(d) { return `${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+
 function _currentSemesterLabel() {
-  const m = new Date().getMonth() + 1;
-  const semester = (m >= 3 && m <= 8) ? 1 : 2;
+  const cfg = _semesterConfig || _SEMESTER_DEFAULT;
+  const today = _mmdd(new Date());
+  // 1학기 구간[s1, s2) 안이면 1학기, 그 외(연도를 넘어가는 s2~12/31, 1/1~s1 포함)는 2학기
+  const semester = (today >= cfg.s1 && today < cfg.s2) ? 1 : 2;
   return `1학년 ${semester}학기`;
 }
 function _applySemesterLabel() {
@@ -1253,14 +1262,9 @@ function _openResultSheet(reportText, absentees, date, session, total) {
     <div class="vh-header">
       <div class="vh-handle"></div>
       <div class="vh-title-row">
-        <div class="vh-student-info" style="display:flex;align-items:center;gap:12px;">
-          <div style="width:36px;height:36px;border-radius:var(--radius-sm);background:var(--blue-dim);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>
-          </div>
-          <div>
-            <div class="vh-name">전체 결과</div>
-            <div class="vh-meta">${dl} · <span style="color:var(--blue);font-weight:700;">${sessShort}</span></div>
-          </div>
+        <div class="vh-student-info">
+          <div class="vh-name">전체 결과</div>
+          <div class="vh-meta">${dl} · <span style="color:var(--blue);font-weight:700;">${sessShort}</span></div>
         </div>
         <button class="vh-close-btn" id="_rsClose" aria-label="닫기">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -4105,6 +4109,20 @@ function _renderDevMenuSheet() {
 
     <div id="_holList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:24px;"></div>
 
+    <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;">🏫 학기 설정</div>
+    <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px;box-shadow:var(--sh-pressed);margin-bottom:24px;">
+      <div style="font-size:11px;color:var(--ink-3);margin-bottom:10px;line-height:1.5;">통계 탭 "1학기/2학기" 표시가 이 월·일을 기준으로 자동 전환돼요. (연도는 무시하고 매년 반복 적용)</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+        <label style="font-size:12px;font-weight:700;color:var(--ink-2);width:76px;flex-shrink:0;">1학기 시작</label>
+        <input type="date" id="_semS1Input" class="cd-input" style="flex:1;">
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
+        <label style="font-size:12px;font-weight:700;color:var(--ink-2);width:76px;flex-shrink:0;">2학기 시작</label>
+        <input type="date" id="_semS2Input" class="cd-input" style="flex:1;">
+      </div>
+      <button onclick="_saveSemesterConfig()" style="width:100%;padding:8px 16px;border-radius:var(--radius-pill);border:none;background:var(--blue);color:#fff;font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;box-shadow:var(--sh-blue);">저장</button>
+    </div>
+
     <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;">🔐 교사 메뉴 보안</div>
     <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px 14px;box-shadow:var(--sh-pressed);margin-bottom:24px;">
       <div style="display:flex;align-items:center;gap:10px;">
@@ -4166,6 +4184,9 @@ function _renderDevMenuSheet() {
 
   sheet.querySelector('#_holDateInput').value = _todayStr();
   sheet.querySelector('#_resetDateInput').value = _todayStr();
+  const semCfg = _semesterConfig || _SEMESTER_DEFAULT;
+  sheet.querySelector('#_semS1Input').value = '2000-' + semCfg.s1;
+  sheet.querySelector('#_semS2Input').value = '2000-' + semCfg.s2;
   _renderHolidayList(sheet);
   _renderReasonList(sheet);
   _renderViolationTypeList(sheet);
@@ -4173,6 +4194,22 @@ function _renderDevMenuSheet() {
   if (pwBtn) _applyTeacherPwBtn(pwBtn);
   const actLogBtn = sheet.querySelector('#_devActLogToggle');
   if (actLogBtn) _applyActivityLogBtn(actLogBtn);
+}
+
+async function _saveSemesterConfig() {
+  const s1 = document.getElementById('_semS1Input')?.value?.slice(5); // 'YYYY-MM-DD' → 'MM-DD'
+  const s2 = document.getElementById('_semS2Input')?.value?.slice(5);
+  if (!s1 || !s2) { showSuccessToast('날짜를 입력해 주세요'); return; }
+  if (s1 >= s2) { Swal.fire('오류', '1학기 시작일이 2학기 시작일보다 빨라야 합니다.', 'error'); return; }
+  const cfg = { s1, s2 };
+  try {
+    await API.saveSemesterConfig(cfg);
+    _semesterConfig = cfg;
+    _applySemesterLabel();
+    showSuccessToast('학기 설정 저장됨', `1학기 ${s1} · 2학기 ${s2}`);
+  } catch (e) {
+    Swal.fire('오류', e?.message || '저장하지 못했습니다.', 'error');
+  }
 }
 
 function _applyTeacherPwBtn(btn) {
@@ -4477,6 +4514,9 @@ window.onload = () => {
           .catch(() => {});
         API.getViolationTypes()
           .then(types => { _violationTypes = [...types, '직접 입력']; })
+          .catch(() => {});
+        API.getSemesterConfig()
+          .then(cfg => { if (cfg) { _semesterConfig = cfg; _applySemesterLabel(); } })
           .catch(() => {});
         API.getActivityLogEnabled()
           .then(on => { _activityLogOn = on; _applyActivityBellVisibility(); checkActivityBadge(); })

@@ -746,6 +746,23 @@ const API = (() => {
   }
 
   /**
+   * 학기 시작일 설정 — 통계 탭 "N학년 N학기" 라벨을 자동 전환하는 기준.
+   * { s1:'MM-DD', s2:'MM-DD' } (연도 무관, 매년 반복 적용). 미설정 시 null.
+   */
+  async function getSemesterConfig() {
+    try {
+      const rows = await _get('settings?key=eq.semester_config&select=value');
+      if (rows.length && rows[0].value) return rows[0].value;
+    } catch (_) {}
+    return null;
+  }
+
+  async function saveSemesterConfig(cfg) {
+    await _req('POST', 'settings', { key: 'semester_config', value: cfg },
+      { Prefer: 'resolution=merge-duplicates,return=minimal' });
+  }
+
+  /**
    * 삭제 전 확인용 — 학생 한 명의 출석/위반 기록 건수
    */
   async function getStudentRecordCounts(studentId) {
@@ -986,6 +1003,8 @@ const API = (() => {
     getStudentInsight,
     getViolationTypes,
     saveViolationTypes,
+    getSemesterConfig,
+    saveSemesterConfig,
     getStudentRecordCounts,
     getAttendanceCountByDate,
   };
