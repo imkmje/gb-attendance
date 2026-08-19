@@ -1140,5 +1140,6 @@ const API = (() => {
     saveSemesterConfig,
     getStudentRecordCounts,
     getAttendanceCountByDate,
+    calcAbsentCounts: _calcAbsentCounts,
   };
 })();

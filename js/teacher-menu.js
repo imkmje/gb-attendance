@@ -359,7 +359,11 @@ function _renderAttEditor(student, records) {
     </div>`;
   };
 
-  const absentCnt = records.filter(r => r.status==='결석'&&!r.noCount).length;
+  // 통계 탭·학생 인사이트·기간 결산과 동일하게 "하루 대표 세션" 기준으로 센다 —
+  // 일괄 적용 등으로 하루에 야간+심야 두 세션이 다 결석이어도 1회로만 잡혀야
+  // 하는데, 예전엔 세션 레코드 개수를 그대로 세서 같은 날인데도 2회로 잡혔었음.
+  const _toRawRecs = recs => recs.map(r => ({ record_date: r.date, session: r.session, status: r.status, no_count: r.noCount }));
+  const absentCnt = API.calcAbsentCounts(_toRawRecs(records));
 
   sheet.innerHTML = `
     <div class="custom-sheet-handle"></div>
@@ -404,7 +408,7 @@ function _renderAttEditor(student, records) {
     const totalEl = sheet.querySelector('#_aeTotalCnt');
     const absentEl = sheet.querySelector('#_aeAbsentCnt');
     if (totalEl) totalEl.textContent = `${records.length}회`;
-    if (absentEl) absentEl.textContent = `${records.filter(r => r.status === '결석' && !r.noCount).length}회`;
+    if (absentEl) absentEl.textContent = `${API.calcAbsentCounts(_toRawRecs(records))}회`;
   };
 
   const bindReasonInput = (inp, rid, rec) => {
