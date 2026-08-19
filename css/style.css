@@ -278,6 +278,11 @@ html[data-theme="dark"] .student-card.absent { background:#221d1c; box-shadow:va
 .clear-input-btn { position:absolute; right:8px; top:50%; transform:translateY(-50%); cursor:pointer; color:var(--ink-4); font-size:16px; z-index:5; line-height:1; }
 .student-card > * { position:relative; z-index:3; }
 
+/* 카드를 꾹 누르면 규정 위반을 등록할 수 있다는 걸 알려주는 상시 힌트.
+   토스트 한 번으로만 안내되던 걸 놓치면 그 기능 자체를 모르고 지나가기
+   쉬워서, 아주 옅은 점 3개로 구석에 계속 남겨둔다. */
+.s-longpress-hint { position:absolute; bottom:8px; right:10px; font-size:12px; line-height:1; letter-spacing:1px; color:var(--ink-4); opacity:0.4; pointer-events:none; z-index:3; }
+
 .student-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; align-items:start; }
 @media (min-width:576px) { .student-grid { grid-template-columns:repeat(3,1fr); } }
 @media (min-width:768px) { .student-grid { grid-template-columns:repeat(4,1fr); } }
@@ -606,19 +611,29 @@ html[data-theme="dark"] .viol-select { background-image:url("data:image/svg+xml,
 .roster-fab-tip { position:absolute; right:62px; top:50%; transform:translateY(-50%); background:var(--ink); color:var(--surface); font-size:11px; font-weight:700; padding:5px 10px; border-radius:var(--radius-sm); white-space:nowrap; pointer-events:none; opacity:0; transition:opacity var(--dur-fast) var(--ease); }
 @media (hover:hover) { .roster-fab:hover .roster-fab-tip { opacity:1; } }
 
-/* ── 조기 퇴실 ──────────────────────────── */
+/* ── 조기 퇴실 / 지각 ──────────────────────────── */
+/* 값이 이미 있는 학생만 기본으로 펼쳐두고, 나머지는 el-toggle-chip을
+   눌러야만 펼쳐지도록(.chips-open) — 대부분의 카드에서 안 쓰는 칩 2개가
+   상시 노출돼 카드가 불필요하게 커지고 특히 폰 2열 그리드에서 오탭
+   위험이 커지는 문제를 완화한다. */
 .early-leave-drop { display:grid; grid-template-rows:0fr; opacity:0; transition:grid-template-rows 300ms cubic-bezier(0.4,0,0.2,1),opacity 180ms var(--ease); }
 .early-leave-overflow { overflow:hidden; }
-.student-card.present .early-leave-drop { grid-template-rows:1fr; opacity:1; transition:grid-template-rows 420ms var(--ease),opacity 240ms var(--ease) 60ms; }
+.student-card.present.chips-open .early-leave-drop { grid-template-rows:1fr; opacity:1; transition:grid-template-rows 420ms var(--ease),opacity 240ms var(--ease) 60ms; }
 .early-leave-inner { padding-top:10px; margin-top:10px; border-top:1px dashed rgba(114,184,150,0.28); display:flex; flex-direction:column; gap:8px; }
-.el-chip { display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:var(--radius-pill);border:none;cursor:pointer;font-family:var(--font);font-size:11px;font-weight:700;background:var(--bg-deep);color:var(--ink-3);transition:all var(--dur-fast) var(--ease);-webkit-tap-highlight-color:transparent; }
+.student-card.absent .el-toggle-row { display:none; }
+.el-toggle-row { margin-top:8px; }
+.el-toggle-chip { font-size:11px; white-space:nowrap; } /* 좁은 2열 카드에서도 한 줄로 들어가게 */
+.el-toggle-chip .el-toggle-caret { transition:transform var(--dur-fast) var(--ease); flex-shrink:0; }
+.student-card.chips-open .el-toggle-chip .el-toggle-caret { transform:rotate(180deg); }
+/* 폰에서 엄지로 누르기엔 작았던 칩 탭 영역을 넉넉하게 — 세로 약 26px → 32px대로 */
+.el-chip { display:inline-flex;align-items:center;gap:5px;padding:8px 14px;border-radius:var(--radius-pill);border:none;cursor:pointer;font-family:var(--font);font-size:12px;font-weight:700;background:var(--bg-deep);color:var(--ink-3);transition:all var(--dur-fast) var(--ease);-webkit-tap-highlight-color:transparent; }
 .el-chip.active { background:var(--amber-dim);color:var(--amber); }
 .el-panel { display:grid;grid-template-rows:0fr;opacity:0;transition:grid-template-rows 280ms var(--ease),opacity 180ms var(--ease); }
 .el-panel.show { grid-template-rows:1fr;opacity:1; }
 .el-panel-overflow { overflow:hidden; }
 .el-panel-inner { padding-top:8px;display:flex;flex-direction:column;gap:7px; }
 .el-presets { display:flex;gap:5px; }
-.el-preset { flex:1;padding:7px 4px;border-radius:var(--radius-sm);border:none;cursor:pointer;font-family:var(--font);font-size:12px;font-weight:700;background:var(--bg-deep);color:var(--ink-3);transition:all var(--dur-fast) var(--ease);-webkit-tap-highlight-color:transparent; }
+.el-preset { flex:1;padding:9px 4px;border-radius:var(--radius-sm);border:none;cursor:pointer;font-family:var(--font);font-size:12px;font-weight:700;background:var(--bg-deep);color:var(--ink-3);transition:all var(--dur-fast) var(--ease);-webkit-tap-highlight-color:transparent; }
 .el-preset.active { background:var(--amber-dim);color:var(--amber); }
 .el-input-row { display:flex;align-items:center;gap:8px; }
 .el-mins-input { flex:1;padding:7px 12px;border-radius:var(--radius-pill);border:1.5px solid var(--bg-deep);background:var(--bg-deep);font-family:var(--font);font-size:13px;font-weight:700;color:var(--ink-2);outline:none;-moz-appearance:textfield; }

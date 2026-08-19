@@ -17,9 +17,9 @@ const VIOLATION_ACTIONS = ['경고', '벌금', '직접 입력'];
    n.0.0 대규모 업데이트 · 0.n.0 기능/디자인 개선 · 0.0.n 버그 수정
    최신순 — 새 배포 때마다 맨 위에 추가할 것
 ════════════════════════════════ */
-const APP_VERSION = '2.27.0';
+const APP_VERSION = '2.28.0';
 const CHANGELOG = [
-  { v:'2.27.0', d:'2026-08-19', t:'minor', title:'디자인 토큰 일관성 정리 — 교사 메뉴 아이콘·시간표 편집 셀 색을 팔레트 토큰으로 통일, 죽은 색상 폴백 제거, 삭제 확인창이 실제로 빨간 버튼으로 뜨도록 수정(예전엔 CSS 우선순위 때문에 계속 파란 버튼으로만 보였음)' },
+  { v:'2.28.0', d:'2026-08-19', t:'minor', title:'출석체크 학생 카드 개편 — 조퇴·지각 칩은 값이 있을 때만 기본 노출, 나머지는 요약 칩 한 번 탭해서 펼치기(카드 밀도 개선, 폰 오탭 감소), 칩 탭 영역 확대, 카드 꾹 누르기(위반 등록) 힌트 점 추가' },
   { v:'2.26.2', d:'2026-08-19', t:'patch', title:'전체 바텀시트(약 20곳) 닫힘 애니메이션이 실제 CSS 전환(400ms)보다 50ms 일찍 DOM에서 제거돼 끝에서 살짝 끊겨 보이던 문제 일괄 수정' },
   { v:'2.26.1', d:'2026-08-19', t:'patch', title:'대시보드 점등 표시를 결석자만/전체 명단 필터 바로 아래 붙여 하나의 카드처럼 통합(양각 음영 적용), 학생 카드 클릭 시 스켈레톤이 너무 짧게 번쩍이던 문제 수정' },
   { v:'2.26.0', d:'2026-08-19', t:'minor', title:'학생 없는 자습반은 명단·규정위반 등록·대시보드 점등에서 자동으로 숨김(학생 추가/자습반 변경 화면은 그대로), 출석체크 미완료 알림은 일단 꺼둠' },
@@ -896,7 +896,9 @@ function renderStudents() {
     const elRec=s.isRecurring||false;
     const elPanelShow=elm>0;
     const ltm=s.lateMins||0;
-    return `<div class="student-card ${isAbsent?'absent':'present'}"
+    const chipsSet=elm>0||ltm>0; // 조퇴·지각 중 하나라도 값이 있으면 기본으로 펼쳐둠
+    const toggleLbl=elm>0?`${elm}분 조퇴`:(ltm>0?`${ltm}분 지각`:'조퇴·지각');
+    return `<div class="student-card ${isAbsent?'absent':'present'}${chipsSet?' chips-open':''}"
            onpointerdown="startPress(${idx},event)" onpointerup="endPress(${idx},event)"
            onpointermove="handlePointerMove(event)" onpointercancel="cancelPress()">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
@@ -906,6 +908,7 @@ function renderStudents() {
           </div>
           <span class="s-badge ${isAbsent?'absent':'present'}">${s.status}</span>
         </div>
+        <div class="s-longpress-hint" aria-hidden="true">⋮</div>
         <div class="reason-drop" onclick="event.stopPropagation()" onpointerdown="event.stopPropagation()" onpointerup="event.stopPropagation()">
           <div class="reason-drop-overflow"><div class="reason-drop-inner">
             <select class="cd-reason-select" onchange="changeReasonType(${idx},this.value,this)">
@@ -931,6 +934,12 @@ function renderStudents() {
               <span class="nocount-label${s.applyRestOfDay?' on':''}" id="rest-lbl-${idx}">일괄 적용 <span style="font-weight:500;opacity:0.7;">(선택 시 오늘 자습 전체 결석 적용)</span></span>
             </div>` : ''}
           </div></div>
+        </div>
+        <div class="el-toggle-row" onclick="event.stopPropagation()" onpointerdown="event.stopPropagation()" onpointerup="event.stopPropagation()">
+          <button class="el-chip el-toggle-chip${chipsSet?' active':''}" id="el-toggle-${idx}" onclick="toggleElChips(this)" aria-expanded="${chipsSet?'true':'false'}">
+            <span id="el-toggle-lbl-${idx}">${toggleLbl}</span>
+            <svg class="el-toggle-caret" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
         </div>
         <div class="early-leave-drop" onclick="event.stopPropagation()" onpointerdown="event.stopPropagation()" onpointerup="event.stopPropagation()">
           <div class="early-leave-overflow"><div class="early-leave-inner">
@@ -1073,6 +1082,27 @@ function _updateEarlyLeaveChip(idx, mins) {
   if (!chip) return;
   chip.classList.toggle('active', mins > 0);
   if (lbl) lbl.textContent = mins > 0 ? `${mins}분 조기 퇴실` : '조기 퇴실';
+  _updateElToggleChip(idx);
+}
+// 조퇴/지각 값 유무에 따라 접힌 상태에서 보이는 요약 칩(el-toggle-chip)을
+// 동기화 — 둘 중 하나라도 값이 생기면 칩 라벨을 갱신하고 카드를 자동으로 펼친다.
+function _updateElToggleChip(idx) {
+  const s = currentStudents[idx]; if (!s) return;
+  const elm = s.earlyLeaveMins || 0, ltm = s.lateMins || 0;
+  const chipsSet = elm > 0 || ltm > 0;
+  const btn = document.getElementById(`el-toggle-${idx}`);
+  const lbl = document.getElementById(`el-toggle-lbl-${idx}`);
+  if (btn) btn.classList.toggle('active', chipsSet);
+  if (lbl) lbl.textContent = elm > 0 ? `${elm}분 조퇴` : (ltm > 0 ? `${ltm}분 지각` : '조퇴·지각');
+  const card = btn?.closest('.student-card');
+  if (card && chipsSet) card.classList.add('chips-open');
+}
+// el-toggle-chip 탭 — 조퇴·지각 편집 영역을 펼치거나 접는다.
+function toggleElChips(btn) {
+  const card = btn.closest('.student-card');
+  if (!card) return;
+  const open = card.classList.toggle('chips-open');
+  btn.setAttribute('aria-expanded', open ? 'true' : 'false');
 }
 function toggleEarlyLeavePanel(idx) {
   const panel = document.getElementById(`el-panel-${idx}`);
@@ -1109,6 +1139,7 @@ function _updateLateChip(idx, mins) {
   if (lbl) lbl.textContent = mins > 0 ? `${mins}분 지각` : '지각';
   const fineBtn = document.getElementById(`late-fine-btn-${idx}`);
   if (fineBtn) fineBtn.style.display = mins > 0 ? '' : 'none';
+  _updateElToggleChip(idx);
 }
 function setLate(idx, mins) {
   const s = currentStudents[idx]; if (!s) return;
