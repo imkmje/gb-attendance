@@ -17,8 +17,9 @@ const VIOLATION_ACTIONS = ['경고', '벌금', '직접 입력'];
    n.0.0 대규모 업데이트 · 0.n.0 기능/디자인 개선 · 0.0.n 버그 수정
    최신순 — 새 배포 때마다 맨 위에 추가할 것
 ════════════════════════════════ */
-const APP_VERSION = '2.25.0';
+const APP_VERSION = '2.26.0';
 const CHANGELOG = [
+  { v:'2.26.0', d:'2026-08-19', t:'minor', title:'학생 없는 자습반은 명단·규정위반 등록·대시보드 점등에서 자동으로 숨김(학생 추가/자습반 변경 화면은 그대로), 출석체크 미완료 알림은 일단 꺼둠' },
   { v:'2.25.0', d:'2026-08-19', t:'minor', title:'대시보드에 반별 세션 점등 표시 추가 — 자습반 5개 × 세션 3칸으로 그날 어떤 반의 어떤 시간대가 출석체크됐는지 한눈에 확인' },
   { v:'2.24.0', d:'2026-08-19', t:'minor', title:'출석 저장 실패 시(네트워크 끊김) 자동 오프라인 큐잉 — 연결되면 자동 재전송, 화면 상단에 대기 건수 칩 표시' },
   { v:'2.23.0', d:'2026-08-19', t:'minor', title:'평일 저녁(19시)/토요일 오후(13시) 넘도록 그날 출석체크가 하나도 없으면 알림 — 자습 없는 날(공휴일 설정에서 세션 미등록)은 자동 제외' },
@@ -98,6 +99,16 @@ let _lockChipTimer = null;
 let _rosterData        = [];
 let _rosterLoaded      = false;
 let _rosterActivePill  = 0;
+
+// 학생이 1명도 없는 자습반은 "기존 반을 골라서 보는" 화면(명단 필터,
+// 규정 위반 등록 대상 고르기 등)에서 자동으로 숨긴다. 반대로 학생을 새로
+// 배정/이동시키는 화면(학생 추가, 자습반 변경)은 지금 비어있어도 골라야
+// 하므로 그쪽은 GROUPS 원본을 그대로 쓴다 — 이 함수로 바꾸지 말 것.
+function _activeGroups() {
+  if (!_rosterLoaded) return GROUPS;
+  const present = new Set(_rosterData.map(s => s.group));
+  return GROUPS.filter(g => present.has(g));
+}
 let _rosterSearchQuery = '';
 let _ssRestored        = false;
 let _skipHistory       = false;
@@ -1857,7 +1868,7 @@ function renderRoster() {
 
 function _renderRosterPills() {
   const wrap = document.getElementById('rosterPillWrap');
-  const labels = ['전체', ...GROUPS];
+  const labels = ['전체', ..._activeGroups()];
   wrap.innerHTML = '<div class="roster-pill-slider" id="rosterPillSlider"></div>' +
     labels.map((lbl, i) => `<button class="roster-pill${i===_rosterActivePill?' active':''}" onclick="selectRosterPill(${i})">${lbl}</button>`).join('');
   _updatePillFade('rosterPillWrap');
@@ -1899,9 +1910,10 @@ function filterRosterByName(val) {
 
 function _renderRosterCards() {
   const container = document.getElementById('rosterContainer');
+  const activeGroups = _activeGroups();
   let filtered = _rosterActivePill === 0
     ? _rosterData
-    : _rosterData.filter(s => s.group === GROUPS[_rosterActivePill - 1]);
+    : _rosterData.filter(s => s.group === activeGroups[_rosterActivePill - 1]);
   if (_rosterSearchQuery) filtered = filtered.filter(s => s.name.includes(_rosterSearchQuery));
 
   if (!filtered.length) {
@@ -1915,7 +1927,7 @@ function _renderRosterCards() {
     </span>
   </div>`;
   if (_rosterActivePill === 0) {
-    GROUPS.forEach(g => {
+    activeGroups.forEach(g => {
       const gs = filtered.filter(s => s.group === g);
       if (!gs.length) return;
       html += `<div class="roster-section-head"><span class="roster-section-title">${g}</span><span class="roster-section-count">${gs.length}명</span><div class="roster-section-line"></div></div>`;
@@ -2108,9 +2120,13 @@ function _renderDashLights(roster, date) {
   const sessions = _computeSessionOptions(date);
   if (!roster || !sessions.length) { el.innerHTML = ''; return; }
 
+  // 그날 명단(roster)에 실제로 학생이 있는 반만 — 학생 없는 반은 표시 자체를 만들지 않는다.
+  const presentGroups = GROUPS.filter(g => roster.some(s => s.group === g));
+  if (!presentGroups.length) { el.innerHTML = ''; return; }
+
   const shortLabels = sessions.map(o => o.text.replace(' 자율학습','').replace(/\(토\)/,''));
   const lit = {};
-  GROUPS.forEach(g => { lit[g] = sessions.map(() => false); });
+  presentGroups.forEach(g => { lit[g] = sessions.map(() => false); });
   roster.forEach(s => {
     if (!lit[s.group]) return;
     s.sessions.forEach(sess => {
@@ -2119,7 +2135,7 @@ function _renderDashLights(roster, date) {
     });
   });
 
-  const groups = GROUPS.map(g => `
+  const groups = presentGroups.map(g => `
     <div class="dash-lights-grp" title="${_esc(g)}">
       <span class="dash-lights-label">${_groupShortLabel(g)}</span>
       ${lit[g].map((on, i) => `<span class="dash-light${on ? ' on' : ''}" title="${_esc(shortLabels[i])}"></span>`).join('')}
@@ -2875,9 +2891,10 @@ function openViolFabSheet() {
   const el = _cdToast({ type:'purple', title:'학생 카드를 꾹 눌러도 등록할 수 있어요', sub:'' });
   setTimeout(()=>{ el.classList.add('out'); setTimeout(()=>el.remove(),280); }, 2400);
 
+  const activeGroups = _activeGroups();
   const filtered = _rosterActivePill === 0
     ? _rosterData
-    : _rosterData.filter(s => s.group === GROUPS[_rosterActivePill - 1]);
+    : _rosterData.filter(s => s.group === activeGroups[_rosterActivePill - 1]);
   if (!filtered.length) { Swal.fire('알림','먼저 명단을 불러와주세요.','info'); return; }
   _openStudentPickerSheet(filtered);
 }
@@ -5030,7 +5047,10 @@ window.addEventListener('online', () => _flushOfflineQueue(false));
 // 한 번 알려준다. 시험 기간·모의고사처럼 자습이 아예 없는 날은 개발자 메뉴 →
 // 공휴일 설정에서 해당 날짜의 오전/오후 체크를 모두 해제해두면 세션 자체가
 // 없는 날로 처리되어 이 알림도 자동으로 뜨지 않는다.
+// ⚠ 2026-08-19 요청으로 일단 꺼둠(ATTENDANCE_REMINDER_ENABLED = false) — 필요해지면 true로.
+const ATTENDANCE_REMINDER_ENABLED = false;
 function _maybeShowAttendanceReminder() {
+  if (!ATTENDANCE_REMINDER_ENABLED) return;
   const todayStr = _todayStr();
   const day = new Date(todayStr).getDay();
   if (!_computeSessionOptions(todayStr).length) return; // 일요일이거나 세션이 등록되지 않은 날
