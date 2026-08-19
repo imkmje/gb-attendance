@@ -17,8 +17,9 @@ const VIOLATION_ACTIONS = ['경고', '벌금', '직접 입력'];
    n.0.0 대규모 업데이트 · 0.n.0 기능/디자인 개선 · 0.0.n 버그 수정
    최신순 — 새 배포 때마다 맨 위에 추가할 것
 ════════════════════════════════ */
-const APP_VERSION = '2.26.2';
+const APP_VERSION = '2.27.0';
 const CHANGELOG = [
+  { v:'2.27.0', d:'2026-08-19', t:'minor', title:'디자인 토큰 일관성 정리 — 교사 메뉴 아이콘·시간표 편집 셀 색을 팔레트 토큰으로 통일, 죽은 색상 폴백 제거, 삭제 확인창이 실제로 빨간 버튼으로 뜨도록 수정(예전엔 CSS 우선순위 때문에 계속 파란 버튼으로만 보였음)' },
   { v:'2.26.2', d:'2026-08-19', t:'patch', title:'전체 바텀시트(약 20곳) 닫힘 애니메이션이 실제 CSS 전환(400ms)보다 50ms 일찍 DOM에서 제거돼 끝에서 살짝 끊겨 보이던 문제 일괄 수정' },
   { v:'2.26.1', d:'2026-08-19', t:'patch', title:'대시보드 점등 표시를 결석자만/전체 명단 필터 바로 아래 붙여 하나의 카드처럼 통합(양각 음영 적용), 학생 카드 클릭 시 스켈레톤이 너무 짧게 번쩍이던 문제 수정' },
   { v:'2.26.0', d:'2026-08-19', t:'minor', title:'학생 없는 자습반은 명단·규정위반 등록·대시보드 점등에서 자동으로 숨김(학생 추가/자습반 변경 화면은 그대로), 출석체크 미완료 알림은 일단 꺼둠' },
@@ -3255,18 +3256,18 @@ function _openTeacherMenu() {
           title:'결석 카운트 수정', sub:'출석 기록 수정 및 결석 카운트를 조정합니다', fn:_teacherEditAttendance },
         { bg:'var(--green-dim)',  fg:'var(--green)', svg:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
           title:'자습 세션 변경',  sub:'학생별 자습 참가 세션(O/방과후/-)을 편집합니다', fn:_teacherEditSchedule },
-        { bg:'#fef3c7',          fg:'#d97706',      svg:'<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
+        { bg:'var(--amber-dim)', fg:'var(--amber)', svg:'<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
           title:'전체 벌금 현황',  sub:'전체 벌금 목록 조회 및 납부 상태를 수정합니다', fn:_teacherViewFines },
-        { bg:'#fce7f3',          fg:'#db2777',      svg:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01"/>',
+        { bg:'var(--purple-dim)', fg:'var(--purple)', svg:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01"/>',
           title:'평일 공휴일 설정', sub:'평일 공휴일 중 자습하는 날을 등록/삭제합니다', fn:_teacherEditHolidays },
       ],
     },
     {
       label: '학생 관리',
       items: [
-        { bg:'#e0fdf4',          fg:'#059669',      svg:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/>',
+        { bg:'var(--green-dim)', fg:'var(--green)', svg:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/>',
           title:'학생 추가',      sub:'새 학생을 자습반에 등록합니다', fn:_teacherAddStudent },
-        { bg:'#fff7ed',          fg:'#ea580c',      svg:'<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/><line x1="18" y1="8" x2="23" y2="13"/><line x1="23" y1="8" x2="18" y2="13"/>',
+        { bg:'var(--red-dim)',   fg:'var(--red)',   svg:'<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/><line x1="18" y1="8" x2="23" y2="13"/><line x1="23" y1="8" x2="18" y2="13"/>',
           title:'학생 삭제 / 자습반 변경', sub:'학생을 삭제하거나 소속 자습반을 변경합니다', fn:_teacherManageStudent },
       ],
     },
@@ -3635,9 +3636,10 @@ function _renderScheduleEditor(student, rawSchedule, onSaved) {
   const SESS_WD = ['오후','야간','심야'];
   const SESS_SAT = ['오전','오후'];
 
+  // 읽기 전용 시간표(.sds-on/.sds-aft)와 같은 색 배정 — O=파랑, 방과후=초록.
   const cellStyle = v => {
-    if (v === 'O')    return 'background:var(--clay-indigo-light,#e0e7ff);color:var(--blue,#4f46e5);border:1.5px solid var(--blue,#4f46e5);';
-    if (v === '방과후') return 'background:#fef9c3;color:#b45309;border:1.5px solid #d97706;';
+    if (v === 'O')    return 'background:var(--blue-dim);color:var(--blue);border:1.5px solid var(--blue);';
+    if (v === '방과후') return 'background:var(--green-dim);color:var(--green);border:1.5px solid var(--green);';
     return 'background:var(--bg-deep);color:var(--ink-4);border:1.5px solid transparent;';
   };
   const cellText = v => v === '방과후' ? '방과후' : v;
@@ -3695,7 +3697,7 @@ function _renderScheduleEditor(student, rawSchedule, onSaved) {
       ${makeRow('sat', '토', sched.sat)}
     </div>
     <!-- 저장 -->
-    <button id="_sceSave" style="margin-top:20px;padding:14px;border-radius:var(--radius);border:none;background:var(--blue,#4f46e5);color:#fff;font-family:var(--font);font-size:14px;font-weight:700;cursor:pointer;width:100%;box-shadow:var(--sh-blue);">저장</button>`;
+    <button id="_sceSave" style="margin-top:20px;padding:14px;border-radius:var(--radius);border:none;background:var(--blue);color:#fff;font-family:var(--font);font-size:14px;font-weight:700;cursor:pointer;width:100%;box-shadow:var(--sh-blue);">저장</button>`;
 
   backdrop.appendChild(sheet);
   document.body.appendChild(backdrop);
@@ -3821,13 +3823,13 @@ function _teacherResetAttendance() {
       <button id="_traClose" aria-label="닫기" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;font-size:12px;box-shadow:var(--sh-xs);">✕</button>
     </div>
     <div style="background:var(--bg-deep);border-radius:var(--radius);padding:12px 14px;margin-bottom:16px;">
-      <div style="font-size:12px;font-weight:700;color:var(--red,#ef4444);margin-bottom:4px;">⚠ 주의</div>
+      <div style="font-size:12px;font-weight:700;color:var(--red);margin-bottom:4px;">⚠ 주의</div>
       <div style="font-size:12px;color:var(--ink-3);line-height:1.6;">지정한 날짜의 <b>모든 반 출석 기록</b>이 삭제됩니다.<br>삭제 후에는 복구할 수 없습니다.</div>
     </div>
     <div style="font-size:13px;font-weight:700;color:var(--ink-2);margin-bottom:8px;">날짜 선택</div>
     <input type="date" id="_traDate" value="${today}"
       style="width:100%;padding:12px 14px;border-radius:var(--radius);border:1.5px solid var(--bg-deep);background:var(--surface);color:var(--ink);font-family:var(--font);font-size:14px;box-sizing:border-box;outline:none;">
-    <button id="_traConfirm" style="margin-top:16px;padding:14px;border-radius:var(--radius);border:none;background:var(--red,#ef4444);color:#fff;font-family:var(--font);font-size:14px;font-weight:700;cursor:pointer;width:100%;">선택한 날짜 출석 기록 삭제</button>`;
+    <button id="_traConfirm" style="margin-top:16px;padding:14px;border-radius:var(--radius);border:none;background:var(--red);color:#fff;font-family:var(--font);font-size:14px;font-weight:700;cursor:pointer;width:100%;">선택한 날짜 출석 기록 삭제</button>`;
 
   backdrop.appendChild(sheet);
   document.body.appendChild(backdrop);
@@ -3848,7 +3850,7 @@ function _teacherResetAttendance() {
       showCancelButton: true,
       confirmButtonText: '삭제',
       cancelButtonText: '취소',
-      confirmButtonColor: '#ef4444',
+      customClass: { confirmButton: 'swal2-danger' },
     }).then(r => {
       if (!r.isConfirmed) return;
       showLoading('출석 기록 삭제 중...');
@@ -3995,7 +3997,7 @@ async function _teacherDeleteStudent(student) {
       <span style="color:var(--red);font-weight:700;">되돌릴 수 없습니다.</span> 정말 삭제할까요?`,
     icon:  'warning', showCancelButton: true,
     confirmButtonText: '삭제', cancelButtonText: '취소',
-    confirmButtonColor: '#ef4444',
+    confirmButtonColor: 'var(--red)',
   });
   if (!result.isConfirmed) return;
   try {
@@ -4104,7 +4106,7 @@ function _renderImportPreview(sheet, rawRows, close) {
       <div style="font-size:13px;font-weight:700;color:var(--ink);margin-bottom:8px;">미리보기 · 총 ${parsed.length}명${skipped ? ` (${skipped}행 무시됨)` : ''}</div>
       <div style="overflow-x:auto;">
         <table style="width:100%;border-collapse:collapse;font-size:12px;">
-          <thead><tr style="border-bottom:1.5px solid var(--ink-4,#bdb7b0);">
+          <thead><tr style="border-bottom:1.5px solid var(--ink-4);">
             <th style="padding:4px 6px;text-align:left;color:var(--ink-3);font-weight:700;">반</th>
             <th style="padding:4px 6px;text-align:left;color:var(--ink-3);font-weight:700;">번호</th>
             <th style="padding:4px 6px;text-align:left;color:var(--ink-3);font-weight:700;">이름</th>
@@ -4136,7 +4138,7 @@ function _renderImportPreview(sheet, rawRows, close) {
   sheet.querySelector('#_impReplace').addEventListener('click', () => {
     Swal.fire({
       title: '전체 교체',
-      html: `기존 학생 데이터 전체를 삭제하고<br>새로운 <b>${parsed.length}명</b>으로 교체합니다.<br><small style="color:#d4959a;">⚠ 출석·위반 기록도 함께 삭제됩니다.</small>`,
+      html: `기존 학생 데이터 전체를 삭제하고<br>새로운 <b>${parsed.length}명</b>으로 교체합니다.<br><small style="color:var(--red);">⚠ 출석·위반 기록도 함께 삭제됩니다.</small>`,
       icon: 'warning',
       showCancelButton: true,
       confirmButtonText: '교체',
@@ -4746,10 +4748,10 @@ function _renderDevMenuSheet() {
 
     <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;">🗑️ 출석 기록 초기화</div>
     <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px;box-shadow:var(--sh-pressed);margin-bottom:24px;">
-      <div style="font-size:11px;color:var(--red,#ef4444);font-weight:600;margin-bottom:8px;">지정한 날짜의 모든 출석 기록이 삭제됩니다.</div>
+      <div style="font-size:11px;color:var(--red);font-weight:600;margin-bottom:8px;">지정한 날짜의 모든 출석 기록이 삭제됩니다.</div>
       <div style="display:flex;gap:8px;align-items:center;">
         <input type="date" id="_resetDateInput" class="cd-input" style="flex:1;">
-        <button onclick="_devResetAttendance()" style="padding:8px 16px;border-radius:var(--radius-pill);border:none;background:var(--red,#ef4444);color:#fff;font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">초기화</button>
+        <button onclick="_devResetAttendance()" style="padding:8px 16px;border-radius:var(--radius-pill);border:none;background:var(--red);color:#fff;font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">초기화</button>
       </div>
     </div>
 
@@ -4814,7 +4816,7 @@ async function _saveSemesterConfig() {
 function _applyTeacherPwBtn(btn) {
   const on = localStorage.getItem('teacherPwEnabled') !== 'false';
   btn.textContent = on ? 'ON' : 'OFF';
-  btn.style.background = on ? 'var(--green,#22c55e)' : 'var(--red,#ef4444)';
+  btn.style.background = on ? 'var(--green)' : 'var(--red)';
   btn.style.color = '#fff';
 }
 
@@ -4829,7 +4831,7 @@ function _toggleTeacherPw() {
 function _applyActivityLogBtn(btn) {
   const on = _activityLogEnabled();
   btn.textContent = on ? 'ON' : 'OFF';
-  btn.style.background = on ? 'var(--green,#22c55e)' : 'var(--red,#ef4444)';
+  btn.style.background = on ? 'var(--green)' : 'var(--red)';
   btn.style.color = '#fff';
 }
 
@@ -4863,7 +4865,7 @@ function _renderReasonList(sheet) {
       <span style="flex:1;font-size:13px;font-weight:600;color:var(--ink);">${_esc(r)}</span>
       <button onclick="_moveReasonType(${i},-1)" title="위로" aria-label="위로 이동" style="width:28px;height:28px;border:none;border-radius:6px;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;font-size:13px;line-height:1;">↑</button>
       <button onclick="_moveReasonType(${i},1)"  title="아래로" aria-label="아래로 이동" style="width:28px;height:28px;border:none;border-radius:6px;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;font-size:13px;line-height:1;">↓</button>
-      <button onclick="_deleteReasonType(${i})" title="삭제" aria-label="사유 삭제" style="width:28px;height:28px;border:none;border-radius:6px;background:var(--red-dim);color:var(--red,#ef4444);cursor:pointer;font-size:16px;font-weight:900;line-height:1;">×</button>
+      <button onclick="_deleteReasonType(${i})" title="삭제" aria-label="사유 삭제" style="width:28px;height:28px;border:none;border-radius:6px;background:var(--red-dim);color:var(--red);cursor:pointer;font-size:16px;font-weight:900;line-height:1;">×</button>
     </div>`).join('');
 }
 
@@ -4916,7 +4918,7 @@ function _renderViolationTypeList(sheet) {
       <span style="flex:1;font-size:13px;font-weight:600;color:var(--ink);">${_esc(v)}</span>
       <button onclick="_moveViolationType(${i},-1)" title="위로" aria-label="위로 이동" style="width:28px;height:28px;border:none;border-radius:6px;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;font-size:13px;line-height:1;">↑</button>
       <button onclick="_moveViolationType(${i},1)"  title="아래로" aria-label="아래로 이동" style="width:28px;height:28px;border:none;border-radius:6px;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;font-size:13px;line-height:1;">↓</button>
-      <button onclick="_deleteViolationType(${i})" title="삭제" aria-label="유형 삭제" style="width:28px;height:28px;border:none;border-radius:6px;background:var(--red-dim);color:var(--red,#ef4444);cursor:pointer;font-size:16px;font-weight:900;line-height:1;">×</button>
+      <button onclick="_deleteViolationType(${i})" title="삭제" aria-label="유형 삭제" style="width:28px;height:28px;border:none;border-radius:6px;background:var(--red-dim);color:var(--red);cursor:pointer;font-size:16px;font-weight:900;line-height:1;">×</button>
     </div>`).join('');
 }
 
@@ -5022,7 +5024,7 @@ function _devResetAttendance() {
         showCancelButton: true,
         confirmButtonText: '삭제',
         cancelButtonText: '취소',
-        confirmButtonColor: '#ef4444',
+        customClass: { confirmButton: 'swal2-danger' },
       }).then(r => {
         if (!r.isConfirmed) return;
         showLoading('출석 기록 삭제 중...');
