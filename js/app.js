@@ -17,8 +17,9 @@ const VIOLATION_ACTIONS = ['경고', '벌금', '직접 입력'];
    n.0.0 대규모 업데이트 · 0.n.0 기능/디자인 개선 · 0.0.n 버그 수정
    최신순 — 새 배포 때마다 맨 위에 추가할 것
 ════════════════════════════════ */
-const APP_VERSION = '2.16.0';
+const APP_VERSION = '2.16.1';
 const CHANGELOG = [
+  { v:'2.16.1', d:'2026-08-19', t:'patch', title:'기간 결산 아이콘을 통계 탭과 겹치지 않는 확성기 아이콘으로 교체, 기본 조회 기간을 "이번 달"로 변경, 텍스트 복사 시 성과순 정렬+메달 표시' },
   { v:'2.16.0', d:'2026-08-19', t:'minor', title:'연속 출석 스트릭 표시 + 대시보드에 "기간 결산" 추가 (출석률·결석·최대연속, 카톡 공지용 텍스트 복사)' },
   { v:'2.15.2', d:'2026-08-19', t:'patch', title:'출석체크 스크롤 축소 애니메이션이 끊기던 문제 수정 (강제 리플로우 제거)' },
   { v:'2.15.1', d:'2026-08-19', t:'patch', title:'스크롤 시 세션 흰색 필(슬라이더)이 불안정하게 떨리던 버그 수정' },
@@ -2182,7 +2183,8 @@ function openPeriodSummarySheet() {
   sheet.style.cssText = 'max-height:90dvh;display:flex;flex-direction:column;padding-bottom:20px;';
 
   const today = _todayStr();
-  const weekStart = _fmtYMD(_mondayOf(new Date()));
+  const weekStart  = _fmtYMD(_mondayOf(new Date()));
+  const monthStart = (() => { const d = new Date(); d.setDate(1); return _fmtYMD(d); })();
 
   sheet.innerHTML = `
     <div class="custom-sheet-handle"></div>
@@ -2196,13 +2198,13 @@ function openPeriodSummarySheet() {
       </button>
     </div>
     <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;">
-      <input type="date" id="_psStart" class="cd-input" style="flex:1;min-width:0;" value="${weekStart}">
+      <input type="date" id="_psStart" class="cd-input" style="flex:1;min-width:0;" value="${monthStart}">
       <span style="color:var(--ink-4);font-size:12px;flex-shrink:0;">~</span>
       <input type="date" id="_psEnd" class="cd-input" style="flex:1;min-width:0;" value="${today}">
     </div>
     <div class="ssf-chips" style="margin-bottom:14px;">
       <button class="ssf-chip" id="_psPresetWeek">이번 주</button>
-      <button class="ssf-chip" id="_psPresetMonth">이번 달</button>
+      <button class="ssf-chip on" id="_psPresetMonth">이번 달</button>
       <button class="ssf-chip" id="_psPresetSemester">학기 전체</button>
     </div>
     <div id="_psSummary" style="text-align:center;margin-bottom:14px;"></div>
@@ -2239,16 +2241,25 @@ function openPeriodSummarySheet() {
       .catch(() => { listEl.innerHTML = _emptyState('결산을 불러오지 못했습니다.'); summaryEl.innerHTML = ''; });
   };
 
+  const chips = {
+    week:     sheet.querySelector('#_psPresetWeek'),
+    month:    sheet.querySelector('#_psPresetMonth'),
+    semester: sheet.querySelector('#_psPresetSemester'),
+  };
+  const setActiveChip = key => Object.entries(chips).forEach(([k, el]) => el.classList.toggle('on', k === key));
+
   startInput.addEventListener('change', runQuery);
   endInput.addEventListener('change', runQuery);
-  sheet.querySelector('#_psPresetWeek').addEventListener('click', () => {
+  chips.week.addEventListener('click', () => {
+    setActiveChip('week');
     startInput.value = weekStart; endInput.value = today; runQuery();
   });
-  sheet.querySelector('#_psPresetMonth').addEventListener('click', () => {
-    const d = new Date(); d.setDate(1);
-    startInput.value = _fmtYMD(d); endInput.value = today; runQuery();
+  chips.month.addEventListener('click', () => {
+    setActiveChip('month');
+    startInput.value = monthStart; endInput.value = today; runQuery();
   });
-  sheet.querySelector('#_psPresetSemester').addEventListener('click', () => {
+  chips.semester.addEventListener('click', () => {
+    setActiveChip('semester');
     startInput.value = _currentSemesterStartDate(); endInput.value = today; runQuery();
   });
   sheet.querySelector('#_psCopy').addEventListener('click', () => {
@@ -2309,16 +2320,22 @@ function _fmtDateShort(dateStr) {
   return `${+m}/${+d}`;
 }
 
-// 반별로 묶어서 카톡 공지에 바로 붙여넣기 좋은 형태의 텍스트로 변환
+// 반별로 묶어서 카톡 공지에 바로 붙여넣기 좋은 형태의 텍스트로 변환.
+// 매달 학생 동기부여용 공지로 쓸 걸 염두에 두고, 반 안에서는 명단 순서가
+// 아니라 (최대연속 → 출석률) 성과 순으로 정렬하고 상위 3명은 메달을 붙여
+// 잘한 학생이 먼저 보이도록 한다(통계 탭 Top3와 같은 결의 표현).
+const _MEDALS = ['🥇','🥈','🥉'];
 function _buildPeriodSummaryText(summary, start, end) {
   const active = summary.filter(s => s.attendRate !== null);
   let text = `📊 기간 결산 (${_fmtDateShort(start)}~${_fmtDateShort(end)})\n`;
   GROUPS.forEach(g => {
-    const gs = active.filter(s => s.group === g);
+    const gs = active.filter(s => s.group === g)
+      .sort((a, b) => b.periodMaxStreak - a.periodMaxStreak || b.attendRate - a.attendRate);
     if (!gs.length) return;
     text += `\n[${g}]\n`;
-    gs.forEach(s => {
-      text += `· ${s.name} - 출석률 ${s.attendRate}% · 결석 ${s.absentCount}회 · 최대연속 ${s.periodMaxStreak}일\n`;
+    gs.forEach((s, i) => {
+      const medal = _MEDALS[i] ? `${_MEDALS[i]} ` : '';
+      text += `${medal}· ${s.name} - 출석률 ${s.attendRate}% · 결석 ${s.absentCount}회 · 최대연속 ${s.periodMaxStreak}일\n`;
     });
   });
   return text.trim();
