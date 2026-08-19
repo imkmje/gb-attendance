@@ -17,9 +17,10 @@ const VIOLATION_ACTIONS = ['경고', '벌금', '직접 입력'];
    n.0.0 대규모 업데이트 · 0.n.0 기능/디자인 개선 · 0.0.n 버그 수정
    최신순 — 새 배포 때마다 맨 위에 추가할 것
 ════════════════════════════════ */
-const APP_VERSION = '2.28.0';
+const APP_VERSION = '2.28.1';
 const CHANGELOG = [
-  { v:'2.28.0', d:'2026-08-19', t:'minor', title:'출석체크 학생 카드 개편 — 조퇴·지각 칩은 값이 있을 때만 기본 노출, 나머지는 요약 칩 한 번 탭해서 펼치기(카드 밀도 개선, 폰 오탭 감소), 칩 탭 영역 확대, 카드 꾹 누르기(위반 등록) 힌트 점 추가' },
+  { v:'2.28.1', d:'2026-08-19', t:'patch', title:'출석체크 카드에 있던 "꾹 누르면 위반 등록" 힌트 점 제거 — 그 기능은 명단 탭 카드에만 있고 출석체크 카드엔 원래 없던 기능이라 안내가 잘못됐었음' },
+  { v:'2.28.0', d:'2026-08-19', t:'minor', title:'출석체크 학생 카드 개편 — 조퇴·지각 칩은 값이 있을 때만 기본 노출, 나머지는 요약 칩 한 번 탭해서 펼치기(카드 밀도 개선, 폰 오탭 감소), 칩 탭 영역 확대' },
   { v:'2.26.2', d:'2026-08-19', t:'patch', title:'전체 바텀시트(약 20곳) 닫힘 애니메이션이 실제 CSS 전환(400ms)보다 50ms 일찍 DOM에서 제거돼 끝에서 살짝 끊겨 보이던 문제 일괄 수정' },
   { v:'2.26.1', d:'2026-08-19', t:'patch', title:'대시보드 점등 표시를 결석자만/전체 명단 필터 바로 아래 붙여 하나의 카드처럼 통합(양각 음영 적용), 학생 카드 클릭 시 스켈레톤이 너무 짧게 번쩍이던 문제 수정' },
   { v:'2.26.0', d:'2026-08-19', t:'minor', title:'학생 없는 자습반은 명단·규정위반 등록·대시보드 점등에서 자동으로 숨김(학생 추가/자습반 변경 화면은 그대로), 출석체크 미완료 알림은 일단 꺼둠' },
@@ -908,7 +909,6 @@ function renderStudents() {
           </div>
           <span class="s-badge ${isAbsent?'absent':'present'}">${s.status}</span>
         </div>
-        <div class="s-longpress-hint" aria-hidden="true">⋮</div>
         <div class="reason-drop" onclick="event.stopPropagation()" onpointerdown="event.stopPropagation()" onpointerup="event.stopPropagation()">
           <div class="reason-drop-overflow"><div class="reason-drop-inner">
             <select class="cd-reason-select" onchange="changeReasonType(${idx},this.value,this)">

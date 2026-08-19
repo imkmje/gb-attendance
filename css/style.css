@@ -278,11 +278,6 @@ html[data-theme="dark"] .student-card.absent { background:#221d1c; box-shadow:va
 .clear-input-btn { position:absolute; right:8px; top:50%; transform:translateY(-50%); cursor:pointer; color:var(--ink-4); font-size:16px; z-index:5; line-height:1; }
 .student-card > * { position:relative; z-index:3; }
 
-/* 카드를 꾹 누르면 규정 위반을 등록할 수 있다는 걸 알려주는 상시 힌트.
-   토스트 한 번으로만 안내되던 걸 놓치면 그 기능 자체를 모르고 지나가기
-   쉬워서, 아주 옅은 점 3개로 구석에 계속 남겨둔다. */
-.s-longpress-hint { position:absolute; bottom:8px; right:10px; font-size:12px; line-height:1; letter-spacing:1px; color:var(--ink-4); opacity:0.4; pointer-events:none; z-index:3; }
-
 .student-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; align-items:start; }
 @media (min-width:576px) { .student-grid { grid-template-columns:repeat(3,1fr); } }
 @media (min-width:768px) { .student-grid { grid-template-columns:repeat(4,1fr); } }
