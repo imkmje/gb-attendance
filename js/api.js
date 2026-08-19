@@ -8,18 +8,36 @@
 const API = (() => {
 
   // ─── 내부 fetch 헬퍼 ──────────────────────────────────────
+  // 요청이 응답 없이 무한 대기하는 것을 막기 위한 타임아웃(AbortController).
+  // 와이파이가 끊기거나 응답이 멈추면 로딩 스피너가 영원히 도는 문제가 있었음 —
+  // 타임아웃 시 사용자가 이해할 수 있는 메시지로 잘라서 던진다.
+  const REQUEST_TIMEOUT_MS = 20000;
+
   async function _req(method, path, body = null, extra = {}) {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
-      method,
-      headers: {
-        apikey:         SUPABASE_ANON_KEY,
-        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        'Content-Type': 'application/json',
-        Prefer:         'return=representation',
-        ...extra,
-      },
-      body: body !== null ? JSON.stringify(body) : undefined,
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    let res;
+    try {
+      res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+        method,
+        headers: {
+          apikey:         SUPABASE_ANON_KEY,
+          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+          Prefer:         'return=representation',
+          ...extra,
+        },
+        body: body !== null ? JSON.stringify(body) : undefined,
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        throw new Error('요청 시간이 초과됐습니다. 네트워크 상태를 확인한 후 다시 시도해 주세요.');
+      }
+      throw new Error('네트워크 연결에 실패했습니다. 인터넷 연결을 확인해 주세요.');
+    } finally {
+      clearTimeout(timer);
+    }
     if (!res.ok) {
       const msg = await res.text();
       throw new Error(`[API] ${method} ${path} → ${res.status}: ${msg}`);
