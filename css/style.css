@@ -122,13 +122,31 @@ html[data-theme="dark"] .splash-icon-wrap::after { background:linear-gradient(15
 @media (hover:hover) { .back-btn:hover  { box-shadow:var(--sh-hover); color:var(--ink); } }
 .back-btn:active { transform:scale(0.92) !important; box-shadow:var(--sh-pressed); }
 
-.filter-section { position:sticky; top:0; z-index:80; background:var(--surface); box-shadow:var(--sh-sm); padding:10px 14px 0; display:flex; flex-direction:column; gap:0; transition:padding var(--dur-normal) var(--ease), box-shadow var(--dur-normal) var(--ease); }
-.filter-row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:center; padding-bottom:10px; transition:padding-bottom var(--dur-normal) var(--ease); }
-/* 출석체크 탭: 스크롤 내리면 상단 필터 영역이 자연스럽게 줄어듦 */
+/* 출석체크 탭: 스크롤 내리면 상단 필터 영역(날짜·자습반·세션·확인자)이
+   아이폰 대형 타이틀처럼 스크롤량에 비례해 매끄럽게 줄어듦.
+   --collapse(0~1)는 JS 스크롤 리스너가 프레임마다 직접 갱신하므로
+   여기 관련된 속성들은 CSS transition을 걸지 않는다 — 걸면 값이 바뀔
+   때마다 트랜지션이 스크롤을 뒤쫓아가며 밀리는 느낌(래그)이 생김. */
+.filter-section { --collapse:0; position:sticky; top:0; z-index:80; background:var(--surface); box-shadow:var(--sh-sm); padding:calc(10px - 6px * var(--collapse)) 14px 0; display:flex; flex-direction:column; gap:0; transition:box-shadow var(--dur-normal) var(--ease); }
+.filter-row { display:flex; flex-wrap:wrap; gap:calc(8px - 2px * var(--collapse)); align-items:center; justify-content:center; padding-bottom:calc(10px - 5px * var(--collapse)); }
 #afterSchoolRow { overflow:hidden; max-height:60px; transition:max-height var(--dur-normal) var(--ease), opacity var(--dur-fast) var(--ease), padding-bottom var(--dur-normal) var(--ease); }
-.filter-section.scrolled { padding-top:6px; box-shadow:var(--sh-md); }
-.filter-section.scrolled .filter-row { padding-bottom:6px; }
+.filter-section.scrolled { box-shadow:var(--sh-md); }
 .filter-section.scrolled #afterSchoolRow { max-height:0; opacity:0; padding-bottom:0 !important; }
+/* 날짜·자습반·확인자 입력과 세션 탭도 --collapse에 맞춰 함께 작아짐.
+   .cd-select는 화살표 아이콘 자리(padding-right:32px)를 건드리면 안 되므로
+   .cd-input과 묶지 않고 longhand로 위·아래·왼쪽 패딩만 줄인다. */
+.filter-section .cd-input {
+  padding:calc(8px - 3px * var(--collapse)) calc(12px - 3px * var(--collapse)) !important;
+  font-size:calc(13px - 1.5px * var(--collapse)) !important;
+}
+.filter-section .cd-select {
+  padding-top:calc(8px - 3px * var(--collapse)) !important;
+  padding-bottom:calc(8px - 3px * var(--collapse)) !important;
+  padding-left:calc(12px - 3px * var(--collapse)) !important;
+  font-size:calc(13px - 1.5px * var(--collapse)) !important;
+}
+.filter-section .session-pill-wrap { padding:calc(3px - 1px * var(--collapse)); }
+.filter-section .session-pill { padding:calc(8px - 3px * var(--collapse)) calc(16px - 4px * var(--collapse)); font-size:calc(13px - 1.5px * var(--collapse)); }
 .cd-input, .cd-select { font-family:var(--font); background:var(--bg-deep) !important; box-shadow:var(--sh-pressed) !important; border:none !important; border-radius:var(--radius-sm) !important; color:var(--ink) !important; font-size:13px !important; font-weight:600 !important; padding:8px 12px !important; transition:box-shadow var(--dur-fast) var(--ease) !important; outline:none; -webkit-appearance:none; appearance:none; }
 .cd-select { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238c867e' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") !important; background-repeat:no-repeat !important; background-position:right 10px center !important; padding-right:32px !important; }
 html[data-theme="dark"] .cd-select { background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236e6860' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") !important; }

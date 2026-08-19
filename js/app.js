@@ -17,8 +17,9 @@ const VIOLATION_ACTIONS = ['경고', '벌금', '직접 입력'];
    n.0.0 대규모 업데이트 · 0.n.0 기능/디자인 개선 · 0.0.n 버그 수정
    최신순 — 새 배포 때마다 맨 위에 추가할 것
 ════════════════════════════════ */
-const APP_VERSION = '2.14.0';
+const APP_VERSION = '2.15.0';
 const CHANGELOG = [
+  { v:'2.15.0', d:'2026-08-19', t:'minor', title:'출석체크 상단 필터 영역이 아이폰처럼 스크롤에 비례해 자연스럽게 축소되도록 개선' },
   { v:'2.14.0', d:'2026-08-19', t:'minor', title:'네트워크 요청 타임아웃 추가, 모바일 터치 시 hover 스타일 안 풀리던 문제 수정, 아이폰 안전영역 대응, 흐린 회색 텍스트 가독성 개선' },
   { v:'2.13.0', d:'2026-08-19', t:'minor', title:'개발자 메뉴에 학기 설정(1학기/2학기 시작일) 추가 — 통계 탭 학기 표시를 직접 조정 가능' },
   { v:'2.12.2', d:'2026-08-19', t:'patch', title:'"결과보기" 창 제목 위 아이콘 위치가 어색해 제거 (다른 시트와 통일)' },
@@ -532,17 +533,37 @@ window.addEventListener('popstate', (e) => {
   }
 }, false);
 
-// 출석체크 탭: 스크롤 내리면 상단 필터 영역(날짜·세션·확인자)이 자연스럽게 줄어듦
+// 출석체크 탭: 스크롤 내리면 상단 필터 영역(날짜·세션·확인자)이 아이폰 대형
+// 타이틀처럼 스크롤량에 비례해 자연스럽게 줄어듦.
+// COLLAPSE_DISTANCE(px)만큼 내리면 완전히 축소된 상태(--collapse:1)가 된다.
+const COLLAPSE_DISTANCE = 60;
 let _scrollTicking = false;
+function _applyScrollCollapse() {
+  // rAF와 setTimeout 둘 중 먼저 온 쪽이 실행하고 플래그를 내리는 방식(경쟁) —
+  // 탭이 백그라운드로 가는 등 이유로 requestAnimationFrame이 지연/보류되면
+  // _scrollTicking이 true로 계속 남아 이후 스크롤이 전부 무시되는 문제가
+  // 있었음. 둘 중 하나는 반드시 제때 실행되므로 그 문제를 막는다.
+  if (!_scrollTicking) return;
+  _scrollTicking = false;
+  const homeActive = document.getElementById('view-home')?.classList.contains('active');
+  const fs = document.querySelector('.filter-section');
+  if (!fs) return;
+  const collapse = homeActive ? Math.min(1, Math.max(0, window.scrollY / COLLAPSE_DISTANCE)) : 0;
+  fs.style.setProperty('--collapse', collapse);
+  fs.classList.toggle('scrolled', !!homeActive && window.scrollY > 24);
+  // 세션 탭 배경 슬라이더는 JS가 버튼 크기를 읽어 위치를 잡으므로,
+  // 탭 자체가 --collapse에 맞춰 계속 작아지는 동안 같이 갱신해줘야
+  // 슬라이더가 줄어든 버튼과 안 맞고 따로 노는 게 방지된다.
+  if (homeActive) {
+    const activePill = document.querySelector('#sessionPillWrap .session-pill.active');
+    if (activePill) _movePillSlider(activePill);
+  }
+}
 window.addEventListener('scroll', () => {
   if (_scrollTicking) return;
   _scrollTicking = true;
-  requestAnimationFrame(() => {
-    const homeActive = document.getElementById('view-home')?.classList.contains('active');
-    const fs = document.querySelector('.filter-section');
-    if (fs) fs.classList.toggle('scrolled', !!homeActive && window.scrollY > 24);
-    _scrollTicking = false;
-  });
+  requestAnimationFrame(_applyScrollCollapse);
+  setTimeout(_applyScrollCollapse, 100);
 }, { passive: true });
 
 /* ════════════════════════════════
