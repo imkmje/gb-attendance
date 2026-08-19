@@ -1168,7 +1168,9 @@ function _buildFineReportText(visible, filterState) {
 
   let report = `[자습반별 벌금 현황${filterState === 'unpaid' ? ' · 미납만' : ''}]\n`;
   report += `▪ 총 부과: ${fmt(total)} · 납부: ${fmt(paid)} · 미납: ${fmt(unpaid)}\n`;
-  report += '----------------------------------\n';
+  // attendance.js의 viewAllResults와 동일한 이유로 "-" 반복 대신 박스 그리기
+  // 문자(─)를 쓴다 — 마크다운 지원 붙여넣기 대상에서 구분선/제목으로 오인되는 문제 방지.
+  report += '────────────────────────────────\n';
 
   const byGroup = {};
   for (const v of visible) (byGroup[v.student.group || '기타'] ??= []).push(v);
@@ -1179,10 +1181,10 @@ function _buildFineReportText(visible, filterState) {
     report += `\n[${group}] 소계 ${fmt(groupTotal)}${groupUnpaid > 0 ? ` (미납 ${fmt(groupUnpaid)})` : ''}\n`;
     vs.forEach(v => {
       const fine = _parseFine(v.action);
-      report += `- ${v.student.ban}반 ${v.student.num}번 ${v.student.name} · ${v.violType}${v.detail ? `(${v.detail})` : ''} · ${fmt(fine)} [${v.paid ? '납부' : '미납'}]\n`;
+      report += `· ${v.student.ban}반 ${v.student.num}번 ${v.student.name} · ${v.violType}${v.detail ? `(${v.detail})` : ''} · ${fmt(fine)} [${v.paid ? '납부' : '미납'}]\n`;
     });
   }
-  report += '----------------------------------';
+  report += '────────────────────────────────';
   return report;
 }
 

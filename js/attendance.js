@@ -831,17 +831,23 @@ function viewAllResults() {
   let report = `[${loadedGroup} 자율학습 현황]\n`;
   report += `▪ 일시: ${date} (${sessShort})\n`;
   if (checkerName) report += `▪ 확인자: ${checkerName}\n`;
-  report += '----------------------------------\n';
+  // 순수 "-" 반복 줄은 마크다운을 지원하는 붙여넣기 대상에서, 바로 위 줄을
+  // 제목(Setext heading)으로 오인하거나 구분선(hr)으로 렌더링해버리는
+  // 경우가 있어 — 마크다운에 없는 박스 그리기 문자(─)로 바꿔 피한다.
+  report += '────────────────────────────────\n';
   if (!absentees.length) {
     report += '전원 출석하였습니다.\n';
   } else {
     absentees.forEach(s => {
       const reason = s.reasonType === '직접 입력' ? s.reasonText : s.reasonType;
       const reasonSuffix = reason ? ` (${reason})` : '';
-      report += `- ${s.ban}반 ${s.num}번 ${s.name} [결석]${reasonSuffix}\n`;
+      // 줄 맨 앞의 "- "는 카카오톡/메모앱 등 일부 붙여넣기 대상에서 마크다운
+      // 목록으로 오인돼 들여쓰기·기호가 깨져 보이는 사례가 있었음 — 기간
+      // 결산 카톡 공지 텍스트가 이미 쓰고 있는 "·"로 통일해 문제를 피한다.
+      report += `· ${s.ban}반 ${s.num}번 ${s.name} [결석]${reasonSuffix}\n`;
     });
   }
-  report += '----------------------------------';
+  report += '────────────────────────────────';
 
   _openResultSheet(report, absentees, date, opt.text, currentStudents.length);
 }

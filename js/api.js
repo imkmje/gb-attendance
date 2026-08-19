@@ -517,12 +517,12 @@ const API = (() => {
     let report = `[${groupName} 자율학습 현황]\n`;
     report += `▪ 일시: ${date} (${sessionName.replace(' 자율학습','')})\n`;
     if (checkers.length) report += `▪ 확인자: ${checkers.join(', ')}\n`;
-    report += '----------------------------------\n';
+    report += '────────────────────────────────\n';
     const absentees = studentList
       .filter(s => s.status && s.status !== '출석')
-      .map(s => `- ${s.ban}반 ${s.num}번 ${s.name} [${s.status}]${s.reason ? ` (${s.reason})` : ''}`);
+      .map(s => `· ${s.ban}반 ${s.num}번 ${s.name} [${s.status}]${s.reason ? ` (${s.reason})` : ''}`);
     report += absentees.length ? absentees.join('\n') + '\n' : '전원 출석하였습니다.\n';
-    report += '----------------------------------';
+    report += '────────────────────────────────';
     return report;
   }
 
