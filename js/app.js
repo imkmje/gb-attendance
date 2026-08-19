@@ -17,8 +17,9 @@ const VIOLATION_ACTIONS = ['경고', '벌금', '직접 입력'];
    n.0.0 대규모 업데이트 · 0.n.0 기능/디자인 개선 · 0.0.n 버그 수정
    최신순 — 새 배포 때마다 맨 위에 추가할 것
 ════════════════════════════════ */
-const APP_VERSION = '2.20.0';
+const APP_VERSION = '2.21.0';
 const CHANGELOG = [
+  { v:'2.21.0', d:'2026-08-19', t:'minor', title:'기간 결산 "학생 전달용/교사용" 모드 구분을 없애고 체크박스 하나로 통일, 미납 벌금 0원인 학생은 태그·문구 자동 숨김, 텍스트 복사 전 미리보기 추가' },
   { v:'2.20.0', d:'2026-08-19', t:'minor', title:'기간 결산 팝업 화면 목록이 체크박스 선택에 실시간으로 반영되도록 개선(부드러운 페이드), 학생 전달용 항목에 "기간 중 지각"·"미납 벌금" 추가' },
   { v:'2.19.0', d:'2026-08-19', t:'minor', title:'기간 결산에 "학생 전달용"/"교사용" 모드 추가 — 교사용은 지각·조퇴·위반·미납 벌금까지 체크박스로 골라 복사 가능, 부드러운 슬라이드+페이드 전환' },
   { v:'2.18.2', d:'2026-08-19', t:'patch', title:'명단·통계·시간표·기간결산 검색창에 × 지우기 버튼 추가' },
@@ -2257,18 +2258,11 @@ function openPeriodSummarySheet() {
     <div id="_psList" style="overflow-y:auto;flex:1;transition:opacity var(--dur-fast) var(--ease);">
       ${Array.from({length:3}).map(() => `<div style="background:var(--surface);border-radius:var(--radius);box-shadow:var(--sh-md);padding:14px;margin-bottom:10px;"><div class="cd-skeleton" style="height:12px;width:30%;margin-bottom:10px;"></div><div class="cd-skeleton" style="height:38px;width:100%;"></div></div>`).join('')}
     </div>
-    <div class="sch-pill-wrap" style="padding:0;margin-top:14px;flex-shrink:0;">
-      <div class="sch-pill-bar" id="_psModeBar">
-        <div class="sch-pill-indicator" id="_psModeIndicator"></div>
-        <div class="sch-pill-item active" id="_psMode-student">학생 전달용</div>
-        <div class="sch-pill-item" id="_psMode-teacher">교사용</div>
-      </div>
-    </div>
-    <div style="font-size:11px;font-weight:700;color:var(--ink-3);margin:12px 0 6px;flex-shrink:0;" id="_psFieldsLabel">학생 전달용 텍스트에 포함할 항목</div>
+    <div style="font-size:11px;font-weight:700;color:var(--ink-3);margin:14px 0 6px;flex-shrink:0;">표시·전달 항목 — 체크한 항목만 위 목록과 복사 텍스트에 보여요</div>
     <div id="_psFields" style="display:flex;flex-wrap:wrap;gap:6px;flex-shrink:0;transition:opacity var(--dur-fast) var(--ease);"></div>
     <button class="vh-add-btn is-green" id="_psCopy" style="margin:12px 0 0;flex-shrink:0;">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-      텍스트 복사
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+      텍스트 미리보기
     </button>`;
   backdrop.appendChild(sheet);
   document.body.appendChild(backdrop);
@@ -2285,18 +2279,9 @@ function openPeriodSummarySheet() {
   const searchInput = sheet.querySelector('#_psSearch');
   const searchClear = sheet.querySelector('#_psSearchClear');
 
-  // 학생 전달용 ↔ 교사용 모드 — 세그먼트 슬라이더는 시간표/대시보드 탭과
-  // 같은 검증된 스프링 애니메이션(.sch-pill-indicator)을 그대로 재사용하고,
-  // 체크박스 목록 자체도 순간적으로 안 바뀌게 살짝 페이드 전환을 준다.
-  let psMode = 'student';
-  const modeBar   = sheet.querySelector('#_psModeBar');
-  const modeInd    = sheet.querySelector('#_psModeIndicator');
-  const modeStudentBtn = sheet.querySelector('#_psMode-student');
-  const modeTeacherBtn = sheet.querySelector('#_psMode-teacher');
-  const fieldsLabelEl = sheet.querySelector('#_psFieldsLabel');
-  const fieldsEl       = sheet.querySelector('#_psFields');
-
-  const currentFieldDefs = () => psMode === 'teacher' ? PERIOD_SUMMARY_FIELDS_TEACHER : PERIOD_SUMMARY_FIELDS;
+  // 학생용/교사용을 모드로 나누지 않고 체크박스 하나로 통일 — 대시보드에서
+  // 볼 항목도, 학생에게 전달할 항목도 그때그때 체크박스만 바꾸면 된다.
+  const fieldsEl = sheet.querySelector('#_psFields');
   const getCheckedFields = () => [...fieldsEl.querySelectorAll('input:checked')].map(el => el.dataset.field);
 
   // 체크박스를 켜고 끌 때마다 팝업에 뜬 학생 목록의 뱃지가 그 자리에서
@@ -2306,49 +2291,15 @@ function openPeriodSummarySheet() {
     if (!summary.length) return;
     listEl.style.opacity = '0';
     setTimeout(() => {
-      _renderPeriodSummary(summaryEl, listEl, summary, startInput.value, endInput.value, searchInput.value.trim(), getCheckedFields(), currentFieldDefs());
+      _renderPeriodSummary(summaryEl, listEl, summary, startInput.value, endInput.value, searchInput.value.trim(), getCheckedFields());
       listEl.style.opacity = '1';
     }, 120);
   };
 
-  const bindFieldCheckboxes = () => {
-    fieldsEl.querySelectorAll('input[type=checkbox]').forEach(cb => cb.addEventListener('change', rerenderList));
-  };
-
-  const moveModeSlider = () => {
-    const active = modeBar.querySelector('.sch-pill-item.active');
-    if (!active) return;
-    modeInd.style.width = active.offsetWidth + 'px';
-    modeInd.style.transform = 'translateX(' + active.offsetLeft + 'px)';
-  };
-
-  const renderFieldsCheckboxes = () => {
-    fieldsLabelEl.textContent = psMode === 'teacher' ? '교사 기록용 텍스트에 포함할 항목' : '학생 전달용 텍스트에 포함할 항목';
-    fieldsEl.innerHTML = currentFieldDefs().map(f => `<label style="display:flex;align-items:center;gap:5px;background:var(--bg-deep);border-radius:var(--radius-pill);padding:6px 12px;font-size:12px;font-weight:600;color:var(--ink-2);cursor:pointer;">
-      <input type="checkbox" data-field="${f.key}" checked style="width:14px;height:14px;accent-color:var(--blue);cursor:pointer;">${f.label}
-    </label>`).join('');
-    bindFieldCheckboxes();
-  };
-  renderFieldsCheckboxes();
-
-  const switchPsMode = mode => {
-    if (psMode === mode) return;
-    psMode = mode;
-    modeStudentBtn.classList.toggle('active', mode === 'student');
-    modeTeacherBtn.classList.toggle('active', mode === 'teacher');
-    moveModeSlider();
-    fieldsEl.style.opacity = '0';
-    setTimeout(() => { renderFieldsCheckboxes(); fieldsEl.style.opacity = '1'; rerenderList(); }, 150);
-  };
-  modeStudentBtn.addEventListener('click', () => switchPsMode('student'));
-  modeTeacherBtn.addEventListener('click', () => switchPsMode('teacher'));
-  // 최초 렌더 시 슬라이더가 기본 CSS 폭(0)에서 실제 폭으로 스냅되는 게
-  // 보이지 않도록, 트랜지션을 잠깐 끄고 위치부터 잡은 뒤 되살린다.
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    modeInd.style.transition = 'none';
-    moveModeSlider();
-    requestAnimationFrame(() => { modeInd.style.transition = ''; });
-  }));
+  fieldsEl.innerHTML = PERIOD_SUMMARY_FIELDS.map(f => `<label style="display:flex;align-items:center;gap:5px;background:var(--bg-deep);border-radius:var(--radius-pill);padding:6px 12px;font-size:12px;font-weight:600;color:var(--ink-2);cursor:pointer;">
+    <input type="checkbox" data-field="${f.key}" checked style="width:14px;height:14px;accent-color:var(--blue);cursor:pointer;">${f.label}
+  </label>`).join('');
+  fieldsEl.querySelectorAll('input[type=checkbox]').forEach(cb => cb.addEventListener('change', rerenderList));
 
   const runQuery = () => {
     let start = startInput.value, end = endInput.value;
@@ -2365,7 +2316,7 @@ function openPeriodSummarySheet() {
     API.getPeriodSummary(start, end)
       .then(data => {
         summary = data || [];
-        _renderPeriodSummary(summaryEl, listEl, summary, start, end, searchInput.value.trim(), getCheckedFields(), currentFieldDefs());
+        _renderPeriodSummary(summaryEl, listEl, summary, start, end, searchInput.value.trim(), getCheckedFields());
       })
       .catch(() => { listEl.innerHTML = _emptyState('결산을 불러오지 못했습니다.'); summaryEl.innerHTML = ''; });
   };
@@ -2376,7 +2327,7 @@ function openPeriodSummarySheet() {
   searchInput.addEventListener('input', () => {
     searchClear.style.display = searchInput.value ? '' : 'none';
     if (!summary.length) return;
-    _renderPeriodSummary(summaryEl, listEl, summary, startInput.value, endInput.value, searchInput.value.trim(), getCheckedFields(), currentFieldDefs());
+    _renderPeriodSummary(summaryEl, listEl, summary, startInput.value, endInput.value, searchInput.value.trim(), getCheckedFields());
   });
   searchClear.addEventListener('click', () => {
     searchInput.value = '';
@@ -2405,21 +2356,19 @@ function openPeriodSummarySheet() {
     startInput.value = _currentSemesterStartDate(); endInput.value = today; runQuery();
   });
   sheet.querySelector('#_psCopy').addEventListener('click', () => {
-    if (!summary.length) { showSuccessToast('복사할 내용이 없습니다'); return; }
-    const fields = [...sheet.querySelectorAll('#_psFields input:checked')].map(el => el.dataset.field);
-    const text = _buildPeriodSummaryText(summary, startInput.value, endInput.value, fields, currentFieldDefs());
-    navigator.clipboard.writeText(text).then(() => showSuccessToast('클립보드에 복사됐어요'));
+    if (!summary.length) { showSuccessToast('미리볼 내용이 없습니다'); return; }
+    const text = _buildPeriodSummaryText(summary, startInput.value, endInput.value, getCheckedFields());
+    _openTextPreviewSheet(text, '기간 결산 미리보기');
   });
 
   runQuery();
 }
 
-function _renderPeriodSummary(summaryEl, listEl, summary, start, end, searchQuery, checkedFields, fieldDefs) {
-  // checkedFields/fieldDefs 없이 호출되는 기존 코드 경로 보호용 기본값 —
-  // 없으면 예전처럼 출석률/결석/최대연속자습 3개만 보여준다.
-  const defs = fieldDefs || PERIOD_SUMMARY_FIELDS;
+function _renderPeriodSummary(summaryEl, listEl, summary, start, end, searchQuery, checkedFields) {
+  // checkedFields 없이 호출되는 기존 코드 경로 보호용 기본값 — 없으면
+  // 예전처럼 출석률/결석/최대연속자습 3개만 보여준다.
   const keys = checkedFields || ['rate', 'period', 'streak'];
-  const activeFieldDefs = defs.filter(f => keys.includes(f.key));
+  const activeFieldDefs = PERIOD_SUMMARY_FIELDS.filter(f => keys.includes(f.key));
   const active = summary.filter(s => s.attendRate !== null); // 기록이 있는 학생만 결산 대상으로 카운트
   const avgRate = active.length
     ? Math.round(active.reduce((sum, s) => sum + s.attendRate, 0) / active.length)
@@ -2466,10 +2415,13 @@ function _fmtDateShort(dateStr) {
 }
 
 // 기간 결산 텍스트 복사 + 팝업 목록 태그 둘 다에 쓰이는 항목 정의.
-// get(s): 카톡 복사 텍스트용 한 줄 문구. tag(s): 팝업 목록에 뜨는
-// 색깔 있는 뱃지 HTML — 체크박스로 고른 항목이 실시간으로 그대로
-// 화면 목록에도 반영되도록, 텍스트 복사와 화면 표시가 이 정의 하나를
-// 같이 참조한다(따로 관리하면 서로 어긋날 위험이 있어 하나로 묶음).
+// get(s): 카톡 복사 텍스트용 한 줄 문구(숨길 항목은 null 반환). tag(s):
+// 팝업 목록에 뜨는 색깔 있는 뱃지 HTML(숨길 항목은 빈 문자열) — 체크박스로
+// 고른 항목이 실시간으로 그대로 화면 목록에도 반영되도록, 텍스트 복사와
+// 화면 표시가 이 정의 하나를 같이 참조한다(따로 관리하면 서로 어긋날
+// 위험이 있어 하나로 묶음). 학생용/교사용을 따로 나누지 않고 하나로 통일 —
+// 대시보드에서 볼 항목과 학생에게 전달할 항목은 어차피 체크박스로 그때그때
+// 고르면 되므로 모드를 나눌 필요가 없다.
 const PERIOD_SUMMARY_FIELDS = [
   { key:'rate', label:'출석률', get: s => `출석률 ${s.attendRate}%`,
     tag: s => { const c=s.attendRate>=90?'var(--green)':s.attendRate>=70?'var(--amber)':'var(--red)'; const d=s.attendRate>=90?'var(--green-dim)':s.attendRate>=70?'var(--amber-dim)':'var(--red-dim)'; return `<span class="sch-dr-s" style="background:${d};color:${c};">출석률 ${s.attendRate}%</span>`; } },
@@ -2483,14 +2435,9 @@ const PERIOD_SUMMARY_FIELDS = [
     tag: s => `<span class="sch-dr-s" style="background:var(--green-dim);color:var(--green);">최대 연속 자습 ${s.periodMaxStreak}일</span>` },
   { key:'late', label:'기간 중 지각', get: s => `지각 ${s.lateCount}회`,
     tag: s => `<span class="sch-dr-s" style="background:var(--amber-dim);color:var(--amber);">지각 ${s.lateCount}회</span>` },
-  { key:'fine', label:'미납 벌금', get: s => `미납 벌금 ${s.fineUnpaid.toLocaleString()}원`,
-    tag: s => `<span class="sch-dr-s" style="background:${s.fineUnpaid>0?'var(--red-dim)':'var(--bg-deep)'};color:${s.fineUnpaid>0?'var(--red)':'var(--ink-3)'};">미납 벌금 ${s.fineUnpaid.toLocaleString()}원</span>` },
-];
-
-// 교사 내부 기록용 — 학생용 전체 항목에, 학생에게 그대로 보여주기엔
-// 애매한 조퇴·누적 위반까지 더한 세트.
-const PERIOD_SUMMARY_FIELDS_TEACHER = [
-  ...PERIOD_SUMMARY_FIELDS,
+  // 미납 벌금 0원이면 딱히 알릴 게 없는 상태라 태그/문구 자체를 숨긴다.
+  { key:'fine', label:'미납 벌금', get: s => s.fineUnpaid > 0 ? `미납 벌금 ${s.fineUnpaid.toLocaleString()}원` : null,
+    tag: s => s.fineUnpaid > 0 ? `<span class="sch-dr-s" style="background:var(--red-dim);color:var(--red);">미납 벌금 ${s.fineUnpaid.toLocaleString()}원</span>` : '' },
   { key:'early', label:'기간 중 조퇴', get: s => `조퇴 ${s.earlyCount}회`,
     tag: s => `<span class="sch-dr-s" style="background:var(--amber-dim);color:var(--amber);">조퇴 ${s.earlyCount}회</span>` },
   { key:'viol', label:'누적 위반', get: s => `위반 ${s.violationCount}회`,
@@ -2502,12 +2449,11 @@ const PERIOD_SUMMARY_FIELDS_TEACHER = [
 // 아니라 (최대연속 → 출석률) 성과 순으로 정렬하고 상위 3명은 메달을 붙여
 // 잘한 학생이 먼저 보이도록 한다(통계 탭 Top3와 같은 결의 표현).
 // fields: 체크박스에서 고른 필드 key 배열 — 굳이 안 보여주고 싶은 항목은
-// 빼고 복사 가능. fieldDefs: 학생용(PERIOD_SUMMARY_FIELDS) 또는
-// 교사용(PERIOD_SUMMARY_FIELDS_TEACHER) 중 현재 모드에 해당하는 정의 목록.
+// 빼고 복사 가능.
 const _MEDALS = ['🥇','🥈','🥉'];
-function _buildPeriodSummaryText(summary, start, end, fields, fieldDefs) {
+function _buildPeriodSummaryText(summary, start, end, fields) {
   const active = summary.filter(s => s.attendRate !== null);
-  const activeFields = fieldDefs.filter(f => fields.includes(f.key));
+  const activeFields = PERIOD_SUMMARY_FIELDS.filter(f => fields.includes(f.key));
   let text = `📊 기간 결산 (${_fmtDateShort(start)}~${_fmtDateShort(end)})\n`;
   GROUPS.forEach(g => {
     const gs = active.filter(s => s.group === g)
@@ -2516,12 +2462,46 @@ function _buildPeriodSummaryText(summary, start, end, fields, fieldDefs) {
     text += `\n[${g}]\n`;
     gs.forEach((s, i) => {
       const medal = _MEDALS[i] ? `${_MEDALS[i]} ` : '';
-      const parts = activeFields.map(f => f.get(s));
+      const parts = activeFields.map(f => f.get(s)).filter(Boolean); // null(숨김 항목) 제외
       const suffix = parts.length ? ` - ${parts.join(' · ')}` : '';
       text += `${medal}· ${s.name}${suffix}\n`;
     });
   });
   return text.trim();
+}
+
+// 클립보드에 바로 복사하지 않고, 실제로 뭐가 복사될지 먼저 눈으로 확인할 수
+// 있게 미리보기를 보여주는 스택 시트. 기간 결산 외에 다른 텍스트 복사
+// 기능에서도 재사용할 수 있도록 일반화해서 분리했다.
+function _openTextPreviewSheet(text, title) {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'custom-sheet-backdrop';
+  backdrop.style.zIndex = '3200';
+  const sheet = document.createElement('div');
+  sheet.className = 'custom-sheet';
+  sheet.style.cssText = 'max-height:80dvh;display:flex;flex-direction:column;padding-bottom:20px;';
+  sheet.innerHTML = `
+    <div class="custom-sheet-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <div style="font-size:15px;font-weight:800;color:var(--ink);letter-spacing:-0.4px;">${_esc(title || '미리보기')}</div>
+      <button id="_tpvClose" aria-label="닫기" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--sh-xs);">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <textarea id="_tpvText" readonly style="flex:1;min-height:220px;resize:none;border:1px solid var(--bg-deep);border-radius:var(--radius);padding:12px;font-size:13px;line-height:1.65;color:var(--ink-2);background:var(--bg);font-family:inherit;">${_esc(text)}</textarea>
+    <button class="vh-add-btn is-green" id="_tpvCopy" style="margin:14px 0 0;flex-shrink:0;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+      클립보드에 복사
+    </button>`;
+  backdrop.appendChild(sheet);
+  document.body.appendChild(backdrop);
+  requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+  sheet.querySelector('#_tpvClose').addEventListener('click', close);
+  sheet.querySelector('#_tpvCopy').addEventListener('click', () => {
+    navigator.clipboard.writeText(text).then(() => { showSuccessToast('클립보드에 복사됐어요'); close(); });
+  });
 }
 
 /* ════════════════════════════════
