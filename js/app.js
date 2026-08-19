@@ -17,8 +17,9 @@ const VIOLATION_ACTIONS = ['경고', '벌금', '직접 입력'];
    n.0.0 대규모 업데이트 · 0.n.0 기능/디자인 개선 · 0.0.n 버그 수정
    최신순 — 새 배포 때마다 맨 위에 추가할 것
 ════════════════════════════════ */
-const APP_VERSION = '2.17.0';
+const APP_VERSION = '2.17.1';
 const CHANGELOG = [
+  { v:'2.17.1', d:'2026-08-19', t:'patch', title:'기간 결산 버튼 아이콘을 확성기로 원복(텍스트 버튼 대신), 팝업 헤더의 색깔 이모지 제거 — 다른 시트들과 동일하게 텍스트만' },
   { v:'2.17.0', d:'2026-08-19', t:'minor', title:'기간 결산: 최대 연속 자습 하나로 통일, 아이콘을 텍스트 버튼으로 교체, 텍스트 복사에 누적/기간중 결석 분리 표시 + 포함 항목 체크박스 선택 추가' },
   { v:'2.16.1', d:'2026-08-19', t:'patch', title:'기간 결산 아이콘을 통계 탭과 겹치지 않는 확성기 아이콘으로 교체, 기본 조회 기간을 "이번 달"로 변경, 텍스트 복사 시 성과순 정렬+메달 표시' },
   { v:'2.16.0', d:'2026-08-19', t:'minor', title:'연속 출석 스트릭 표시 + 대시보드에 "기간 결산" 추가 (출석률·결석·최대연속, 카톡 공지용 텍스트 복사)' },
@@ -2190,10 +2191,7 @@ function openPeriodSummarySheet() {
   sheet.innerHTML = `
     <div class="custom-sheet-handle"></div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-      <div style="display:flex;align-items:center;gap:8px;">
-        <span style="font-size:18px;line-height:1;">📊</span>
-        <div style="font-size:15px;font-weight:800;color:var(--ink);letter-spacing:-0.4px;">기간 결산</div>
-      </div>
+      <div style="font-size:15px;font-weight:800;color:var(--ink);letter-spacing:-0.4px;">기간 결산</div>
       <button id="_psClose" aria-label="닫기" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--sh-xs);">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
