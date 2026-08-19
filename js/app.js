@@ -17,8 +17,10 @@ const VIOLATION_ACTIONS = ['경고', '벌금', '직접 입력'];
    n.0.0 대규모 업데이트 · 0.n.0 기능/디자인 개선 · 0.0.n 버그 수정
    최신순 — 새 배포 때마다 맨 위에 추가할 것
 ════════════════════════════════ */
-const APP_VERSION = '2.26.0';
+const APP_VERSION = '2.26.2';
 const CHANGELOG = [
+  { v:'2.26.2', d:'2026-08-19', t:'patch', title:'전체 바텀시트(약 20곳) 닫힘 애니메이션이 실제 CSS 전환(400ms)보다 50ms 일찍 DOM에서 제거돼 끝에서 살짝 끊겨 보이던 문제 일괄 수정' },
+  { v:'2.26.1', d:'2026-08-19', t:'patch', title:'대시보드 점등 표시를 결석자만/전체 명단 필터 바로 아래 붙여 하나의 카드처럼 통합(양각 음영 적용), 학생 카드 클릭 시 스켈레톤이 너무 짧게 번쩍이던 문제 수정' },
   { v:'2.26.0', d:'2026-08-19', t:'minor', title:'학생 없는 자습반은 명단·규정위반 등록·대시보드 점등에서 자동으로 숨김(학생 추가/자습반 변경 화면은 그대로), 출석체크 미완료 알림은 일단 꺼둠' },
   { v:'2.25.0', d:'2026-08-19', t:'minor', title:'대시보드에 반별 세션 점등 표시 추가 — 자습반 5개 × 세션 3칸으로 그날 어떤 반의 어떤 시간대가 출석체크됐는지 한눈에 확인' },
   { v:'2.24.0', d:'2026-08-19', t:'minor', title:'출석 저장 실패 시(네트워크 끊김) 자동 오프라인 큐잉 — 연결되면 자동 재전송, 화면 상단에 대기 건수 칩 표시' },
@@ -374,7 +376,7 @@ function openInstallGuideSheet() {
   backdrop.appendChild(sheet);
   document.body.appendChild(backdrop);
   requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
-  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 420); };
   backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
   sheet.querySelector('#_installClose').addEventListener('click', close);
 
@@ -434,7 +436,7 @@ function showSheet(opts) {
     `<div class="custom-sheet-btns">${opts.buttons.map((b,i)=>`<button class="custom-sheet-btn ${b.cls}" id="_csb${i}">${b.label}</button>`).join('')}</div>`;
   backdrop.appendChild(sheet); document.body.appendChild(backdrop);
   requestAnimationFrame(()=>requestAnimationFrame(()=>backdrop.classList.add('show')));
-  const close = () => { backdrop.classList.remove('show'); setTimeout(()=>backdrop.remove(),350); };
+  const close = () => { backdrop.classList.remove('show'); setTimeout(()=>backdrop.remove(),420); };
   opts.buttons.forEach((b,i)=>sheet.querySelector(`#_csb${i}`).addEventListener('click',()=>{ close(); if(b.cb)b.cb(); }));
   backdrop.addEventListener('click',e=>{ if(e.target===backdrop){ close(); const c=opts.buttons.find(b=>b.cls==='csb-cancel'); if(c&&c.cb)c.cb(); } });
 }
@@ -2282,8 +2284,16 @@ function _openStudentInsightSheet(student) {
   backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
   sheet.querySelector('#_diClose').addEventListener('click', close);
 
+  // API 응답이 너무 빨리(수십~백여ms) 오면 스켈레톤이 찰나만 번쩍이고
+  // 사라져서 오히려 어색해 보임 — 스켈레톤이 최소한 이만큼은 눈에 보이도록
+  // 붙잡아둔다. 응답이 이미 이 시간보다 오래 걸렸으면 추가 지연은 없음.
+  const MIN_SKELETON_MS = 260;
+  const _t0 = Date.now();
   API.getStudentInsight(student.id)
-    .then(insight => _renderStudentInsightBody(sheet.querySelector('#_diBody'), insight))
+    .then(insight => {
+      const wait = Math.max(0, MIN_SKELETON_MS - (Date.now() - _t0));
+      setTimeout(() => _renderStudentInsightBody(sheet.querySelector('#_diBody'), insight), wait);
+    })
     .catch(() => { sheet.querySelector('#_diBody').innerHTML = _emptyState('정보를 불러오지 못했습니다.'); });
 }
 
@@ -2428,7 +2438,7 @@ function openPeriodSummarySheet() {
   backdrop.appendChild(sheet);
   document.body.appendChild(backdrop);
   requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
-  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 420); };
   backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
   sheet.querySelector('#_psClose').addEventListener('click', close);
 
@@ -2657,7 +2667,7 @@ function _openTextPreviewSheet(text, title) {
   backdrop.appendChild(sheet);
   document.body.appendChild(backdrop);
   requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
-  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 420); };
   backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
   sheet.querySelector('#_tpvClose').addEventListener('click', close);
   sheet.querySelector('#_tpvCopy').addEventListener('click', () => {
@@ -2922,7 +2932,7 @@ function _openStudentPickerSheet(students) {
 
   backdrop.appendChild(sheet); document.body.appendChild(backdrop);
   requestAnimationFrame(()=>requestAnimationFrame(()=>backdrop.classList.add('show')));
-  const close = () => { backdrop.classList.remove('show'); setTimeout(()=>backdrop.remove(),350); };
+  const close = () => { backdrop.classList.remove('show'); setTimeout(()=>backdrop.remove(),420); };
   backdrop.addEventListener('click', e=>{ if(e.target===backdrop)close(); });
 
   students.forEach((s,i) => {
@@ -2997,7 +3007,7 @@ function openViolSheet(student, preselect = {}) {
 
   backdrop.appendChild(sheet); document.body.appendChild(backdrop);
   requestAnimationFrame(()=>requestAnimationFrame(()=>backdrop.classList.add('show')));
-  backdrop.addEventListener('click', e=>{ if(e.target===backdrop){ backdrop.classList.remove('show'); setTimeout(()=>backdrop.remove(),350); } });
+  backdrop.addEventListener('click', e=>{ if(e.target===backdrop){ backdrop.classList.remove('show'); setTimeout(()=>backdrop.remove(),420); } });
   window._violBackdrop = backdrop;
   if (preselect.violType) {
     const sel = sheet.querySelector('#_vType');
@@ -3070,7 +3080,7 @@ function _submitViolation() {
 
   API.saveViolation(payload)
     .then(() => {
-      if (window._violBackdrop) { window._violBackdrop.classList.remove('show'); setTimeout(()=>window._violBackdrop?.remove(),350); }
+      if (window._violBackdrop) { window._violBackdrop.classList.remove('show'); setTimeout(()=>window._violBackdrop?.remove(),420); }
       showSuccessToast('위반 등록 완료', `${_violTarget.name} · ${vType}`);
       _rosterLoaded = false;
       if (document.getElementById('tab-roster')?.classList.contains('active')) {
@@ -3185,7 +3195,7 @@ function openActivityLogSheet() {
   document.body.appendChild(backdrop);
   requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
 
-  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 420); };
   backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
   sheet.querySelector('#_alClose').addEventListener('click', close);
   sheet.querySelector('#_alPost').addEventListener('click', () => {
@@ -3314,7 +3324,7 @@ function _openTeacherMenu() {
   document.body.appendChild(backdrop);
   requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
 
-  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 420); };
   backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
   sheet.querySelector('#_tmClose').addEventListener('click', close);
   allItems.forEach((item, i) => {
@@ -3383,7 +3393,7 @@ function _openStudentPickerSheetEx(students, callback) {
   document.body.appendChild(backdrop);
   requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
 
-  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 420); };
   backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
   sheet.querySelector('#_spxGroup').addEventListener('change', function() { renderStudents(this.value); });
 }
@@ -3466,7 +3476,7 @@ function _renderAttEditor(student, records) {
   let _aeChanged = false;
   const close = () => {
     backdrop.classList.remove('show');
-    setTimeout(() => backdrop.remove(), 350);
+    setTimeout(() => backdrop.remove(), 420);
     if (_aeChanged) {
       _cache.stats = null;
       _rosterLoaded = false;
@@ -3691,7 +3701,7 @@ function _renderScheduleEditor(student, rawSchedule, onSaved) {
   document.body.appendChild(backdrop);
   requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
 
-  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 420); };
   backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
   sheet.querySelector('#_sceClose').addEventListener('click', close);
 
@@ -3786,7 +3796,7 @@ function _renderHolidayEditorSheet() {
   document.body.appendChild(backdrop);
   requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
 
-  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 420); };
   backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
   sheet.querySelector('#_heClose').addEventListener('click', close);
 
@@ -3823,7 +3833,7 @@ function _teacherResetAttendance() {
   document.body.appendChild(backdrop);
   requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
 
-  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 420); };
   backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
   sheet.querySelector('#_traClose').addEventListener('click', close);
 
@@ -3890,7 +3900,7 @@ function _teacherAddStudent() {
   document.body.appendChild(backdrop);
   requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
 
-  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 420); };
   backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
 
   sheet.querySelector('#_asSubmit').addEventListener('click', async () => {
@@ -3955,7 +3965,7 @@ function _teacherChangeRoom(student) {
   document.body.appendChild(backdrop);
   requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
 
-  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 420); };
   backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
 
   sheet.querySelectorAll('._crBtn').forEach(btn => {
@@ -4049,7 +4059,7 @@ function _teacherImportStudents() {
   document.body.appendChild(backdrop);
   requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
 
-  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 420); };
   backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
   sheet.querySelector('#_impTmpl').addEventListener('click', _downloadStudentTemplate);
 
@@ -4182,7 +4192,7 @@ function _teacherExportData() {
   document.body.appendChild(backdrop);
   requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
 
-  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 420); };
   backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
 
   sheet.querySelector('#_expBtn').addEventListener('click', async () => {
@@ -4310,7 +4320,7 @@ function _renderFineSheet(fines) {
   document.body.appendChild(backdrop);
   requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
 
-  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 420); };
   backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
   sheet.querySelector('#_fshClose').addEventListener('click', close);
   sheet.querySelector('#_fshCopy').addEventListener('click', () => {
@@ -4510,7 +4520,7 @@ function _editFineRecord(viol, onSaved) {
   document.body.appendChild(backdrop);
   requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
 
-  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 420); };
   backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
   sheet.querySelector('#_feClose').addEventListener('click', close);
   sheet.querySelector('#_feCancel').addEventListener('click', close);
@@ -4647,7 +4657,7 @@ function _openChangelogSheet() {
   backdrop.appendChild(sheet);
   document.body.appendChild(backdrop);
   requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
-  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 350); };
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 420); };
   backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
   sheet.querySelector('#_clClose').addEventListener('click', close);
 }

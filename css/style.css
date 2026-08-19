@@ -559,7 +559,10 @@ html[data-theme="dark"] .vh-item::after { background:linear-gradient(158deg, rgb
 /* 대시보드 — 반별 세션 점등 표시. 그 반의 그 세션 출석 저장이 됐으면 켜짐.
    반마다 신호등처럼 점 3개를 바짝 붙여서 아주 작게 — 라벨/세션명은 텍스트로 늘어놓지 않고
    각 점의 title(호버 툴팁)로만 제공한다. */
-.dash-lights { display:flex; flex-wrap:wrap; align-items:center; gap:9px; background:var(--surface); border-radius:var(--radius-sm); box-shadow:var(--sh-sm); padding:6px 10px; margin-bottom:14px; }
+/* 결석자만/전체 명단 필터 바로 아래 붙여서 한 덩어리처럼 보이게 하되,
+   같은 배경색(var(--surface)) 위에서도 도드라지도록 --sh-md(양각 하이라이트
+   포함)를 써서 눌린 필터 바(--sh-pressed)와 대비되는 튀어나온 느낌을 준다. */
+.dash-lights { display:flex; flex-wrap:wrap; align-items:center; gap:9px; background:var(--surface); border-radius:var(--radius-sm); box-shadow:var(--sh-md); padding:6px 10px; }
 .dash-lights-grp { display:flex; align-items:center; gap:3px; }
 .dash-lights-label { font-size:9px; font-weight:800; color:var(--ink-3); margin-right:1px; }
 .dash-light { width:6px; height:6px; border-radius:50%; background:var(--bg-deep); box-shadow:var(--sh-pressed); transition:background var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease); }
