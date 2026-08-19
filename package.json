@@ -1,0 +1,14 @@
+{
+  "name": "gb-attendance",
+  "private": true,
+  "version": "1.0.0",
+  "description": "청·백운반 자율학습 출석부 — E2E 테스트",
+  "scripts": {
+    "test": "playwright test",
+    "test:report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "http-server": "^14.1.1"
+  }
+}
