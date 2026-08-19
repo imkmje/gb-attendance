@@ -17,8 +17,9 @@ const VIOLATION_ACTIONS = ['경고', '벌금', '직접 입력'];
    n.0.0 대규모 업데이트 · 0.n.0 기능/디자인 개선 · 0.0.n 버그 수정
    최신순 — 새 배포 때마다 맨 위에 추가할 것
 ════════════════════════════════ */
-const APP_VERSION = '2.18.1';
+const APP_VERSION = '2.18.2';
 const CHANGELOG = [
+  { v:'2.18.2', d:'2026-08-19', t:'patch', title:'명단·통계·시간표·기간결산 검색창에 × 지우기 버튼 추가' },
   { v:'2.18.1', d:'2026-08-19', t:'patch', title:'기간 결산 텍스트 복사 항목에 "누적 자습 시간" 추가' },
   { v:'2.18.0', d:'2026-08-19', t:'minor', title:'명단·통계·기간결산 탭에 학생 이름 검색 추가, 기간결산 시작일>종료일 자동 보정, 학생 인사이트 "최근 결석 이력"을 날짜별로 병합(같은 날 여러 세션이어도 카드 하나)' },
   { v:'2.17.1', d:'2026-08-19', t:'patch', title:'기간 결산 버튼 아이콘을 확성기로 원복(텍스트 버튼 대신), 팝업 헤더의 색깔 이모지 제거 — 다른 시트들과 동일하게 텍스트만' },
@@ -138,6 +139,21 @@ function _esc(str) {
 
 function _emptyState(text, iconSvg) {
   return `<div class="cd-empty"><div class="cd-empty-icon">${iconSvg || _EMPTY_ICON_INBOX}</div><div class="cd-empty-text">${text}</div></div>`;
+}
+
+// 명단/통계/시간표/기간결산 검색창이 공유하는 × 지우기 버튼 로직.
+// 입력값이 있을 때만 버튼을 보여주고, 누르면 비운 뒤 해당 필터 함수를
+// 다시 호출해 전체 목록으로 돌아가게 한다.
+function _updateSearchClear(inputId, clearId) {
+  const inp = document.getElementById(inputId);
+  const btn = document.getElementById(clearId);
+  if (btn) btn.style.display = inp && inp.value ? '' : 'none';
+}
+function _clearSearchInput(inputId, clearId, onCleared) {
+  const inp = document.getElementById(inputId);
+  if (inp) inp.value = '';
+  _updateSearchClear(inputId, clearId);
+  onCleared('');
 }
 
 // 로컬 타임존 기준 오늘 날짜 (YYYY-MM-DD)
@@ -1456,6 +1472,7 @@ function handleSort(col){ sortState.asc=(sortState.col===col)?!sortState.asc:tru
 let _statsSearchQuery = '';
 function filterStatsByName(val) {
   _statsSearchQuery = val.trim();
+  _updateSearchClear('statsSearchInput', 'statsSearchClear');
   filterStats();
 }
 
@@ -1547,6 +1564,7 @@ function _schDataFiltered() {
 }
 function filterSchByName(val) {
   _schSearchQuery = val.trim();
+  _updateSearchClear('schSearchInput', 'schSearchClear');
   _renderSchCards();
   renderSchDay(_schDayIdx);
 }
@@ -1764,6 +1782,7 @@ function selectRosterPill(idx) {
 
 function filterRosterByName(val) {
   _rosterSearchQuery = val.trim();
+  _updateSearchClear('rosterSearchInput', 'rosterSearchClear');
   _renderRosterCards();
 }
 
@@ -2228,7 +2247,10 @@ function openPeriodSummarySheet() {
       <button class="ssf-chip on" id="_psPresetMonth">이번 달</button>
       <button class="ssf-chip" id="_psPresetSemester">학기 전체</button>
     </div>
-    <input type="text" id="_psSearch" class="cd-input" placeholder="학생 이름 검색" style="width:100%;box-sizing:border-box;margin-bottom:14px;">
+    <div style="position:relative;margin-bottom:14px;">
+      <input type="text" id="_psSearch" class="cd-input" placeholder="학생 이름 검색" style="width:100%;box-sizing:border-box;padding-right:32px;">
+      <span class="clear-input-btn" id="_psSearchClear" role="button" tabindex="0" aria-label="검색어 지우기" style="display:none;">&times;</span>
+    </div>
     <div id="_psSummary" style="text-align:center;margin-bottom:14px;"></div>
     <div id="_psList" style="overflow-y:auto;flex:1;">
       ${Array.from({length:3}).map(() => `<div style="background:var(--surface);border-radius:var(--radius);box-shadow:var(--sh-md);padding:14px;margin-bottom:10px;"><div class="cd-skeleton" style="height:12px;width:30%;margin-bottom:10px;"></div><div class="cd-skeleton" style="height:38px;width:100%;"></div></div>`).join('')}
@@ -2256,6 +2278,7 @@ function openPeriodSummarySheet() {
   const listEl       = sheet.querySelector('#_psList');
   const summaryEl    = sheet.querySelector('#_psSummary');
   const searchInput = sheet.querySelector('#_psSearch');
+  const searchClear = sheet.querySelector('#_psSearchClear');
 
   const runQuery = () => {
     let start = startInput.value, end = endInput.value;
@@ -2281,8 +2304,13 @@ function openPeriodSummarySheet() {
   // 텍스트 복사는 검색과 무관하게 항상 전체를 대상으로 하도록 유지
   // (검색 중인 걸 깜빡하고 복사하면 몇 명 빠진 채로 공지가 나갈 위험 방지).
   searchInput.addEventListener('input', () => {
+    searchClear.style.display = searchInput.value ? '' : 'none';
     if (!summary.length) return;
     _renderPeriodSummary(summaryEl, listEl, summary, startInput.value, endInput.value, searchInput.value.trim());
+  });
+  searchClear.addEventListener('click', () => {
+    searchInput.value = '';
+    searchInput.dispatchEvent(new Event('input'));
   });
 
   const chips = {

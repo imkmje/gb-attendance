@@ -210,7 +210,10 @@
   <div id="view-roster" class="tab-view">
     <div class="view-filter-bar" style="flex-direction:column;align-items:stretch;gap:8px;padding:10px 14px;">
       <div class="roster-pill-wrap" id="rosterPillWrap"></div>
-      <input type="text" id="rosterSearchInput" class="cd-input" placeholder="학생 이름 검색" style="width:100%;box-sizing:border-box;" oninput="filterRosterByName(this.value)">
+      <div style="position:relative;">
+        <input type="text" id="rosterSearchInput" class="cd-input" placeholder="학생 이름 검색" style="width:100%;box-sizing:border-box;padding-right:32px;" oninput="filterRosterByName(this.value)">
+        <span class="clear-input-btn" id="rosterSearchClear" onclick="_clearSearchInput('rosterSearchInput','rosterSearchClear',filterRosterByName)" role="button" tabindex="0" aria-label="검색어 지우기" style="display:none;">&times;</span>
+      </div>
     </div>
     <div class="main-container" id="rosterContainer">
       <div class="text-center py-5" style="color:var(--ink-3);font-weight:600;">명단을 불러오는 중...</div>
@@ -224,7 +227,10 @@
         <select id="filterStudyGroup" class="cd-select" style="flex:1;" onchange="filterStats()"></select>
         <select id="filterClass"      class="cd-select" style="flex:1;" onchange="filterStats()"></select>
       </div>
-      <input type="text" id="statsSearchInput" class="cd-input" placeholder="학생 이름 검색" style="width:100%;box-sizing:border-box;" oninput="filterStatsByName(this.value)">
+      <div style="position:relative;">
+        <input type="text" id="statsSearchInput" class="cd-input" placeholder="학생 이름 검색" style="width:100%;box-sizing:border-box;padding-right:32px;" oninput="filterStatsByName(this.value)">
+        <span class="clear-input-btn" id="statsSearchClear" onclick="_clearSearchInput('statsSearchInput','statsSearchClear',filterStatsByName)" role="button" tabindex="0" aria-label="검색어 지우기" style="display:none;">&times;</span>
+      </div>
     </div>
     <div class="container py-4">
       <div class="top3-card">
@@ -262,7 +268,10 @@
           </button>
         </div>
       </div>
-      <input type="text" id="schSearchInput" class="cd-input" placeholder="학생 이름 검색" style="width:100%;box-sizing:border-box;" oninput="filterSchByName(this.value)">
+      <div style="position:relative;">
+        <input type="text" id="schSearchInput" class="cd-input" placeholder="학생 이름 검색" style="width:100%;box-sizing:border-box;padding-right:32px;" oninput="filterSchByName(this.value)">
+        <span class="clear-input-btn" id="schSearchClear" onclick="_clearSearchInput('schSearchInput','schSearchClear',filterSchByName)" role="button" tabindex="0" aria-label="검색어 지우기" style="display:none;">&times;</span>
+      </div>
     </div>
     <div class="container py-4">
       <div id="schTitle" style="display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700;color:var(--ink);margin-bottom:12px;">
@@ -385,8 +394,8 @@
 
 
   <script src="js/config.js?v=20260720d"></script>
-  <script src="js/api.js?v=20260819t"></script>
-  <script src="js/app.js?v=20260819t"></script>
+  <script src="js/api.js?v=20260819u"></script>
+  <script src="js/app.js?v=20260819u"></script>
 
 </body>
 </html>
