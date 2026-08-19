@@ -131,6 +131,13 @@ const API = (() => {
     }
   }
 
+  // 위반 action 문자열("벌금 5,000원 · ...")에서 벌금 금액만 뽑아낸다.
+  // getStudentInsight/getPeriodSummary가 공유.
+  function _parseFineAmount(action) {
+    const m = (action || '').match(/벌금\s*([\d,]+)원/);
+    return m ? parseInt(m[1].replace(/,/g, '')) : 0;
+  }
+
   // 누적 자습 시간 — 통계 탭(calculateStats)과 기간 결산이 동일한 계산을
   // 공유. 출석한 세션의 가중치(SESSION_WEIGHTS)에서 조퇴·지각 분(分)을
   // 시간으로 환산해 뺀다.
@@ -958,9 +965,8 @@ const API = (() => {
 
     let fineTotal = 0, finePaid = 0;
     violations.forEach(v => {
-      const m = (v.action || '').match(/벌금\s*([\d,]+)원/);
-      if (m) {
-        const f = parseInt(m[1].replace(/,/g, ''));
+      const f = _parseFineAmount(v.action);
+      if (f > 0) {
         fineTotal += f;
         if (v.paid) finePaid += f;
       }
@@ -1003,24 +1009,33 @@ const API = (() => {
    * 누적(전체 기록 기준) 결석 횟수를 학생 전원에 대해 함께 계산해서 반환.
    * "최대 연속 자습"은 기간 자체를 이미 조정할 수 있으므로 기간 기준
    * 하나만 둔다(학기 전체를 보고 싶으면 기간을 학기 전체로 잡으면 됨).
+   * 지각·조퇴는 기간 중 기준, 위반·미납 벌금은 학생 전달용이 아니라
+   * 교사 내부 기록용이라 누적(전체) 기준으로 반환.
    * GAS 없음 — 신규
    */
   async function getPeriodSummary(startDate, endDate) {
-    const [students, attendance] = await Promise.all([
+    const [students, attendance, violations] = await Promise.all([
       _get('students?select=id,class_num,student_num,name,study_room&order=study_room,class_num,student_num'),
       _get('attendance?select=student_id,session,status,record_date,no_count,early_leave_mins,late_mins'),
+      _get('violations?select=student_id,action,paid').catch(() => []),
     ]);
     const attByStudent = {};
     for (const a of attendance) (attByStudent[a.student_id] ??= []).push(a);
+    const violByStudent = {};
+    for (const v of violations) (violByStudent[v.student_id] ??= []).push(v);
 
     return students.map(s => {
       const allRecs    = attByStudent[s.id] ?? [];
       const periodRecs = allRecs.filter(r => r.record_date >= startDate && r.record_date <= endDate);
+      const studentViolations = violByStudent[s.id] ?? [];
 
       const attendCount   = periodRecs.filter(r => r.status === '출석').length;
       const countedAbsent = _calcAbsentCounts(periodRecs);
       const total          = attendCount + countedAbsent;
       const attendRate      = total > 0 ? Math.round((attendCount / total) * 100) : null;
+
+      let fineUnpaid = 0;
+      studentViolations.forEach(v => { if (!v.paid) fineUnpaid += _parseFineAmount(v.action); });
 
       return {
         id:    s.id,
@@ -1033,6 +1048,10 @@ const API = (() => {
         totalAbsentCount:  _calcAbsentCounts(allRecs), // 누적(전체) 결석
         totalStudyHours:   _calcStudyHours(allRecs),   // 누적(전체) 자습 시간 — 통계 탭과 동일한 정의
         periodMaxStreak:   _maxPresentStreak(periodRecs),
+        lateCount:         periodRecs.filter(r => (r.late_mins ?? 0) > 0).length,        // 기간 중 지각
+        earlyCount:        periodRecs.filter(r => (r.early_leave_mins ?? 0) > 0).length, // 기간 중 조퇴
+        violationCount:    studentViolations.length, // 누적(전체) 위반
+        fineUnpaid,                                   // 누적(전체) 미납 벌금
       };
     });
   }

@@ -17,8 +17,9 @@ const VIOLATION_ACTIONS = ['경고', '벌금', '직접 입력'];
    n.0.0 대규모 업데이트 · 0.n.0 기능/디자인 개선 · 0.0.n 버그 수정
    최신순 — 새 배포 때마다 맨 위에 추가할 것
 ════════════════════════════════ */
-const APP_VERSION = '2.18.2';
+const APP_VERSION = '2.19.0';
 const CHANGELOG = [
+  { v:'2.19.0', d:'2026-08-19', t:'minor', title:'기간 결산에 "학생 전달용"/"교사용" 모드 추가 — 교사용은 지각·조퇴·위반·미납 벌금까지 체크박스로 골라 복사 가능, 부드러운 슬라이드+페이드 전환' },
   { v:'2.18.2', d:'2026-08-19', t:'patch', title:'명단·통계·시간표·기간결산 검색창에 × 지우기 버튼 추가' },
   { v:'2.18.1', d:'2026-08-19', t:'patch', title:'기간 결산 텍스트 복사 항목에 "누적 자습 시간" 추가' },
   { v:'2.18.0', d:'2026-08-19', t:'minor', title:'명단·통계·기간결산 탭에 학생 이름 검색 추가, 기간결산 시작일>종료일 자동 보정, 학생 인사이트 "최근 결석 이력"을 날짜별로 병합(같은 날 여러 세션이어도 카드 하나)' },
@@ -2255,12 +2256,15 @@ function openPeriodSummarySheet() {
     <div id="_psList" style="overflow-y:auto;flex:1;">
       ${Array.from({length:3}).map(() => `<div style="background:var(--surface);border-radius:var(--radius);box-shadow:var(--sh-md);padding:14px;margin-bottom:10px;"><div class="cd-skeleton" style="height:12px;width:30%;margin-bottom:10px;"></div><div class="cd-skeleton" style="height:38px;width:100%;"></div></div>`).join('')}
     </div>
-    <div style="font-size:11px;font-weight:700;color:var(--ink-3);margin:14px 0 6px;flex-shrink:0;">학생 전달용 텍스트에 포함할 항목</div>
-    <div id="_psFields" style="display:flex;flex-wrap:wrap;gap:6px;flex-shrink:0;">
-      ${PERIOD_SUMMARY_FIELDS.map(f => `<label style="display:flex;align-items:center;gap:5px;background:var(--bg-deep);border-radius:var(--radius-pill);padding:6px 12px;font-size:12px;font-weight:600;color:var(--ink-2);cursor:pointer;">
-        <input type="checkbox" data-field="${f.key}" checked style="width:14px;height:14px;accent-color:var(--blue);cursor:pointer;">${f.label}
-      </label>`).join('')}
+    <div class="sch-pill-wrap" style="padding:0;margin-top:14px;flex-shrink:0;">
+      <div class="sch-pill-bar" id="_psModeBar">
+        <div class="sch-pill-indicator" id="_psModeIndicator"></div>
+        <div class="sch-pill-item active" id="_psMode-student">학생 전달용</div>
+        <div class="sch-pill-item" id="_psMode-teacher">교사용</div>
+      </div>
     </div>
+    <div style="font-size:11px;font-weight:700;color:var(--ink-3);margin:12px 0 6px;flex-shrink:0;" id="_psFieldsLabel">학생 전달용 텍스트에 포함할 항목</div>
+    <div id="_psFields" style="display:flex;flex-wrap:wrap;gap:6px;flex-shrink:0;transition:opacity var(--dur-fast) var(--ease);"></div>
     <button class="vh-add-btn is-green" id="_psCopy" style="margin:12px 0 0;flex-shrink:0;">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
       텍스트 복사
@@ -2279,6 +2283,53 @@ function openPeriodSummarySheet() {
   const summaryEl    = sheet.querySelector('#_psSummary');
   const searchInput = sheet.querySelector('#_psSearch');
   const searchClear = sheet.querySelector('#_psSearchClear');
+
+  // 학생 전달용 ↔ 교사용 모드 — 세그먼트 슬라이더는 시간표/대시보드 탭과
+  // 같은 검증된 스프링 애니메이션(.sch-pill-indicator)을 그대로 재사용하고,
+  // 체크박스 목록 자체도 순간적으로 안 바뀌게 살짝 페이드 전환을 준다.
+  let psMode = 'student';
+  const modeBar   = sheet.querySelector('#_psModeBar');
+  const modeInd    = sheet.querySelector('#_psModeIndicator');
+  const modeStudentBtn = sheet.querySelector('#_psMode-student');
+  const modeTeacherBtn = sheet.querySelector('#_psMode-teacher');
+  const fieldsLabelEl = sheet.querySelector('#_psFieldsLabel');
+  const fieldsEl       = sheet.querySelector('#_psFields');
+
+  const currentFieldDefs = () => psMode === 'teacher' ? PERIOD_SUMMARY_FIELDS_TEACHER : PERIOD_SUMMARY_FIELDS;
+
+  const moveModeSlider = () => {
+    const active = modeBar.querySelector('.sch-pill-item.active');
+    if (!active) return;
+    modeInd.style.width = active.offsetWidth + 'px';
+    modeInd.style.transform = 'translateX(' + active.offsetLeft + 'px)';
+  };
+
+  const renderFieldsCheckboxes = () => {
+    fieldsLabelEl.textContent = psMode === 'teacher' ? '교사 기록용 텍스트에 포함할 항목' : '학생 전달용 텍스트에 포함할 항목';
+    fieldsEl.innerHTML = currentFieldDefs().map(f => `<label style="display:flex;align-items:center;gap:5px;background:var(--bg-deep);border-radius:var(--radius-pill);padding:6px 12px;font-size:12px;font-weight:600;color:var(--ink-2);cursor:pointer;">
+      <input type="checkbox" data-field="${f.key}" checked style="width:14px;height:14px;accent-color:var(--blue);cursor:pointer;">${f.label}
+    </label>`).join('');
+  };
+  renderFieldsCheckboxes();
+
+  const switchPsMode = mode => {
+    if (psMode === mode) return;
+    psMode = mode;
+    modeStudentBtn.classList.toggle('active', mode === 'student');
+    modeTeacherBtn.classList.toggle('active', mode === 'teacher');
+    moveModeSlider();
+    fieldsEl.style.opacity = '0';
+    setTimeout(() => { renderFieldsCheckboxes(); fieldsEl.style.opacity = '1'; }, 150);
+  };
+  modeStudentBtn.addEventListener('click', () => switchPsMode('student'));
+  modeTeacherBtn.addEventListener('click', () => switchPsMode('teacher'));
+  // 최초 렌더 시 슬라이더가 기본 CSS 폭(0)에서 실제 폭으로 스냅되는 게
+  // 보이지 않도록, 트랜지션을 잠깐 끄고 위치부터 잡은 뒤 되살린다.
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    modeInd.style.transition = 'none';
+    moveModeSlider();
+    requestAnimationFrame(() => { modeInd.style.transition = ''; });
+  }));
 
   const runQuery = () => {
     let start = startInput.value, end = endInput.value;
@@ -2337,7 +2388,7 @@ function openPeriodSummarySheet() {
   sheet.querySelector('#_psCopy').addEventListener('click', () => {
     if (!summary.length) { showSuccessToast('복사할 내용이 없습니다'); return; }
     const fields = [...sheet.querySelectorAll('#_psFields input:checked')].map(el => el.dataset.field);
-    const text = _buildPeriodSummaryText(summary, startInput.value, endInput.value, fields);
+    const text = _buildPeriodSummaryText(summary, startInput.value, endInput.value, fields, currentFieldDefs());
     navigator.clipboard.writeText(text).then(() => showSuccessToast('클립보드에 복사됐어요'));
   });
 
@@ -2406,16 +2457,27 @@ const PERIOD_SUMMARY_FIELDS = [
   { key:'streak', label:'최대 연속 자습',  get: s => `최대 연속 자습 ${s.periodMaxStreak}일` },
 ];
 
+// 교사 내부 기록용 — 학생용 항목 전체에 지각·조퇴·위반·미납 벌금처럼
+// 학생에게 그대로 보여주기엔 부담스러운(또는 불필요한) 항목을 더한 세트.
+const PERIOD_SUMMARY_FIELDS_TEACHER = [
+  ...PERIOD_SUMMARY_FIELDS,
+  { key:'late',  label:'기간 중 지각', get: s => `지각 ${s.lateCount}회` },
+  { key:'early', label:'기간 중 조퇴', get: s => `조퇴 ${s.earlyCount}회` },
+  { key:'viol',  label:'누적 위반',    get: s => `위반 ${s.violationCount}회` },
+  { key:'fine',  label:'미납 벌금',    get: s => `미납 벌금 ${s.fineUnpaid.toLocaleString()}원` },
+];
+
 // 반별로 묶어서 카톡 공지에 바로 붙여넣기 좋은 형태의 텍스트로 변환.
 // 매달 학생 동기부여용 공지로 쓸 걸 염두에 두고, 반 안에서는 명단 순서가
 // 아니라 (최대연속 → 출석률) 성과 순으로 정렬하고 상위 3명은 메달을 붙여
 // 잘한 학생이 먼저 보이도록 한다(통계 탭 Top3와 같은 결의 표현).
-// fields: 체크박스에서 고른 PERIOD_SUMMARY_FIELDS의 key 배열 — 학생에게
-// 보내기 전에 굳이 안 보여주고 싶은 항목(예: 결석 수)은 빼고 복사 가능.
+// fields: 체크박스에서 고른 필드 key 배열 — 굳이 안 보여주고 싶은 항목은
+// 빼고 복사 가능. fieldDefs: 학생용(PERIOD_SUMMARY_FIELDS) 또는
+// 교사용(PERIOD_SUMMARY_FIELDS_TEACHER) 중 현재 모드에 해당하는 정의 목록.
 const _MEDALS = ['🥇','🥈','🥉'];
-function _buildPeriodSummaryText(summary, start, end, fields) {
+function _buildPeriodSummaryText(summary, start, end, fields, fieldDefs) {
   const active = summary.filter(s => s.attendRate !== null);
-  const activeFields = PERIOD_SUMMARY_FIELDS.filter(f => fields.includes(f.key));
+  const activeFields = fieldDefs.filter(f => fields.includes(f.key));
   let text = `📊 기간 결산 (${_fmtDateShort(start)}~${_fmtDateShort(end)})\n`;
   GROUPS.forEach(g => {
     const gs = active.filter(s => s.group === g)
