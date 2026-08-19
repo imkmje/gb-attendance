@@ -17,8 +17,9 @@ const VIOLATION_ACTIONS = ['경고', '벌금', '직접 입력'];
    n.0.0 대규모 업데이트 · 0.n.0 기능/디자인 개선 · 0.0.n 버그 수정
    최신순 — 새 배포 때마다 맨 위에 추가할 것
 ════════════════════════════════ */
-const APP_VERSION = '2.19.0';
+const APP_VERSION = '2.20.0';
 const CHANGELOG = [
+  { v:'2.20.0', d:'2026-08-19', t:'minor', title:'기간 결산 팝업 화면 목록이 체크박스 선택에 실시간으로 반영되도록 개선(부드러운 페이드), 학생 전달용 항목에 "기간 중 지각"·"미납 벌금" 추가' },
   { v:'2.19.0', d:'2026-08-19', t:'minor', title:'기간 결산에 "학생 전달용"/"교사용" 모드 추가 — 교사용은 지각·조퇴·위반·미납 벌금까지 체크박스로 골라 복사 가능, 부드러운 슬라이드+페이드 전환' },
   { v:'2.18.2', d:'2026-08-19', t:'patch', title:'명단·통계·시간표·기간결산 검색창에 × 지우기 버튼 추가' },
   { v:'2.18.1', d:'2026-08-19', t:'patch', title:'기간 결산 텍스트 복사 항목에 "누적 자습 시간" 추가' },
@@ -2253,7 +2254,7 @@ function openPeriodSummarySheet() {
       <span class="clear-input-btn" id="_psSearchClear" role="button" tabindex="0" aria-label="검색어 지우기" style="display:none;">&times;</span>
     </div>
     <div id="_psSummary" style="text-align:center;margin-bottom:14px;"></div>
-    <div id="_psList" style="overflow-y:auto;flex:1;">
+    <div id="_psList" style="overflow-y:auto;flex:1;transition:opacity var(--dur-fast) var(--ease);">
       ${Array.from({length:3}).map(() => `<div style="background:var(--surface);border-radius:var(--radius);box-shadow:var(--sh-md);padding:14px;margin-bottom:10px;"><div class="cd-skeleton" style="height:12px;width:30%;margin-bottom:10px;"></div><div class="cd-skeleton" style="height:38px;width:100%;"></div></div>`).join('')}
     </div>
     <div class="sch-pill-wrap" style="padding:0;margin-top:14px;flex-shrink:0;">
@@ -2296,6 +2297,23 @@ function openPeriodSummarySheet() {
   const fieldsEl       = sheet.querySelector('#_psFields');
 
   const currentFieldDefs = () => psMode === 'teacher' ? PERIOD_SUMMARY_FIELDS_TEACHER : PERIOD_SUMMARY_FIELDS;
+  const getCheckedFields = () => [...fieldsEl.querySelectorAll('input:checked')].map(el => el.dataset.field);
+
+  // 체크박스를 켜고 끌 때마다 팝업에 뜬 학생 목록의 뱃지가 그 자리에서
+  // 바로 바뀌도록 — 예전엔 텍스트 복사 버튼을 눌러야만 반영 여부를 알 수
+  // 있었음. 살짝 페이드를 줘서 뱃지가 우르르 바뀌는 게 딱딱하지 않게 한다.
+  const rerenderList = () => {
+    if (!summary.length) return;
+    listEl.style.opacity = '0';
+    setTimeout(() => {
+      _renderPeriodSummary(summaryEl, listEl, summary, startInput.value, endInput.value, searchInput.value.trim(), getCheckedFields(), currentFieldDefs());
+      listEl.style.opacity = '1';
+    }, 120);
+  };
+
+  const bindFieldCheckboxes = () => {
+    fieldsEl.querySelectorAll('input[type=checkbox]').forEach(cb => cb.addEventListener('change', rerenderList));
+  };
 
   const moveModeSlider = () => {
     const active = modeBar.querySelector('.sch-pill-item.active');
@@ -2309,6 +2327,7 @@ function openPeriodSummarySheet() {
     fieldsEl.innerHTML = currentFieldDefs().map(f => `<label style="display:flex;align-items:center;gap:5px;background:var(--bg-deep);border-radius:var(--radius-pill);padding:6px 12px;font-size:12px;font-weight:600;color:var(--ink-2);cursor:pointer;">
       <input type="checkbox" data-field="${f.key}" checked style="width:14px;height:14px;accent-color:var(--blue);cursor:pointer;">${f.label}
     </label>`).join('');
+    bindFieldCheckboxes();
   };
   renderFieldsCheckboxes();
 
@@ -2319,7 +2338,7 @@ function openPeriodSummarySheet() {
     modeTeacherBtn.classList.toggle('active', mode === 'teacher');
     moveModeSlider();
     fieldsEl.style.opacity = '0';
-    setTimeout(() => { renderFieldsCheckboxes(); fieldsEl.style.opacity = '1'; }, 150);
+    setTimeout(() => { renderFieldsCheckboxes(); fieldsEl.style.opacity = '1'; rerenderList(); }, 150);
   };
   modeStudentBtn.addEventListener('click', () => switchPsMode('student'));
   modeTeacherBtn.addEventListener('click', () => switchPsMode('teacher'));
@@ -2346,7 +2365,7 @@ function openPeriodSummarySheet() {
     API.getPeriodSummary(start, end)
       .then(data => {
         summary = data || [];
-        _renderPeriodSummary(summaryEl, listEl, summary, start, end, searchInput.value.trim());
+        _renderPeriodSummary(summaryEl, listEl, summary, start, end, searchInput.value.trim(), getCheckedFields(), currentFieldDefs());
       })
       .catch(() => { listEl.innerHTML = _emptyState('결산을 불러오지 못했습니다.'); summaryEl.innerHTML = ''; });
   };
@@ -2357,7 +2376,7 @@ function openPeriodSummarySheet() {
   searchInput.addEventListener('input', () => {
     searchClear.style.display = searchInput.value ? '' : 'none';
     if (!summary.length) return;
-    _renderPeriodSummary(summaryEl, listEl, summary, startInput.value, endInput.value, searchInput.value.trim());
+    _renderPeriodSummary(summaryEl, listEl, summary, startInput.value, endInput.value, searchInput.value.trim(), getCheckedFields(), currentFieldDefs());
   });
   searchClear.addEventListener('click', () => {
     searchInput.value = '';
@@ -2395,7 +2414,12 @@ function openPeriodSummarySheet() {
   runQuery();
 }
 
-function _renderPeriodSummary(summaryEl, listEl, summary, start, end, searchQuery) {
+function _renderPeriodSummary(summaryEl, listEl, summary, start, end, searchQuery, checkedFields, fieldDefs) {
+  // checkedFields/fieldDefs 없이 호출되는 기존 코드 경로 보호용 기본값 —
+  // 없으면 예전처럼 출석률/결석/최대연속자습 3개만 보여준다.
+  const defs = fieldDefs || PERIOD_SUMMARY_FIELDS;
+  const keys = checkedFields || ['rate', 'period', 'streak'];
+  const activeFieldDefs = defs.filter(f => keys.includes(f.key));
   const active = summary.filter(s => s.attendRate !== null); // 기록이 있는 학생만 결산 대상으로 카운트
   const avgRate = active.length
     ? Math.round(active.reduce((sum, s) => sum + s.attendRate, 0) / active.length)
@@ -2415,17 +2439,12 @@ function _renderPeriodSummary(summaryEl, listEl, summary, start, end, searchQuer
     const gs = visible.filter(s => s.group === g);
     if (!gs.length) return '';
     const rows = gs.map(s => {
-      const rateColor = s.attendRate >= 90 ? 'var(--green)' : s.attendRate >= 70 ? 'var(--amber)' : 'var(--red)';
-      const rateDim   = s.attendRate >= 90 ? 'var(--green-dim)' : s.attendRate >= 70 ? 'var(--amber-dim)' : 'var(--red-dim)';
+      const tags = activeFieldDefs.map(f => f.tag(s)).join('');
       return `<div class="_ps-row" data-sid="${s.id}" style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--bg-deep);cursor:pointer;">
         <div style="width:36px;height:36px;border-radius:var(--radius-sm);background:var(--blue-dim);color:var(--blue);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;">${s.ban}-${s.num}</div>
         <div style="flex:1;min-width:0;">
           <div style="font-size:14px;font-weight:700;color:var(--ink);">${_esc(s.name)}</div>
-          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">
-            <span class="sch-dr-s" style="background:${rateDim};color:${rateColor};">출석률 ${s.attendRate}%</span>
-            <span class="sch-dr-s" style="background:var(--red-dim);color:var(--red);">결석 ${s.absentCount}회</span>
-            <span class="sch-dr-s" style="background:var(--green-dim);color:var(--green);">최대 연속 자습 ${s.periodMaxStreak}일</span>
-          </div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">${tags}</div>
         </div>
       </div>`;
     }).join('');
@@ -2446,25 +2465,36 @@ function _fmtDateShort(dateStr) {
   return `${+m}/${+d}`;
 }
 
-// 기간 결산 텍스트 복사 시 포함 여부를 학생 전달용으로 개별 선택할 수 있는
-// 항목들. openPeriodSummarySheet의 체크박스 목록과 _buildPeriodSummaryText
-// 둘 다 이 정의 하나를 같이 참조한다.
+// 기간 결산 텍스트 복사 + 팝업 목록 태그 둘 다에 쓰이는 항목 정의.
+// get(s): 카톡 복사 텍스트용 한 줄 문구. tag(s): 팝업 목록에 뜨는
+// 색깔 있는 뱃지 HTML — 체크박스로 고른 항목이 실시간으로 그대로
+// 화면 목록에도 반영되도록, 텍스트 복사와 화면 표시가 이 정의 하나를
+// 같이 참조한다(따로 관리하면 서로 어긋날 위험이 있어 하나로 묶음).
 const PERIOD_SUMMARY_FIELDS = [
-  { key:'rate',   label:'출석률',          get: s => `출석률 ${s.attendRate}%` },
-  { key:'hours',  label:'누적 자습 시간',  get: s => `누적 자습 시간 ${s.totalStudyHours.toFixed(1)}시간` },
-  { key:'total',  label:'누적 결석',       get: s => `누적결석 ${s.totalAbsentCount}회` },
-  { key:'period', label:'기간 중 결석',    get: s => `기간중결석 ${s.absentCount}회` },
-  { key:'streak', label:'최대 연속 자습',  get: s => `최대 연속 자습 ${s.periodMaxStreak}일` },
+  { key:'rate', label:'출석률', get: s => `출석률 ${s.attendRate}%`,
+    tag: s => { const c=s.attendRate>=90?'var(--green)':s.attendRate>=70?'var(--amber)':'var(--red)'; const d=s.attendRate>=90?'var(--green-dim)':s.attendRate>=70?'var(--amber-dim)':'var(--red-dim)'; return `<span class="sch-dr-s" style="background:${d};color:${c};">출석률 ${s.attendRate}%</span>`; } },
+  { key:'hours', label:'누적 자습 시간', get: s => `누적 자습 시간 ${s.totalStudyHours.toFixed(1)}시간`,
+    tag: s => `<span class="sch-dr-s" style="background:var(--blue-dim);color:var(--blue);">누적 자습 시간 ${s.totalStudyHours.toFixed(1)}시간</span>` },
+  { key:'total', label:'누적 결석', get: s => `누적결석 ${s.totalAbsentCount}회`,
+    tag: s => `<span class="sch-dr-s" style="background:var(--red-dim);color:var(--red);">누적결석 ${s.totalAbsentCount}회</span>` },
+  { key:'period', label:'기간 중 결석', get: s => `기간중결석 ${s.absentCount}회`,
+    tag: s => `<span class="sch-dr-s" style="background:var(--red-dim);color:var(--red);">기간중결석 ${s.absentCount}회</span>` },
+  { key:'streak', label:'최대 연속 자습', get: s => `최대 연속 자습 ${s.periodMaxStreak}일`,
+    tag: s => `<span class="sch-dr-s" style="background:var(--green-dim);color:var(--green);">최대 연속 자습 ${s.periodMaxStreak}일</span>` },
+  { key:'late', label:'기간 중 지각', get: s => `지각 ${s.lateCount}회`,
+    tag: s => `<span class="sch-dr-s" style="background:var(--amber-dim);color:var(--amber);">지각 ${s.lateCount}회</span>` },
+  { key:'fine', label:'미납 벌금', get: s => `미납 벌금 ${s.fineUnpaid.toLocaleString()}원`,
+    tag: s => `<span class="sch-dr-s" style="background:${s.fineUnpaid>0?'var(--red-dim)':'var(--bg-deep)'};color:${s.fineUnpaid>0?'var(--red)':'var(--ink-3)'};">미납 벌금 ${s.fineUnpaid.toLocaleString()}원</span>` },
 ];
 
-// 교사 내부 기록용 — 학생용 항목 전체에 지각·조퇴·위반·미납 벌금처럼
-// 학생에게 그대로 보여주기엔 부담스러운(또는 불필요한) 항목을 더한 세트.
+// 교사 내부 기록용 — 학생용 전체 항목에, 학생에게 그대로 보여주기엔
+// 애매한 조퇴·누적 위반까지 더한 세트.
 const PERIOD_SUMMARY_FIELDS_TEACHER = [
   ...PERIOD_SUMMARY_FIELDS,
-  { key:'late',  label:'기간 중 지각', get: s => `지각 ${s.lateCount}회` },
-  { key:'early', label:'기간 중 조퇴', get: s => `조퇴 ${s.earlyCount}회` },
-  { key:'viol',  label:'누적 위반',    get: s => `위반 ${s.violationCount}회` },
-  { key:'fine',  label:'미납 벌금',    get: s => `미납 벌금 ${s.fineUnpaid.toLocaleString()}원` },
+  { key:'early', label:'기간 중 조퇴', get: s => `조퇴 ${s.earlyCount}회`,
+    tag: s => `<span class="sch-dr-s" style="background:var(--amber-dim);color:var(--amber);">조퇴 ${s.earlyCount}회</span>` },
+  { key:'viol', label:'누적 위반', get: s => `위반 ${s.violationCount}회`,
+    tag: s => `<span class="sch-dr-s" style="background:var(--purple-dim);color:var(--purple);">위반 ${s.violationCount}회</span>` },
 ];
 
 // 반별로 묶어서 카톡 공지에 바로 붙여넣기 좋은 형태의 텍스트로 변환.
