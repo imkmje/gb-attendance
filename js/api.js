@@ -972,8 +972,10 @@ const API = (() => {
 
   /**
    * 대시보드 — 기간 결산. 지정한 기간(startDate~endDate) 동안의
-   * 출석률·결석 횟수·기간 내 최대 연속 출석과, 전체 누적 기록 기준
-   * 최대 연속 출석(학기 전체)을 학생 전원에 대해 함께 계산해서 반환.
+   * 출석률·기간 중 결석 횟수·기간 내 최대 연속 자습과, 참고용으로
+   * 누적(전체 기록 기준) 결석 횟수를 학생 전원에 대해 함께 계산해서 반환.
+   * "최대 연속 자습"은 기간 자체를 이미 조정할 수 있으므로 기간 기준
+   * 하나만 둔다(학기 전체를 보고 싶으면 기간을 학기 전체로 잡으면 됨).
    * GAS 없음 — 신규
    */
   async function getPeriodSummary(startDate, endDate) {
@@ -1000,9 +1002,9 @@ const API = (() => {
         name:  s.name,
         group: s.study_room,
         attendRate,
-        absentCount:       countedAbsent,
+        absentCount:       countedAbsent,             // 기간 중 결석
+        totalAbsentCount:  _calcAbsentCounts(allRecs), // 누적(전체) 결석
         periodMaxStreak:   _maxPresentStreak(periodRecs),
-        semesterMaxStreak: _maxPresentStreak(allRecs),
       };
     });
   }

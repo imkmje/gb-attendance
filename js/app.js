@@ -17,8 +17,9 @@ const VIOLATION_ACTIONS = ['경고', '벌금', '직접 입력'];
    n.0.0 대규모 업데이트 · 0.n.0 기능/디자인 개선 · 0.0.n 버그 수정
    최신순 — 새 배포 때마다 맨 위에 추가할 것
 ════════════════════════════════ */
-const APP_VERSION = '2.16.1';
+const APP_VERSION = '2.17.0';
 const CHANGELOG = [
+  { v:'2.17.0', d:'2026-08-19', t:'minor', title:'기간 결산: 최대 연속 자습 하나로 통일, 아이콘을 텍스트 버튼으로 교체, 텍스트 복사에 누적/기간중 결석 분리 표시 + 포함 항목 체크박스 선택 추가' },
   { v:'2.16.1', d:'2026-08-19', t:'patch', title:'기간 결산 아이콘을 통계 탭과 겹치지 않는 확성기 아이콘으로 교체, 기본 조회 기간을 "이번 달"로 변경, 텍스트 복사 시 성과순 정렬+메달 표시' },
   { v:'2.16.0', d:'2026-08-19', t:'minor', title:'연속 출석 스트릭 표시 + 대시보드에 "기간 결산" 추가 (출석률·결석·최대연속, 카톡 공지용 텍스트 복사)' },
   { v:'2.15.2', d:'2026-08-19', t:'patch', title:'출석체크 스크롤 축소 애니메이션이 끊기던 문제 수정 (강제 리플로우 제거)' },
@@ -2211,7 +2212,13 @@ function openPeriodSummarySheet() {
     <div id="_psList" style="overflow-y:auto;flex:1;">
       ${Array.from({length:3}).map(() => `<div style="background:var(--surface);border-radius:var(--radius);box-shadow:var(--sh-md);padding:14px;margin-bottom:10px;"><div class="cd-skeleton" style="height:12px;width:30%;margin-bottom:10px;"></div><div class="cd-skeleton" style="height:38px;width:100%;"></div></div>`).join('')}
     </div>
-    <button class="vh-add-btn is-green" id="_psCopy" style="margin:14px 0 0;flex-shrink:0;">
+    <div style="font-size:11px;font-weight:700;color:var(--ink-3);margin:14px 0 6px;flex-shrink:0;">학생 전달용 텍스트에 포함할 항목</div>
+    <div id="_psFields" style="display:flex;flex-wrap:wrap;gap:6px;flex-shrink:0;">
+      ${PERIOD_SUMMARY_FIELDS.map(f => `<label style="display:flex;align-items:center;gap:5px;background:var(--bg-deep);border-radius:var(--radius-pill);padding:6px 12px;font-size:12px;font-weight:600;color:var(--ink-2);cursor:pointer;">
+        <input type="checkbox" data-field="${f.key}" checked style="width:14px;height:14px;accent-color:var(--blue);cursor:pointer;">${f.label}
+      </label>`).join('')}
+    </div>
+    <button class="vh-add-btn is-green" id="_psCopy" style="margin:12px 0 0;flex-shrink:0;">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
       텍스트 복사
     </button>`;
@@ -2264,7 +2271,8 @@ function openPeriodSummarySheet() {
   });
   sheet.querySelector('#_psCopy').addEventListener('click', () => {
     if (!summary.length) { showSuccessToast('복사할 내용이 없습니다'); return; }
-    const text = _buildPeriodSummaryText(summary, startInput.value, endInput.value);
+    const fields = [...sheet.querySelectorAll('#_psFields input:checked')].map(el => el.dataset.field);
+    const text = _buildPeriodSummaryText(summary, startInput.value, endInput.value, fields);
     navigator.clipboard.writeText(text).then(() => showSuccessToast('클립보드에 복사됐어요'));
   });
 
@@ -2297,8 +2305,7 @@ function _renderPeriodSummary(summaryEl, listEl, summary, start, end) {
           <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">
             <span class="sch-dr-s" style="background:${rateDim};color:${rateColor};">출석률 ${s.attendRate}%</span>
             <span class="sch-dr-s" style="background:var(--red-dim);color:var(--red);">결석 ${s.absentCount}회</span>
-            <span class="sch-dr-s" style="background:var(--green-dim);color:var(--green);">🔥 기간 ${s.periodMaxStreak}일</span>
-            <span class="sch-dr-s" style="background:var(--bg-deep);color:var(--ink-3);">🏆 학기 ${s.semesterMaxStreak}일</span>
+            <span class="sch-dr-s" style="background:var(--green-dim);color:var(--green);">최대 연속 자습 ${s.periodMaxStreak}일</span>
           </div>
         </div>
       </div>`;
@@ -2320,13 +2327,26 @@ function _fmtDateShort(dateStr) {
   return `${+m}/${+d}`;
 }
 
+// 기간 결산 텍스트 복사 시 포함 여부를 학생 전달용으로 개별 선택할 수 있는
+// 항목들. openPeriodSummarySheet의 체크박스 목록과 _buildPeriodSummaryText
+// 둘 다 이 정의 하나를 같이 참조한다.
+const PERIOD_SUMMARY_FIELDS = [
+  { key:'rate',   label:'출석률',        get: s => `출석률 ${s.attendRate}%` },
+  { key:'total',  label:'누적 결석',      get: s => `누적결석 ${s.totalAbsentCount}회` },
+  { key:'period', label:'기간 중 결석',   get: s => `기간중결석 ${s.absentCount}회` },
+  { key:'streak', label:'최대 연속 자습', get: s => `최대 연속 자습 ${s.periodMaxStreak}일` },
+];
+
 // 반별로 묶어서 카톡 공지에 바로 붙여넣기 좋은 형태의 텍스트로 변환.
 // 매달 학생 동기부여용 공지로 쓸 걸 염두에 두고, 반 안에서는 명단 순서가
 // 아니라 (최대연속 → 출석률) 성과 순으로 정렬하고 상위 3명은 메달을 붙여
 // 잘한 학생이 먼저 보이도록 한다(통계 탭 Top3와 같은 결의 표현).
+// fields: 체크박스에서 고른 PERIOD_SUMMARY_FIELDS의 key 배열 — 학생에게
+// 보내기 전에 굳이 안 보여주고 싶은 항목(예: 결석 수)은 빼고 복사 가능.
 const _MEDALS = ['🥇','🥈','🥉'];
-function _buildPeriodSummaryText(summary, start, end) {
+function _buildPeriodSummaryText(summary, start, end, fields) {
   const active = summary.filter(s => s.attendRate !== null);
+  const activeFields = PERIOD_SUMMARY_FIELDS.filter(f => fields.includes(f.key));
   let text = `📊 기간 결산 (${_fmtDateShort(start)}~${_fmtDateShort(end)})\n`;
   GROUPS.forEach(g => {
     const gs = active.filter(s => s.group === g)
@@ -2335,7 +2355,9 @@ function _buildPeriodSummaryText(summary, start, end) {
     text += `\n[${g}]\n`;
     gs.forEach((s, i) => {
       const medal = _MEDALS[i] ? `${_MEDALS[i]} ` : '';
-      text += `${medal}· ${s.name} - 출석률 ${s.attendRate}% · 결석 ${s.absentCount}회 · 최대연속 ${s.periodMaxStreak}일\n`;
+      const parts = activeFields.map(f => f.get(s));
+      const suffix = parts.length ? ` - ${parts.join(' · ')}` : '';
+      text += `${medal}· ${s.name}${suffix}\n`;
     });
   });
   return text.trim();
