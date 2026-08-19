@@ -17,8 +17,9 @@ const VIOLATION_ACTIONS = ['경고', '벌금', '직접 입력'];
    n.0.0 대규모 업데이트 · 0.n.0 기능/디자인 개선 · 0.0.n 버그 수정
    최신순 — 새 배포 때마다 맨 위에 추가할 것
 ════════════════════════════════ */
-const APP_VERSION = '2.24.0';
+const APP_VERSION = '2.25.0';
 const CHANGELOG = [
+  { v:'2.25.0', d:'2026-08-19', t:'minor', title:'대시보드에 반별 세션 점등 표시 추가 — 자습반 5개 × 세션 3칸으로 그날 어떤 반의 어떤 시간대가 출석체크됐는지 한눈에 확인' },
   { v:'2.24.0', d:'2026-08-19', t:'minor', title:'출석 저장 실패 시(네트워크 끊김) 자동 오프라인 큐잉 — 연결되면 자동 재전송, 화면 상단에 대기 건수 칩 표시' },
   { v:'2.23.0', d:'2026-08-19', t:'minor', title:'평일 저녁(19시)/토요일 오후(13시) 넘도록 그날 출석체크가 하나도 없으면 알림 — 자습 없는 날(공휴일 설정에서 세션 미등록)은 자동 제외' },
   { v:'2.22.0', d:'2026-08-19', t:'minor', title:'출석체크 "결과보기"에 공유하기 버튼 추가 — 지원 기기(모바일)에서 카톡/문자로 바로 전송, 텍스트 복사와 나란히 표시' },
@@ -620,6 +621,23 @@ window.addEventListener('scroll', () => {
 /* ════════════════════════════════
    날짜 / 세션
 ════════════════════════════════ */
+// 날짜별 세션 목록을 계산하는 순수 함수 — handleDateChange(홈 탭 상태 변경)와
+// 대시보드 점등 표시처럼 "이 날짜에 세션이 뭐가 있는지"만 필요한 곳에서 공용으로 쓴다.
+function _computeSessionOptions(dateStr) {
+  const day = new Date(dateStr).getDay();
+  if (day === 0) return [];
+  const holiday = _holidays.find(h => h.date === dateStr);
+  if (holiday) {
+    const opts = [];
+    if (holiday.am) opts.push({text:'오전 자율학습(공휴일)', value:'HOL_AM', isHoliday:true});
+    if (holiday.pm) opts.push({text:'오후 자율학습(공휴일)', value:'HOL_PM', isHoliday:true});
+    return opts;
+  }
+  if (day === 6) return [{text:"오전 자율학습(토)",value:"19"},{text:"오후1 자율학습(토)",value:"20"},{text:"오후2 자율학습(토)",value:"21"}];
+  const base = 4 + (day-1)*3;
+  return [{text:"오후 자율학습",value:String(base)},{text:"야간 자율학습",value:String(base+1)},{text:"심야 자율학습",value:String(base+2)}];
+}
+
 function handleDateChange(forceLoad=false) {
   if (hasUnsavedChanges && !forceLoad) {
     showSheet({ title:'저장하지 않고 변경할까요?', text:'변경사항이 저장되지 않아요.',
@@ -633,9 +651,8 @@ function handleDateChange(forceLoad=false) {
   const dateStr = document.getElementById('dateInput').value;
   sessionStorage.setItem('ss_date', dateStr);
   const day = new Date(dateStr).getDay();
-  sessionOptions=[]; selectedSessionIdx=0;
-
-  const holiday = _holidays.find(h => h.date === dateStr);
+  selectedSessionIdx=0;
+  sessionOptions = _computeSessionOptions(dateStr);
 
   if (day===0) {
     document.getElementById('sessionPillWrap').innerHTML='';
@@ -643,20 +660,12 @@ function handleDateChange(forceLoad=false) {
     document.getElementById('dashboardWidget').classList.remove('visible'); return;
   }
 
-  if (holiday) {
-    if (holiday.am) sessionOptions.push({text:'오전 자율학습(공휴일)', value:'HOL_AM', isHoliday:true});
-    if (holiday.pm) sessionOptions.push({text:'오후 자율학습(공휴일)', value:'HOL_PM', isHoliday:true});
-    if (!sessionOptions.length) {
-      document.getElementById('sessionPillWrap').innerHTML='';
-      document.getElementById('studentContainer').innerHTML=_emptyState('설정된 세션이 없습니다.');
-      document.getElementById('dashboardWidget').classList.remove('visible'); return;
-    }
-  } else if (day===6) {
-    sessionOptions=[{text:"오전 자율학습(토)",value:"19"},{text:"오후1 자율학습(토)",value:"20"},{text:"오후2 자율학습(토)",value:"21"}];
-  } else {
-    const base=4+(day-1)*3;
-    sessionOptions=[{text:"오후 자율학습",value:String(base)},{text:"야간 자율학습",value:String(base+1)},{text:"심야 자율학습",value:String(base+2)}];
+  if (!sessionOptions.length) {
+    document.getElementById('sessionPillWrap').innerHTML='';
+    document.getElementById('studentContainer').innerHTML=_emptyState('설정된 세션이 없습니다.');
+    document.getElementById('dashboardWidget').classList.remove('visible'); return;
   }
+
   const today=new Date();
   if (new Date(dateStr).toDateString()===today.toDateString()) {
     const hm=today.getHours()*100+today.getMinutes();
@@ -2069,16 +2078,53 @@ function loadDashboard() {
   ).join('');
 
   const req = mode === 'all' ? API.getDayRoster(date) : API.getTodayAbsences(date);
-  req
-    .then(data => {
+  // 점등 표시는 모드(결석자만/전체 명단)와 무관하게 항상 전체 명단 기준으로 계산해야 하므로,
+  // "전체 명단" 모드면 이미 하는 요청을 그대로 재사용하고 아니면 별도로 한 번 더 불러온다.
+  // 실패해도 본문 렌더링은 그대로 진행되도록 조용히 null로 처리.
+  const lightsReq = (mode === 'all' ? req : API.getDayRoster(date)).catch(() => null);
+  Promise.all([req, lightsReq])
+    .then(([data, roster]) => {
       if (myToken !== _dashReqToken) return; // 이 사이 더 최신 요청이 시작됐으면 이 결과는 버림
       mode === 'all' ? _renderDashboardAll(data, date) : _renderDashboard(data, date);
+      _renderDashLights(roster, date);
     })
     .catch(() => {
       if (myToken !== _dashReqToken) return;
       summary.innerHTML = '';
       list.innerHTML = _emptyState('현황을 불러오지 못했습니다.');
     });
+}
+
+// 반별로 3칸(세션별) LED 점등 — 그 반의 그 세션 출석 저장이 됐으면 켜짐.
+// "결석자만" 모드에서도 출석 여부만 판단하면 되므로 결석 여부는 보지 않는다.
+function _groupShortLabel(g) {
+  if (g === '청운반') return '청운';
+  const m = g.match(/백운 (.)반/);
+  return m ? m[1] : g;
+}
+function _renderDashLights(roster, date) {
+  const el = document.getElementById('dashLights');
+  if (!el) return;
+  const sessions = _computeSessionOptions(date);
+  if (!roster || !sessions.length) { el.innerHTML = ''; return; }
+
+  const shortLabels = sessions.map(o => o.text.replace(' 자율학습','').replace(/\(토\)/,''));
+  const lit = {};
+  GROUPS.forEach(g => { lit[g] = sessions.map(() => false); });
+  roster.forEach(s => {
+    if (!lit[s.group]) return;
+    s.sessions.forEach(sess => {
+      const idx = sessions.findIndex(o => o.text === sess.session);
+      if (idx >= 0) lit[s.group][idx] = true;
+    });
+  });
+
+  const groups = GROUPS.map(g => `
+    <div class="dash-lights-grp" title="${_esc(g)}">
+      <span class="dash-lights-label">${_groupShortLabel(g)}</span>
+      ${lit[g].map((on, i) => `<span class="dash-light${on ? ' on' : ''}" title="${_esc(shortLabels[i])}"></span>`).join('')}
+    </div>`).join('');
+  el.innerHTML = `<div class="dash-lights">${groups}</div>`;
 }
 
 // 결석 세션 태그 하나 — "전체 명단" 모드에서는 출석 세션도 함께 표시해야 해서
@@ -4987,11 +5033,7 @@ window.addEventListener('online', () => _flushOfflineQueue(false));
 function _maybeShowAttendanceReminder() {
   const todayStr = _todayStr();
   const day = new Date(todayStr).getDay();
-  if (day === 0) return; // 일요일 — 자습 없음
-
-  const holiday = _holidays.find(h => h.date === todayStr);
-  const hasSession = holiday ? !!(holiday.am || holiday.pm) : true; // 평일/토요일 기본값: 세션 있음
-  if (!hasSession) return;
+  if (!_computeSessionOptions(todayStr).length) return; // 일요일이거나 세션이 등록되지 않은 날
 
   const now = new Date();
   const hm = now.getHours() * 100 + now.getMinutes();

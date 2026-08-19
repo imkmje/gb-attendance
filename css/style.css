@@ -555,6 +555,15 @@ html[data-theme="dark"] .vh-item::after { background:linear-gradient(158deg, rgb
 .vh-add-btn.is-blue { background:var(--blue); box-shadow:var(--sh-blue); }
 .vh-add-btn-row { display:flex; gap:10px; margin:0 18px 32px; }
 .vh-add-btn-row .vh-add-btn { margin:0; flex:1; }
+
+/* 대시보드 — 반별 세션 점등 표시. 그 반의 그 세션 출석 저장이 됐으면 켜짐.
+   반마다 신호등처럼 점 3개를 바짝 붙여서 아주 작게 — 라벨/세션명은 텍스트로 늘어놓지 않고
+   각 점의 title(호버 툴팁)로만 제공한다. */
+.dash-lights { display:flex; flex-wrap:wrap; align-items:center; gap:9px; background:var(--surface); border-radius:var(--radius-sm); box-shadow:var(--sh-sm); padding:6px 10px; margin-bottom:14px; }
+.dash-lights-grp { display:flex; align-items:center; gap:3px; }
+.dash-lights-label { font-size:9px; font-weight:800; color:var(--ink-3); margin-right:1px; }
+.dash-light { width:6px; height:6px; border-radius:50%; background:var(--bg-deep); box-shadow:var(--sh-pressed); transition:background var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease); }
+.dash-light.on { background:var(--green); box-shadow:0 0 4px 1px rgba(114,184,150,0.55); }
 .viol-student-header { display:flex; align-items:center; gap:12px; padding:0 0 16px; border-bottom:1px solid var(--bg-deep); margin-bottom:16px; }
 .viol-student-avatar { width:44px; height:44px; border-radius:var(--radius); background:var(--purple-dim); box-shadow:var(--sh-sm); display:flex; align-items:center; justify-content:center; flex-shrink:0; position:relative; overflow:hidden; }
 .viol-student-avatar::after { content:''; position:absolute; inset:0; background:linear-gradient(158deg, rgba(255,255,255,0.40) 0%, transparent 50%); pointer-events:none; }
