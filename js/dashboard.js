@@ -432,7 +432,7 @@ function openPeriodSummarySheet() {
   };
 
   fieldsEl.innerHTML = PERIOD_SUMMARY_FIELDS.map(f => `<label style="display:flex;align-items:center;gap:5px;background:var(--bg-deep);border-radius:var(--radius-pill);padding:6px 12px;font-size:12px;font-weight:600;color:var(--ink-2);cursor:pointer;">
-    <input type="checkbox" data-field="${f.key}" checked style="width:14px;height:14px;accent-color:var(--blue);cursor:pointer;">${f.label}
+    <input type="checkbox" data-field="${f.key}" ${f.sensitive ? '' : 'checked'} style="width:14px;height:14px;accent-color:var(--blue);cursor:pointer;">${f.label}
   </label>`).join('');
   fieldsEl.querySelectorAll('input[type=checkbox]').forEach(cb => cb.addEventListener('change', rerenderList));
 
@@ -571,11 +571,13 @@ const PERIOD_SUMMARY_FIELDS = [
   { key:'late', label:'기간 중 지각', get: s => `지각 ${s.lateCount}회`,
     tag: s => `<span class="sch-dr-s" style="background:var(--amber-dim);color:var(--amber);">지각 ${s.lateCount}회</span>` },
   // 미납 벌금 0원이면 딱히 알릴 게 없는 상태라 태그/문구 자체를 숨긴다.
-  { key:'fine', label:'미납 벌금', get: s => s.fineUnpaid > 0 ? `미납 벌금 ${s.fineUnpaid.toLocaleString()}원` : null,
+  // 벌금·위반은 매달 학생 동기부여 공지에 무심코 그대로 나가면 안 되는
+  // 민감 정보라 sensitive:true — 체크박스 기본값이 꺼진 채로 시작한다.
+  { key:'fine', label:'미납 벌금', sensitive:true, get: s => s.fineUnpaid > 0 ? `미납 벌금 ${s.fineUnpaid.toLocaleString()}원` : null,
     tag: s => s.fineUnpaid > 0 ? `<span class="sch-dr-s" style="background:var(--red-dim);color:var(--red);">미납 벌금 ${s.fineUnpaid.toLocaleString()}원</span>` : '' },
   { key:'early', label:'기간 중 조퇴', get: s => `조퇴 ${s.earlyCount}회`,
     tag: s => `<span class="sch-dr-s" style="background:var(--amber-dim);color:var(--amber);">조퇴 ${s.earlyCount}회</span>` },
-  { key:'viol', label:'누적 위반', get: s => `위반 ${s.violationCount}회`,
+  { key:'viol', label:'누적 위반', sensitive:true, get: s => `위반 ${s.violationCount}회`,
     tag: s => `<span class="sch-dr-s" style="background:var(--purple-dim);color:var(--purple);">위반 ${s.violationCount}회</span>` },
 ];
 

@@ -371,9 +371,9 @@ function _renderAttEditor(student, records) {
       <button id="_aeClose" aria-label="닫기" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;box-shadow:var(--sh-xs);">✕</button>
     </div>
     <div style="display:flex;gap:12px;margin-bottom:12px;padding:10px 12px;background:var(--bg-deep);border-radius:var(--radius-sm);">
-      <span style="font-size:12px;font-weight:600;color:var(--ink-3);">기록 <b style="color:var(--ink);">${records.length}회</b></span>
+      <span style="font-size:12px;font-weight:600;color:var(--ink-3);">기록 <b style="color:var(--ink);" id="_aeTotalCnt">${records.length}회</b></span>
       <span style="color:var(--ink-4);">·</span>
-      <span style="font-size:12px;font-weight:600;color:var(--red);">결석 카운트 <b>${absentCnt}회</b></span>
+      <span style="font-size:12px;font-weight:600;color:var(--red);">결석 카운트 <b id="_aeAbsentCnt">${absentCnt}회</b></span>
     </div>
     <div id="_aeList" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:8px;">
       ${records.length ? records.map(makeRow).join('') : '<div style="text-align:center;padding:28px;color:var(--ink-3);font-size:13px;font-weight:600;">출석 기록이 없습니다.</div>'}
@@ -397,6 +397,15 @@ function _renderAttEditor(student, records) {
   sheet.querySelector('#_aeClose').addEventListener('click', close);
 
   let _reasonTimer = null;
+
+  // 상단 "기록 N회 · 결석 카운트 N회" 헤더 — 시트를 열어둔 채로 상태/노카운트를
+  // 토글하거나 기록을 삭제해도 처음 연 시점 값에 멈춰있던 문제 수정.
+  const _updateAeHeaderCounts = () => {
+    const totalEl = sheet.querySelector('#_aeTotalCnt');
+    const absentEl = sheet.querySelector('#_aeAbsentCnt');
+    if (totalEl) totalEl.textContent = `${records.length}회`;
+    if (absentEl) absentEl.textContent = `${records.filter(r => r.status === '결석' && !r.noCount).length}회`;
+  };
 
   const bindReasonInput = (inp, rid, rec) => {
     inp.addEventListener('input', () => {
@@ -436,6 +445,7 @@ function _renderAttEditor(student, records) {
         existExtra.remove();
         rec.reason = ''; rec.noCount = false;
       }
+      _updateAeHeaderCounts();
 
       try {
         const updates = { status: rec.status };
@@ -453,6 +463,7 @@ function _renderAttEditor(student, records) {
       rec.noCount = !rec.noCount;
       ncBtn.style.background = rec.noCount ? 'var(--green-dim)' : 'var(--bg-deep)';
       ncBtn.style.color      = rec.noCount ? 'var(--green)'     : 'var(--ink-3)';
+      _updateAeHeaderCounts();
       try {
         await API.updateAttendanceRecord(rid, { noCount: rec.noCount });
         _aeChanged = true;
@@ -473,6 +484,7 @@ function _renderAttEditor(student, records) {
         await API.deleteAttendanceRecord(rid);
         records = records.filter(r => r.id !== rid);
         row.remove();
+        _updateAeHeaderCounts();
         _aeChanged = true;
         showSuccessToast('기록 삭제됨');
       } catch { _cdToast({ type:'red', title:'삭제 실패' }); }

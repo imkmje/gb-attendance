@@ -465,7 +465,7 @@ function _updateElToggleChip(idx) {
   if (btn) btn.classList.toggle('active', chipsSet);
   if (lbl) lbl.textContent = elm > 0 ? `${elm}분 조퇴` : (ltm > 0 ? `${ltm}분 지각` : '조퇴·지각');
   const card = btn?.closest('.student-card');
-  if (card && chipsSet) card.classList.add('chips-open');
+  if (card) card.classList.toggle('chips-open', chipsSet);
 }
 // el-toggle-chip 탭 — 조퇴·지각 편집 영역을 펼치거나 접는다.
 function toggleElChips(btn) {
@@ -720,8 +720,17 @@ async function _flushOfflineQueue(manual) {
       _setOfflineQueue(queue);
       flushed++;
     } catch (err) {
-      if (manual && flushed === 0) showSuccessToast('아직 연결이 안 됐어요', '잠시 후 자동으로 다시 시도할게요');
-      break; // 여전히 오프라인이거나 실패 — 다음 online 이벤트/재시도를 기다린다
+      if (_isNetworkError(err)) {
+        // 아직 오프라인 — 이 항목도 뒤에 남은 항목도 지금은 못 보낸다. 다음 online 이벤트/재시도를 기다린다.
+        if (manual && flushed === 0) showSuccessToast('아직 연결이 안 됐어요', '잠시 후 자동으로 다시 시도할게요');
+        break;
+      }
+      // 네트워크 문제가 아니라 서버가 실제로 거부한 항목 — 계속 맨 앞에 붙잡아두면
+      // 뒤에 쌓인 정상 항목까지 영원히 못 나가므로, 이 항목만 빼서 알리고 나머지는 계속 진행한다.
+      const failed = queue.shift();
+      _setOfflineQueue(queue);
+      const p = failed.payload;
+      _cdToast({ type: 'red', title: '오프라인 저장 항목을 동기화하지 못했어요', sub: `${p.group} · ${p.sessionName} · ${p.date} — 직접 다시 저장해 주세요` });
     }
   }
   _flushingOfflineQueue = false;
