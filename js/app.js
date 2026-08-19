@@ -2,6 +2,7 @@
    상수
 ════════════════════════════════ */
 const GROUPS = ['청운반','백운 A반','백운 B반','백운 C반','백운 D반'];
+const TEACHER_PW = '2821'; // 교사 메뉴/시간표 편집/명단 세션 수정 진입 시 공통으로 쓰는 비밀번호 — 바꿀 땐 여기 한 곳만
 
 // 위반 유형 — 개발자 메뉴에서 편집 가능(결석 사유와 동일한 방식).
 // 마지막 '직접 입력'은 고정 항목이며 관리 UI에는 노출되지 않음(항상 자동으로 붙임).
@@ -16,8 +17,11 @@ const VIOLATION_ACTIONS = ['경고', '벌금', '직접 입력'];
    n.0.0 대규모 업데이트 · 0.n.0 기능/디자인 개선 · 0.0.n 버그 수정
    최신순 — 새 배포 때마다 맨 위에 추가할 것
 ════════════════════════════════ */
-const APP_VERSION = '2.11.0';
+const APP_VERSION = '2.12.1';
 const CHANGELOG = [
+  { v:'2.12.1', d:'2026-08-19', t:'patch', title:'학생 이름·결석 사유 등 자유 입력 텍스트가 이스케이프 없이 표시되던 부분 보안 강화(저장형 XSS 방지)' },
+  { v:'2.12.0', d:'2026-08-19', t:'minor', title:'"결과보기" 창을 부트스트랩 모달 → 커스텀 시트로 전환하고 불필요해진 부트스트랩 JS 제거, 통계 학기 라벨 자동 계산' },
+  { v:'2.11.1', d:'2026-08-19', t:'patch', title:'교사 비밀번호 상수화, GROUPS 중복 정의 정리' },
   { v:'2.11.0', d:'2026-08-19', t:'minor', title:'대시보드에 날짜 이동 화살표·전체 명단 보기 추가, 통계 탭에 자습반 구분 없는 전체 순위 보기 추가' },
   { v:'2.10.1', d:'2026-08-19', t:'patch', title:'학생 인사이트의 사유별 결석 집계를 하루 단위로 변경 (야간·심야 일괄 적용 시 하루 1회)' },
   { v:'2.10.0', d:'2026-08-19', t:'minor', title:'통계 탭 디자인을 다른 탭과 통일 (카드형 리스트로 개편) + 이름 클릭 시 명단과 동일한 상세 팝업 표시' },
@@ -112,6 +116,13 @@ function _bindPillFade(id) {
 
 // 빈 상태(empty state) 공통 마크업 — 아이콘 + 안내 문구
 const _EMPTY_ICON_INBOX = '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>';
+// HTML 이스케이프 — 학생 이름/결석 사유/직접입력 유형처럼 사용자가 자유롭게
+// 타이핑한 텍스트를 innerHTML에 꽂아 넣기 전에 반드시 거쳐야 함(저장형 XSS 방지).
+// 순수 텍스트를 보여줘야 하는 곳(토스트, 바텀시트 등)에서 공용으로 사용.
+function _esc(str) {
+  return String(str ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+
 function _emptyState(text, iconSvg) {
   return `<div class="cd-empty"><div class="cd-empty-icon">${iconSvg || _EMPTY_ICON_INBOX}</div><div class="cd-empty-text">${text}</div></div>`;
 }
@@ -123,6 +134,19 @@ function _fmtYMD(d) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 function _todayStr() { return _fmtYMD(new Date()); }
+
+// 통계 탭 Top3 카드의 "1학년 1학기" 라벨 — 날짜가 지나도 안 틀리도록 월 기준 자동 계산
+// (일반적인 국내 고교 학사일정 기준: 3~8월=1학기, 9~2월=2학기. 학교마다 다르면
+//  나중에 settings 테이블에 override 값을 추가해 여기서 우선 사용하도록 확장 가능)
+function _currentSemesterLabel() {
+  const m = new Date().getMonth() + 1;
+  const semester = (m >= 3 && m <= 8) ? 1 : 2;
+  return `1학년 ${semester}학기`;
+}
+function _applySemesterLabel() {
+  const el = document.getElementById('top3SemesterLabel');
+  if (el) el.textContent = _currentSemesterLabel();
+}
 
 /* ════════════════════════════════
    테마
@@ -329,7 +353,7 @@ function _cdToast(opts) {
   const tc = document.getElementById('toast-container');
   const el = document.createElement('div'); el.className = 'cd-toast';
   const dot = opts.spinner ? '<div class="cd-toast-spin"></div>' : `<div class="cd-toast-dot" style="background:${TOAST_DOTS[opts.type]||TOAST_DOTS.blue}"></div>`;
-  el.innerHTML = `${dot}<div class="cd-toast-body"><div class="cd-toast-title">${opts.title}</div>${opts.sub?`<div class="cd-toast-sub">${opts.sub}</div>`:''}</div>`;
+  el.innerHTML = `${dot}<div class="cd-toast-body"><div class="cd-toast-title">${_esc(opts.title)}</div>${opts.sub?`<div class="cd-toast-sub">${_esc(opts.sub)}</div>`:''}</div>`;
   tc.appendChild(el); return el;
 }
 const showLoading = (msg) => {
@@ -351,8 +375,8 @@ function showSheet(opts) {
   const backdrop = document.createElement('div'); backdrop.className = 'custom-sheet-backdrop';
   const sheet    = document.createElement('div'); sheet.className    = 'custom-sheet';
   sheet.innerHTML = '<div class="custom-sheet-handle"></div>' +
-    `<div class="custom-sheet-title">${opts.title}</div>` +
-    (opts.text?`<div class="custom-sheet-text">${opts.text}</div>`:'') +
+    `<div class="custom-sheet-title">${_esc(opts.title)}</div>` +
+    (opts.text?`<div class="custom-sheet-text">${_esc(opts.text)}</div>`:'') +
     `<div class="custom-sheet-btns">${opts.buttons.map((b,i)=>`<button class="custom-sheet-btn ${b.cls}" id="_csb${i}">${b.label}</button>`).join('')}</div>`;
   backdrop.appendChild(sheet); document.body.appendChild(backdrop);
   requestAnimationFrame(()=>requestAnimationFrame(()=>backdrop.classList.add('show')));
@@ -381,7 +405,7 @@ function switchTab(tabName) {
       inputAttributes: { autocomplete: 'off' },
       showCancelButton: true, confirmButtonText: '확인', cancelButtonText: '취소',
     }).then(result => {
-      if (result.isConfirmed && result.value === '2821') {
+      if (result.isConfirmed && result.value === TEACHER_PW) {
         _dashboardAuthed = true;
         switchTab('dashboard');
       } else if (result.isConfirmed) {
@@ -757,7 +781,7 @@ function renderStudents() {
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
           <div style="min-width:0;">
             <div class="s-meta">${s.ban}반 ${s.num}번${absentBadge}</div>
-            <div class="s-name">${s.name}</div>
+            <div class="s-name">${_esc(s.name)}</div>
           </div>
           <span class="s-badge ${isAbsent?'absent':'present'}">${s.status}</span>
         </div>
@@ -765,11 +789,11 @@ function renderStudents() {
           <div class="reason-drop-overflow"><div class="reason-drop-inner">
             <select class="cd-reason-select" onchange="changeReasonType(${idx},this.value,this)">
               <option value="" ${!s.reasonType?'selected':''}>결석 사유 선택</option>
-              ${_reasonTypes.map(r=>`<option value="${r}" ${s.reasonType===r?'selected':''}>${r}</option>`).join('')}
+              ${_reasonTypes.map(r=>`<option value="${_esc(r)}" ${s.reasonType===r?'selected':''}>${_esc(r)}</option>`).join('')}
               <option value="직접 입력" ${s.reasonType==='직접 입력'?'selected':''}>직접 입력</option>
             </select>
             <div style="position:relative;display:${s.reasonType==='직접 입력'?'block':'none'}">
-              <input type="text" class="cd-reason-input" placeholder="상세 사유 입력" value="${s.reasonText||''}" oninput="changeReasonText(${idx},this.value)">
+              <input type="text" class="cd-reason-input" placeholder="상세 사유 입력" value="${_esc(s.reasonText)}" oninput="changeReasonText(${idx},this.value)">
               <span class="clear-input-btn" onclick="clearReasonText(${idx},this)" role="button" tabindex="0" aria-label="입력 지우기">&times;</span>
             </div>
             <div class="nocount-row" onclick="event.stopPropagation()" onpointerdown="event.stopPropagation()" onpointerup="event.stopPropagation()">
@@ -835,7 +859,7 @@ function renderStudents() {
             </div>
           </div></div>
         </div>
-        ${s.reason&&!s.reasonType?`<div class="reason-text">⚠ ${s.reason}</div>`:''}
+        ${s.reason&&!s.reasonType?`<div class="reason-text">⚠ ${_esc(s.reason)}</div>`:''}
       </div>`;
   }).join('');
   updateDashboard();
@@ -1211,17 +1235,57 @@ function viewAllResults() {
   }
   report += '----------------------------------';
 
-  document.getElementById('resultBox').innerText = report;
-  _renderReportFromStudents(absentees, date, opt.text, currentStudents.length);
-  new bootstrap.Modal(document.getElementById('resultModal')).show();
+  _openResultSheet(report, absentees, date, opt.text, currentStudents.length);
 }
 
-function _renderReportFromStudents(absentees, date, session, total) {
+function _openResultSheet(reportText, absentees, date, session, total) {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'custom-sheet-backdrop';
+  backdrop.style.zIndex = '2100';
+  const sheet = document.createElement('div');
+  sheet.className = 'vh-sheet';
+
   const d = new Date(date), dn = ['일','월','화','수','목','금','토'];
   const dl = `${d.getMonth()+1}월 ${d.getDate()}일 (${dn[d.getDay()]})`;
-  const sub = document.getElementById('resultModalSub');
-  if (sub) sub.innerHTML = `${dl} · <span style="color:var(--blue);font-weight:700;">${session.replace(' 자율학습','')}</span>`;
+  const sessShort = session.replace(' 자율학습','');
 
+  sheet.innerHTML = `
+    <div class="vh-header">
+      <div class="vh-handle"></div>
+      <div class="vh-title-row">
+        <div class="vh-student-info" style="display:flex;align-items:center;gap:12px;">
+          <div style="width:36px;height:36px;border-radius:var(--radius-sm);background:var(--blue-dim);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>
+          </div>
+          <div>
+            <div class="vh-name">전체 결과</div>
+            <div class="vh-meta">${dl} · <span style="color:var(--blue);font-weight:700;">${sessShort}</span></div>
+          </div>
+        </div>
+        <button class="vh-close-btn" id="_rsClose" aria-label="닫기">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="vh-body" id="_rsBody"></div>
+    <button class="vh-add-btn is-green" id="_rsCopyBtn">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+      텍스트 복사
+    </button>`;
+  backdrop.appendChild(sheet);
+  document.body.appendChild(backdrop);
+  requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 420); };
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+  sheet.querySelector('#_rsClose').addEventListener('click', close);
+  sheet.querySelector('#_rsCopyBtn').addEventListener('click', () => {
+    navigator.clipboard.writeText(reportText).then(() => showSuccessToast('클립보드에 복사됐어요'));
+  });
+
+  _renderReportFromStudents(sheet.querySelector('#_rsBody'), absentees, total);
+}
+
+function _renderReportFromStudents(body, absentees, total) {
   const presentCount = total - absentees.length;
   let html = `<div class="vh-money-bar" style="margin-bottom:16px;">
     <div class="vh-money-card"><div class="vh-money-n" style="color:var(--ink-2)">${total}</div><div class="vh-money-l">총원</div></div>
@@ -1236,7 +1300,7 @@ function _renderReportFromStudents(absentees, date, session, total) {
       const ban = s.ban + '반';
       if (!grouped[ban]) grouped[ban] = [];
       const reason = s.reasonType === '직접 입력' ? s.reasonText : s.reasonType;
-      const label = `${s.num}번 ${s.name}${reason ? ` (${reason})` : ''}`;
+      const label = `${s.num}번 ${_esc(s.name)}${reason ? ` (${_esc(reason)})` : ''}`;
       grouped[ban].push({ label, hasReason: !!reason });
     });
     let blockIdx = 0;
@@ -1247,10 +1311,8 @@ function _renderReportFromStudents(absentees, date, session, total) {
       blockIdx++;
     }
   }
-  document.getElementById('reportPreview').innerHTML = html;
+  body.innerHTML = html;
 }
-
-function copyResult(){ const t=document.getElementById('resultBox').innerText; navigator.clipboard.writeText(t).then(()=>showSuccessToast('클립보드에 복사됐어요')); }
 
 /* ════════════════════════════════
    통계
@@ -1291,7 +1353,7 @@ function _applyStatsData(data) {
   let top3Html = '';
   for (let i = 0; i < Math.min(3, sorted.length); i++) {
     if (sorted[i].total <= 0) break;
-    top3Html += `<span style="display:inline-flex;align-items:center;gap:6px;background:var(--bg-deep);border-radius:var(--radius);box-shadow:var(--sh-sm);padding:8px 14px;font-size:13px;font-weight:700;color:var(--ink);white-space:nowrap;font-family:var(--font);">${medals[i]} ${sorted[i].group} ${sorted[i].name} <span style="color:var(--blue);font-weight:800;">${sorted[i].total.toFixed(1)}H</span></span>`;
+    top3Html += `<span style="display:inline-flex;align-items:center;gap:6px;background:var(--bg-deep);border-radius:var(--radius);box-shadow:var(--sh-sm);padding:8px 14px;font-size:13px;font-weight:700;color:var(--ink);white-space:nowrap;font-family:var(--font);">${medals[i]} ${_esc(sorted[i].group)} ${_esc(sorted[i].name)} <span style="color:var(--blue);font-weight:800;">${sorted[i].total.toFixed(1)}H</span></span>`;
   }
   document.getElementById('top3Container').innerHTML = top3Html || `<span style="color:var(--ink-3);font-size:13px;font-family:var(--font);">아직 누적 데이터가 없습니다.</span>`;
   const gFil = document.getElementById('filterStudyGroup');
@@ -1348,11 +1410,11 @@ function _statRowHtml(s, showGroup) {
   const rateColor = ratePct === null ? 'var(--ink-4)' : ratePct >= 90 ? 'var(--green)' : ratePct >= 70 ? 'var(--amber)' : 'var(--red)';
   const rateDim   = ratePct === null ? 'var(--bg-deep)' : ratePct >= 90 ? 'var(--green-dim)' : ratePct >= 70 ? 'var(--amber-dim)' : 'var(--red-dim)';
   const rateLabel = ratePct === null ? '—' : ratePct + '%';
-  const groupTag  = showGroup ? `<span class="sch-dr-s" style="background:var(--bg-deep);color:var(--ink-3);">${s.group}</span>` : '';
+  const groupTag  = showGroup ? `<span class="sch-dr-s" style="background:var(--bg-deep);color:var(--ink-3);">${_esc(s.group)}</span>` : '';
   return `<div class="stat-row" data-sid="${s.id}">
     <div style="width:36px;height:36px;border-radius:var(--radius-sm);background:var(--blue-dim);color:var(--blue);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;">${s.ban}-${s.num}</div>
     <div style="flex:1;min-width:0;">
-      <div style="font-size:14px;font-weight:700;color:var(--ink);">${s.name}</div>
+      <div style="font-size:14px;font-weight:700;color:var(--ink);">${_esc(s.name)}</div>
       <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">
         ${groupTag}
         <span class="sch-dr-s" style="background:var(--blue-dim);color:var(--blue);">${s.total.toFixed(1)}시간</span>
@@ -1432,7 +1494,7 @@ function _renderSchCards() {
     dgh+=`<div class="sch-sep"></div><div class="sch-day-wrap sch-sat"><div class="sch-day-lbl">토</div><div class="sch-day-group">${satCells}</div></div>`;
     const editAttr = _scheduleEditMode ? `onclick="_openScheduleCardEditorById('${s.id}')" style="cursor:pointer;"` : '';
     const editBadge = _scheduleEditMode ? `<span style="font-size:10px;font-weight:700;color:var(--blue);background:var(--blue-dim);border-radius:var(--radius-pill);padding:2px 8px;white-space:nowrap;flex-shrink:0;">세션 편집</span>` : '';
-    return `<div class="sch-card-row" ${editAttr}><div class="sch-top-row"><span class="sch-num-cell">${s.ban}반 ${s.num}번</span><span class="sch-name-cell">${s.name}</span><span class="sch-group-cell">${s.group}</span>${editBadge}</div><div class="sch-days">${dgh}</div></div>`;
+    return `<div class="sch-card-row" ${editAttr}><div class="sch-top-row"><span class="sch-num-cell">${s.ban}반 ${s.num}번</span><span class="sch-name-cell">${_esc(s.name)}</span><span class="sch-group-cell">${_esc(s.group)}</span>${editBadge}</div><div class="sch-days">${dgh}</div></div>`;
   }).join('');
 }
 function updateGroupScheduleView() {
@@ -1478,7 +1540,7 @@ function toggleScheduleEditMode() {
     confirmButtonText: '확인',
     cancelButtonText: '취소',
   }).then(result => {
-    if (result.isConfirmed && result.value === '2821') {
+    if (result.isConfirmed && result.value === TEACHER_PW) {
       _scheduleEditAuthed = true;
       _enterScheduleEditMode();
     } else if (result.isConfirmed) {
@@ -1552,7 +1614,7 @@ function renderSchDay(d){
   content.innerHTML=filtered.map(s=>{
     const sess=(s.schedule||[]).slice(offset,offset+count);
     const sessCells=sess.map((val,j)=>{ const cls=val==='O'?'sds-on':(val==='방과후'?'sds-aft':'sds-off'); const label=val==='방과후'?'방과후':sessLabels[j]; return`<span class="sch-dr-s ${cls}">${label}</span>`; }).join('');
-    return`<div class="sch-day-row"><div class="sch-dr-num">${s.num}번</div><div style="flex:1;min-width:0;"><div class="sch-dr-name">${s.name}</div><span class="sch-dr-grp" style="display:inline-block;margin-top:2px;">${s.group}</span></div><div class="sch-dr-sess">${sessCells}</div></div>`;
+    return`<div class="sch-day-row"><div class="sch-dr-num">${s.num}번</div><div style="flex:1;min-width:0;"><div class="sch-dr-name">${_esc(s.name)}</div><span class="sch-dr-grp" style="display:inline-block;margin-top:2px;">${_esc(s.group)}</span></div><div class="sch-dr-sess">${sessCells}</div></div>`;
   }).join('');
 }
 
@@ -1743,7 +1805,7 @@ function _rosterCardHtml(s) {
   const violClass   = s.violCount > 0 ? ' has-violation' : '';
   return `<div class="roster-card${violClass}" data-sid="${s.ban}_${s.num}_${encodeURIComponent(s.name)}_${encodeURIComponent(s.group)}_${s.id}">
     <div class="rc-num">${s.ban}반 ${s.num}번</div>
-    <div class="rc-name">${s.name}</div>
+    <div class="rc-name">${_esc(s.name)}</div>
     <div style="display:flex;flex-wrap:wrap;gap:3px;justify-content:center;margin-top:4px;">
       ${absentBadge}${violBadge}
     </div>
@@ -1753,7 +1815,6 @@ function _rosterCardHtml(s) {
 /* ════════════════════════════════
    대시보드 (교사 전용 — 오늘의 결석 현황 + 학생별 인사이트)
 ════════════════════════════════ */
-const DASH_GROUPS = ['청운반','백운 A반','백운 B반','백운 C반','백운 D반'];
 let _dashMode = 'absent'; // 'absent' | 'all' — "결석자만"/"전체 명단" 세그먼트 상태
 
 function _dashShiftDate(delta) {
@@ -1823,7 +1884,7 @@ function _dashSessTag(sess) {
   if (sess.status !== '결석') {
     return `<span class="sch-dr-s" style="background:var(--green-dim);color:var(--green);">${short} 출석</span>`;
   }
-  const label = sess.reason ? `${short} · ${sess.reason}` : short;
+  const label = sess.reason ? `${short} · ${_esc(sess.reason)}` : short;
   const bg = sess.noCount ? 'var(--green-dim)' : 'var(--red-dim)';
   const fg = sess.noCount ? 'var(--green)'      : 'var(--red)';
   return `<span class="sch-dr-s" style="background:${bg};color:${fg};">${label}${sess.noCount ? ' (노카운트)' : ''}</span>`;
@@ -1836,7 +1897,7 @@ function _dashStudentRowHtml(s, badgeBg, badgeFg) {
   return `<div class="_dash-student" data-sid="${s.id}" style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--bg-deep);cursor:pointer;">
     <div style="width:36px;height:36px;border-radius:var(--radius-sm);background:${badgeBg};color:${badgeFg};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;">${s.ban}-${s.num}</div>
     <div style="flex:1;min-width:0;">
-      <div style="font-size:14px;font-weight:700;color:var(--ink);">${s.name}</div>
+      <div style="font-size:14px;font-weight:700;color:var(--ink);">${_esc(s.name)}</div>
       <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">${tags}</div>
     </div>
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ink-4)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polyline points="9 18 15 12 9 6"/></svg>
@@ -1871,7 +1932,7 @@ function _renderDashboard(absences, date) {
   }
 
   window._dashRoster = absences;
-  const html = DASH_GROUPS.map(g => {
+  const html = GROUPS.map(g => {
     const gs = absences.filter(a => a.group === g)
       .sort((a,b) => parseInt(a.ban)-parseInt(b.ban) || parseInt(a.num)-parseInt(b.num));
     if (!gs.length) return '';
@@ -1908,7 +1969,7 @@ function _renderDashboardAll(roster, date) {
   }
 
   window._dashRoster = roster;
-  const html = DASH_GROUPS.map(g => {
+  const html = GROUPS.map(g => {
     const gs = roster.filter(s => s.group === g)
       .sort((a,b) => parseInt(a.ban)-parseInt(b.ban) || parseInt(a.num)-parseInt(b.num));
     if (!gs.length) return '';
@@ -1935,8 +1996,8 @@ function _openStudentInsightSheet(student) {
       <div class="vh-handle"></div>
       <div class="vh-title-row">
         <div class="vh-student-info">
-          <div class="vh-name">${student.name}</div>
-          <div class="vh-meta">${student.ban}반 ${student.num}번 · ${student.group}</div>
+          <div class="vh-name">${_esc(student.name)}</div>
+          <div class="vh-meta">${student.ban}반 ${student.num}번 · ${_esc(student.group)}</div>
         </div>
         <button class="vh-close-btn" id="_diClose" aria-label="닫기">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -1989,7 +2050,7 @@ function _renderStudentInsightBody(body, ins) {
   const reasonHtml = reasonEntries.length
     ? `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:18px;">
         ${reasonEntries.map(([reason, count]) => `<div style="display:flex;justify-content:space-between;align-items:center;background:var(--bg-deep);border-radius:var(--radius-sm);padding:9px 12px;">
-          <span style="font-size:13px;color:var(--ink-2);font-weight:600;">${reason}</span>
+          <span style="font-size:13px;color:var(--ink-2);font-weight:600;">${_esc(reason)}</span>
           <span style="font-size:13px;font-weight:800;color:var(--ink);">${count}회</span>
         </div>`).join('')}
       </div>`
@@ -1999,7 +2060,7 @@ function _renderStudentInsightBody(body, ins) {
   const recentHtml = ins.recentAbsences.length
     ? ins.recentAbsences.map(a => {
         const nc = a.noCount ? `<span style="font-size:10px;font-weight:700;color:var(--green);background:var(--green-dim);border-radius:var(--radius-pill);padding:1px 8px;margin-left:6px;">노카운트</span>` : '';
-        return `<div class="vh-item"><div class="vh-item-head"><div class="vh-type-dot" style="background:var(--amber);"></div><div class="vh-item-main"><div class="vh-item-type">${a.date}${nc}</div><div class="vh-item-date">${ss(a.session)}</div></div><span class="vh-item-action is-etc">${a.reason || '사유 없음'}</span></div></div>`;
+        return `<div class="vh-item"><div class="vh-item-head"><div class="vh-type-dot" style="background:var(--amber);"></div><div class="vh-item-main"><div class="vh-item-type">${a.date}${nc}</div><div class="vh-item-date">${ss(a.session)}</div></div><span class="vh-item-action is-etc">${_esc(a.reason) || '사유 없음'}</span></div></div>`;
       }).join('')
     : _emptyState('결석 기록이 없습니다.');
 
@@ -2026,8 +2087,8 @@ function openViolHistory(student) {
       <div class="vh-handle"></div>
       <div class="vh-title-row">
         <div class="vh-student-info">
-          <div class="vh-name">${student.name}</div>
-          <div class="vh-meta">${student.ban}반 ${student.num}번 · ${student.group}</div>
+          <div class="vh-name">${_esc(student.name)}</div>
+          <div class="vh-meta">${student.ban}반 ${student.num}번 · ${_esc(student.group)}</div>
         </div>
         <button class="vh-close-btn" id="_vhClose" aria-label="닫기">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -2193,8 +2254,8 @@ function _renderViolHistoryBody(body){
     const fine=_parseFine(r.action),isFine=fine>0;
     const actionCls=isFine?'is-fine':(r.action.includes('경고')?'is-warn':'is-etc');
     const fineRow=isFine?`<div class="vh-fine-row"><span class="vh-fine-amount">${fine.toLocaleString()}원</span><div class="vh-pay-toggle"><button class="vh-pay-btn ${r.paid?'':'unpaid-active'}" data-idx="${idx}" data-state="unpaid" onclick="_togglePayment(this,${idx})">미납</button><button class="vh-pay-btn ${r.paid?'paid-active':''}" data-idx="${idx}" data-state="paid" onclick="_togglePayment(this,${idx})">납부</button></div></div>`:'';
-    const detailRow=r.detail?`<div class="vh-item-detail">${r.detail}</div>`:'';
-    return`<div class="vh-item" data-ridx="${idx}"><div class="vh-item-head"><div class="vh-type-dot"></div><div class="vh-item-main"><div class="vh-item-type">${r.violType}</div><div class="vh-item-date">${r.date}</div></div><span class="vh-item-action ${actionCls}">${r.action}</span></div>${detailRow}${fineRow}</div>`;
+    const detailRow=r.detail?`<div class="vh-item-detail">${_esc(r.detail)}</div>`:'';
+    return`<div class="vh-item" data-ridx="${idx}"><div class="vh-item-head"><div class="vh-type-dot"></div><div class="vh-item-main"><div class="vh-item-type">${_esc(r.violType)}</div><div class="vh-item-date">${r.date}</div></div><span class="vh-item-action ${actionCls}">${_esc(r.action)}</span></div>${detailRow}${fineRow}</div>`;
   }).join('');
 }
 
@@ -2204,7 +2265,7 @@ function _renderAbsentHistoryBody(body){
   const ss=s=>s.replace(' 자율학습','');
   body.innerHTML=absents.map(a=>{
     const nc=a.noCount?`<span style="font-size:10px;font-weight:700;color:var(--green);background:var(--green-dim);border-radius:var(--radius-pill);padding:1px 8px;margin-left:6px;">노카운트</span>`:'';
-    return`<div class="vh-item"><div class="vh-item-head"><div class="vh-type-dot" style="background:var(--amber);"></div><div class="vh-item-main"><div class="vh-item-type">${a.date}${nc}</div><div class="vh-item-date">${ss(a.session)}</div></div><span class="vh-item-action is-etc">${a.reason||'사유 없음'}</span></div></div>`;
+    return`<div class="vh-item"><div class="vh-item-head"><div class="vh-type-dot" style="background:var(--amber);"></div><div class="vh-item-main"><div class="vh-item-type">${a.date}${nc}</div><div class="vh-item-date">${ss(a.session)}</div></div><span class="vh-item-action is-etc">${_esc(a.reason)||'사유 없음'}</span></div></div>`;
   }).join('');
 }
 
@@ -2256,8 +2317,8 @@ function _openStudentPickerSheet(students) {
     `<div style="display:flex;align-items:center;padding:12px 0;border-bottom:1px solid var(--bg-deep);cursor:pointer;gap:12px;" id="_vpick${i}">
        <div style="width:36px;height:36px;border-radius:var(--radius-sm);background:var(--blue-dim);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;font-weight:800;color:var(--blue);">${s.ban}</div>
        <div style="flex:1;">
-         <div style="font-size:15px;font-weight:700;color:var(--ink);">${s.name}</div>
-         <div style="font-size:11px;color:var(--ink-3);margin-top:1px;">${s.ban}반 ${s.num}번 · ${s.group}</div>
+         <div style="font-size:15px;font-weight:700;color:var(--ink);">${_esc(s.name)}</div>
+         <div style="font-size:11px;color:var(--ink-3);margin-top:1px;">${s.ban}반 ${s.num}번 · ${_esc(s.group)}</div>
        </div>
      </div>`
   ).join('');
@@ -2288,7 +2349,7 @@ function openViolSheet(student, preselect = {}) {
   const sheet    = document.createElement('div'); sheet.className    = 'custom-sheet';
   sheet.style.paddingBottom = '40px';
 
-  const violOpts = _violationTypes.map(v => `<option value="${v}">${v}</option>`).join('');
+  const violOpts = _violationTypes.map(v => `<option value="${_esc(v)}">${_esc(v)}</option>`).join('');
   const actOpts  = VIOLATION_ACTIONS.map(a => `<option value="${a}">${a}</option>`).join('');
 
   sheet.innerHTML = `
@@ -2298,8 +2359,8 @@ function openViolSheet(student, preselect = {}) {
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
       </div>
       <div>
-        <div class="viol-student-name">${student.name}</div>
-        <div class="viol-student-meta">${student.ban}반 ${student.num}번 · ${student.group}</div>
+        <div class="viol-student-name">${_esc(student.name)}</div>
+        <div class="viol-student-meta">${student.ban}반 ${student.num}번 · ${_esc(student.group)}</div>
       </div>
     </div>
 
@@ -2433,7 +2494,7 @@ function _submitViolation() {
    교사 메뉴
 ════════════════════════════════ */
 
-// 교사 메뉴 비밀번호(2821) 인증 게이트 — 교사 메뉴 진입, 명단 탭 세션 수정 등
+// 교사 메뉴 비밀번호(TEACHER_PW) 인증 게이트 — 교사 메뉴 진입, 명단 탭 세션 수정 등
 // 교사만 허용해야 하는 동작 앞에서 공통으로 사용
 function _requireTeacherAuth(onSuccess, opts = {}) {
   if (localStorage.getItem('teacherPwEnabled') === 'false') {
@@ -2450,7 +2511,7 @@ function _requireTeacherAuth(onSuccess, opts = {}) {
     confirmButtonText: '확인',
     cancelButtonText: '취소',
   }).then(result => {
-    if (result.isConfirmed && result.value === '2821') {
+    if (result.isConfirmed && result.value === TEACHER_PW) {
       onSuccess();
     } else if (result.isConfirmed) {
       Swal.fire({ title: '비밀번호가 틀렸습니다', icon: 'error', confirmButtonText: '확인' });
@@ -2551,8 +2612,8 @@ function _loadActivityLogBody(body) {
     body.innerHTML = rows.map(r => {
       const isNotice = r.type === 'notice';
       const dotColor = isNotice ? 'background:var(--amber);' : 'background:var(--blue);';
-      const actorTxt = r.actor ? `${r.actor} · ` : '';
-      return `<div class="vh-item"><div class="vh-item-head"><div class="vh-type-dot" style="${dotColor}"></div><div class="vh-item-main"><div class="vh-item-type">${r.message}</div><div class="vh-item-date">${actorTxt}${_timeAgo(r.created_at)}</div></div></div></div>`;
+      const actorTxt = r.actor ? `${_esc(r.actor)} · ` : '';
+      return `<div class="vh-item"><div class="vh-item-head"><div class="vh-type-dot" style="${dotColor}"></div><div class="vh-item-main"><div class="vh-item-type">${_esc(r.message)}</div><div class="vh-item-date">${actorTxt}${_timeAgo(r.created_at)}</div></div></div></div>`;
     }).join('');
   }).catch(() => { body.innerHTML = '<div class="vh-empty">불러오지 못했습니다.</div>'; });
 }
@@ -2707,7 +2768,7 @@ function _openStudentPickerSheetEx(students, callback) {
         style="display:flex;align-items:center;padding:10px 0;border-bottom:1px solid var(--bg-deep);cursor:pointer;gap:12px;">
         <div style="width:32px;height:32px;border-radius:var(--radius-sm);background:var(--blue-dim);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;font-weight:800;color:var(--blue);">${s.ban}</div>
         <div>
-          <div style="font-size:14px;font-weight:700;color:var(--ink);">${s.name}</div>
+          <div style="font-size:14px;font-weight:700;color:var(--ink);">${_esc(s.name)}</div>
           <div style="font-size:11px;color:var(--ink-3);">${s.ban}반 ${s.num}번</div>
         </div>
       </div>`).join('');
@@ -2791,8 +2852,8 @@ function _renderAttEditor(student, records) {
     <div class="custom-sheet-handle"></div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
       <div>
-        <div style="font-size:15px;font-weight:800;color:var(--ink);">${student.name}</div>
-        <div style="font-size:12px;color:var(--ink-3);margin-top:2px;">${student.ban}반 ${student.num}번 · ${student.group}</div>
+        <div style="font-size:15px;font-weight:800;color:var(--ink);">${_esc(student.name)}</div>
+        <div style="font-size:12px;color:var(--ink-3);margin-top:2px;">${student.ban}반 ${student.num}번 · ${_esc(student.group)}</div>
       </div>
       <button id="_aeClose" aria-label="닫기" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;box-shadow:var(--sh-xs);">✕</button>
     </div>
@@ -2995,8 +3056,8 @@ function _renderScheduleEditor(student, rawSchedule, onSaved) {
     <div class="custom-sheet-handle"></div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
       <div>
-        <div style="font-size:15px;font-weight:800;color:var(--ink);">${student.name}</div>
-        <div style="font-size:12px;color:var(--ink-3);margin-top:2px;">${student.ban}반 ${student.num}번 · ${student.group}</div>
+        <div style="font-size:15px;font-weight:800;color:var(--ink);">${_esc(student.name)}</div>
+        <div style="font-size:12px;color:var(--ink-3);margin-top:2px;">${student.ban}반 ${student.num}번 · ${_esc(student.group)}</div>
       </div>
       <button id="_sceClose" aria-label="닫기" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;font-size:12px;box-shadow:var(--sh-xs);">✕</button>
     </div>
@@ -3287,8 +3348,8 @@ function _teacherChangeRoom(student) {
 
   sheet.innerHTML = `
     <div class="custom-sheet-handle"></div>
-    <div style="font-size:15px;font-weight:800;color:var(--ink);margin-bottom:4px;">${student.name}</div>
-    <div style="font-size:12px;color:var(--ink-3);margin-bottom:18px;">현재 자습반: <b style="color:var(--blue);">${student.group}</b></div>
+    <div style="font-size:15px;font-weight:800;color:var(--ink);margin-bottom:4px;">${_esc(student.name)}</div>
+    <div style="font-size:12px;color:var(--ink-3);margin-bottom:18px;">현재 자습반: <b style="color:var(--blue);">${_esc(student.group)}</b></div>
     <div style="display:flex;flex-direction:column;gap:8px;">
       ${GROUPS.map(g => `
         <button class="_crBtn" data-room="${g}" style="all:unset;box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-radius:var(--radius);box-shadow:var(--sh-md);cursor:pointer;font-size:14px;font-weight:700;background:${g===student.group?'var(--blue-dim)':'var(--surface)'};color:${g===student.group?'var(--blue)':'var(--ink)'};">
@@ -3325,8 +3386,8 @@ async function _teacherDeleteStudent(student) {
   hideLoading();
 
   const result = await Swal.fire({
-    title: `${student.name} 삭제`,
-    html:  `<b style="color:var(--red);">${student.ban}반 ${student.num}번 ${student.name}</b>을 삭제하면 아래 기록도 함께 영구 삭제됩니다.<br><br>
+    title: `${_esc(student.name)} 삭제`,
+    html:  `<b style="color:var(--red);">${student.ban}반 ${student.num}번 ${_esc(student.name)}</b>을 삭제하면 아래 기록도 함께 영구 삭제됩니다.<br><br>
       출석 기록 <b>${counts.attendanceCount}건</b> · 위반 기록 <b>${counts.violationCount}건</b><br><br>
       <span style="color:var(--red);font-weight:700;">되돌릴 수 없습니다.</span> 정말 삭제할까요?`,
     icon:  'warning', showCancelButton: true,
@@ -3453,8 +3514,8 @@ function _renderImportPreview(sheet, rawRows, close) {
               return `<tr style="border-bottom:1px solid var(--bg-deep);">
                 <td style="padding:5px 6px;color:var(--ink);">${r.ban}</td>
                 <td style="padding:5px 6px;color:var(--ink);">${r.num}</td>
-                <td style="padding:5px 6px;font-weight:700;color:var(--ink);">${r.name}</td>
-                <td style="padding:5px 6px;color:var(--ink-3);font-size:11px;">${r.group}</td>
+                <td style="padding:5px 6px;font-weight:700;color:var(--ink);">${_esc(r.name)}</td>
+                <td style="padding:5px 6px;color:var(--ink-3);font-size:11px;">${_esc(r.group)}</td>
                 <td style="padding:5px 6px;text-align:right;color:var(--blue);font-weight:700;">${cnt||'-'}</td>
               </tr>`;
             }).join('')}
@@ -3694,7 +3755,7 @@ function _renderFineSheet(fines) {
       const groupTotal  = vs.reduce((s, v) => s + _parseFine(v.action), 0);
       const groupUnpaid = vs.filter(v => !v.paid).reduce((s, v) => s + _parseFine(v.action), 0);
       html += `<div style="display:flex;align-items:baseline;justify-content:space-between;padding:6px 2px 4px;">
-        <span style="font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--ink-4);">${group}</span>
+        <span style="font-size:10px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--ink-4);">${_esc(group)}</span>
         <span style="font-size:11px;font-weight:700;color:var(--ink-3);">소계 ${fmt(groupTotal)}${groupUnpaid > 0 ? ` · 미납 ${fmt(groupUnpaid)}` : ''}</span>
       </div>`;
       for (const v of vs) {
@@ -3703,11 +3764,11 @@ function _renderFineSheet(fines) {
         html += `<div class="_fsh-row" data-vid="${v.id}"
           style="background:var(--surface);border-radius:var(--radius-sm);box-shadow:var(--sh-sm);padding:12px 14px;">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
-            <span style="font-size:13px;font-weight:700;color:var(--ink);">${v.student.name}</span>
+            <span style="font-size:13px;font-weight:700;color:var(--ink);">${_esc(v.student.name)}</span>
             <span style="font-size:11px;color:var(--ink-3);">${v.student.ban}반 ${v.student.num}번</span>
             <span style="margin-left:auto;font-size:11px;color:var(--ink-4);">${v.date}</span>
           </div>
-          <div style="font-size:11px;color:var(--ink-3);margin-bottom:8px;">${v.violType}${v.detail ? ' · ' + v.detail : ''}</div>
+          <div style="font-size:11px;color:var(--ink-3);margin-bottom:8px;">${_esc(v.violType)}${v.detail ? ' · ' + _esc(v.detail) : ''}</div>
           <div style="display:flex;align-items:center;gap:8px;">
             <span class="_fsh-amt" style="font-size:14px;font-weight:800;color:${isPaid ? 'var(--ink-3)' : 'var(--red)'};">${fmt(fine)}</span>
             <button class="_fsh-e" title="수정" aria-label="수정" style="width:26px;height:26px;border-radius:6px;border:1.5px solid var(--bg-deep);background:var(--surface);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;flex-shrink:0;">
@@ -3811,7 +3872,7 @@ function _editFineRecord(viol, onSaved) {
 
   const violOpts = _violationTypes.map(v => {
     const sel = (v === viol.violType) || (v === '직접 입력' && isCustomType);
-    return `<option value="${v}"${sel ? ' selected' : ''}>${v}</option>`;
+    return `<option value="${_esc(v)}"${sel ? ' selected' : ''}>${_esc(v)}</option>`;
   }).join('');
 
   sheet.innerHTML = `
@@ -3822,7 +3883,7 @@ function _editFineRecord(viol, onSaved) {
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
-    <div style="font-size:12px;color:var(--ink-3);margin-bottom:14px;font-weight:600;">${viol.student.name} (${viol.student.ban}반 ${viol.student.num}번)</div>
+    <div style="font-size:12px;color:var(--ink-3);margin-bottom:14px;font-weight:600;">${_esc(viol.student.name)} (${viol.student.ban}반 ${viol.student.num}번)</div>
     <div class="viol-field">
       <label class="viol-label">날짜</label>
       <input type="date" class="viol-input" id="_feDate" value="${viol.date}">
@@ -3833,7 +3894,7 @@ function _editFineRecord(viol, onSaved) {
         ${violOpts}
       </select>
       <div id="_feTypeCustomWrap" style="margin-top:8px;display:${isCustomType ? 'block' : 'none'};">
-        <input type="text" class="viol-input" id="_feTypeCustom" value="${isCustomType ? viol.violType : ''}" placeholder="위반 유형을 직접 입력하세요">
+        <input type="text" class="viol-input" id="_feTypeCustom" value="${isCustomType ? _esc(viol.violType) : ''}" placeholder="위반 유형을 직접 입력하세요">
       </div>
     </div>
     <div class="viol-field">
@@ -3845,7 +3906,7 @@ function _editFineRecord(viol, onSaved) {
     </div>
     <div class="viol-field">
       <label class="viol-label">상세 내용 <span style="font-size:10px;color:var(--ink-4);font-weight:500;">(선택)</span></label>
-      <textarea class="viol-textarea" id="_feDetail" placeholder="추가 메모를 입력하세요.">${viol.detail}</textarea>
+      <textarea class="viol-textarea" id="_feDetail" placeholder="추가 메모를 입력하세요.">${_esc(viol.detail)}</textarea>
     </div>
     <div style="display:flex;gap:10px;margin-top:16px;">
       <button id="_feCancel" class="csb-cancel" style="flex:1;padding:13px;border:none;border-radius:var(--radius-pill);font-family:var(--font);font-size:14px;font-weight:700;cursor:pointer;">취소</button>
@@ -4163,7 +4224,7 @@ function _renderReasonList(sheet) {
   }
   list.innerHTML = _reasonTypes.map((r, i) => `
     <div style="display:flex;align-items:center;gap:6px;padding:8px 10px;background:var(--surface);border-radius:var(--radius-sm);box-shadow:var(--sh-sm);">
-      <span style="flex:1;font-size:13px;font-weight:600;color:var(--ink);">${r}</span>
+      <span style="flex:1;font-size:13px;font-weight:600;color:var(--ink);">${_esc(r)}</span>
       <button onclick="_moveReasonType(${i},-1)" title="위로" aria-label="위로 이동" style="width:28px;height:28px;border:none;border-radius:6px;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;font-size:13px;line-height:1;">↑</button>
       <button onclick="_moveReasonType(${i},1)"  title="아래로" aria-label="아래로 이동" style="width:28px;height:28px;border:none;border-radius:6px;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;font-size:13px;line-height:1;">↓</button>
       <button onclick="_deleteReasonType(${i})" title="삭제" aria-label="사유 삭제" style="width:28px;height:28px;border:none;border-radius:6px;background:var(--red-dim);color:var(--red,#ef4444);cursor:pointer;font-size:16px;font-weight:900;line-height:1;">×</button>
@@ -4216,7 +4277,7 @@ function _renderViolationTypeList(sheet) {
   }
   list.innerHTML = editable.map((v, i) => `
     <div style="display:flex;align-items:center;gap:6px;padding:8px 10px;background:var(--surface);border-radius:var(--radius-sm);box-shadow:var(--sh-sm);">
-      <span style="flex:1;font-size:13px;font-weight:600;color:var(--ink);">${v}</span>
+      <span style="flex:1;font-size:13px;font-weight:600;color:var(--ink);">${_esc(v)}</span>
       <button onclick="_moveViolationType(${i},-1)" title="위로" aria-label="위로 이동" style="width:28px;height:28px;border:none;border-radius:6px;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;font-size:13px;line-height:1;">↑</button>
       <button onclick="_moveViolationType(${i},1)"  title="아래로" aria-label="아래로 이동" style="width:28px;height:28px;border:none;border-radius:6px;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;font-size:13px;line-height:1;">↓</button>
       <button onclick="_deleteViolationType(${i})" title="삭제" aria-label="유형 삭제" style="width:28px;height:28px;border:none;border-radius:6px;background:var(--red-dim);color:var(--red,#ef4444);cursor:pointer;font-size:16px;font-weight:900;line-height:1;">×</button>
@@ -4379,6 +4440,7 @@ window.onload = () => {
   // 응답이 오면 다시 숨겨지는 깜빡임이 생겨서 제거함.
   _applyInstallBtnVisibility();
   _applyRefreshBtnVisibility();
+  _applySemesterLabel();
   _initPullToRefresh();
   _movePcNavIndicator('home');
 
