@@ -133,6 +133,9 @@ window.onload = () => {
         API.getActivityLogEnabled()
           .then(on => { _activityLogOn = on; _applyActivityBellVisibility(); checkActivityBadge(); })
           .catch(() => { checkActivityBadge(); });
+        API.getCardExportEnabled()
+          .then(on => { _cardExportOn = on; })
+          .catch(() => {});
         if (!_rosterLoaded) {
           API.getAllMemberList()
             .then(data => { _rosterData=data||[]; _rosterLoaded=true; })

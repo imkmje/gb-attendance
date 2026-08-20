@@ -1527,10 +1527,12 @@ function _openDevMenu() {
   Promise.all([
     API.getHolidays().catch(() => []),
     API.getActivityLogEnabled().catch(() => _activityLogOn),
-  ]).then(([holidays, activityLogOn]) => {
+    API.getCardExportEnabled().catch(() => _cardExportOn),
+  ]).then(([holidays, activityLogOn, cardExportOn]) => {
     hideLoading();
     _holidays = holidays || [];
     _activityLogOn = activityLogOn;
+    _cardExportOn = cardExportOn;
     _applyActivityBellVisibility();
     _renderDevMenuSheet();
   });
@@ -1673,6 +1675,17 @@ function _renderDevMenuSheet() {
       </div>
     </div>
 
+    <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;">🖼️ 기간 결산 카드 이미지</div>
+    <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px 14px;box-shadow:var(--sh-pressed);margin-bottom:24px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:700;color:var(--ink-2);">"카드 이미지" 내보내기 버튼 사용</div>
+          <div style="font-size:11px;color:var(--ink-3);margin-top:2px;">모든 교사에게 공통 적용 · OFF 시 기간 결산 시트에서 버튼 숨김(텍스트 복사는 그대로 유지)</div>
+        </div>
+        <button id="_devCardExportToggle" onclick="_toggleCardExport()" style="padding:6px 16px;border-radius:var(--radius-pill);border:none;font-family:var(--font);font-size:13px;font-weight:800;cursor:pointer;min-width:52px;transition:background .2s,color .2s;"></button>
+      </div>
+    </div>
+
     <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;">🗑️ 출석 기록 초기화</div>
     <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px;box-shadow:var(--sh-pressed);margin-bottom:24px;">
       <div style="font-size:11px;color:var(--red);font-weight:600;margin-bottom:8px;">지정한 날짜의 모든 출석 기록이 삭제됩니다.</div>
@@ -1722,6 +1735,8 @@ function _renderDevMenuSheet() {
   if (pwBtn) _applyTeacherPwBtn(pwBtn);
   const actLogBtn = sheet.querySelector('#_devActLogToggle');
   if (actLogBtn) _applyActivityLogBtn(actLogBtn);
+  const cardExportBtn = sheet.querySelector('#_devCardExportToggle');
+  if (cardExportBtn) _applyCardExportBtn(cardExportBtn);
 }
 
 async function _saveSemesterConfig() {
@@ -1776,6 +1791,29 @@ async function _toggleActivityLog() {
     _activityLogOn = prev;
     if (btn) _applyActivityLogBtn(btn);
     _applyActivityBellVisibility();
+    Swal.fire('오류', err?.message || '설정을 저장하지 못했습니다.', 'error');
+  }
+}
+
+function _applyCardExportBtn(btn) {
+  const on = _cardExportOn;
+  btn.textContent = on ? 'ON' : 'OFF';
+  btn.style.background = on ? 'var(--green)' : 'var(--red)';
+  btn.style.color = '#fff';
+}
+
+async function _toggleCardExport() {
+  const prev = _cardExportOn;
+  const next = !prev;
+  _cardExportOn = next;
+  const btn = document.getElementById('_devCardExportToggle');
+  if (btn) _applyCardExportBtn(btn);
+  try {
+    await API.saveCardExportEnabled(next);
+    showSuccessToast('카드 이미지 내보내기 ' + (next ? 'ON' : 'OFF'), '모든 교사에게 적용됩니다');
+  } catch (err) {
+    _cardExportOn = prev;
+    if (btn) _applyCardExportBtn(btn);
     Swal.fire('오류', err?.message || '설정을 저장하지 못했습니다.', 'error');
   }
 }

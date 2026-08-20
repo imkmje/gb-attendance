@@ -356,6 +356,15 @@ function _mondayOf(date) {
   return d;
 }
 
+// 이번 달이 아니라 지난달 1일~말일 범위 — 매달 초에 "저번 달 결산" 공지를
+// 낼 때 날짜를 손으로 잡지 않아도 되도록.
+function _lastMonthRange() {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const end = new Date(now.getFullYear(), now.getMonth(), 0); // 이번 달 0일 = 지난달 말일
+  return { start: _fmtYMD(start), end: _fmtYMD(end) };
+}
+
 function openPeriodSummarySheet() {
   const backdrop = document.createElement('div');
   backdrop.className = 'custom-sheet-backdrop';
@@ -384,6 +393,7 @@ function openPeriodSummarySheet() {
     <div class="ssf-chips" style="margin-bottom:8px;">
       <button class="ssf-chip" id="_psPresetWeek">이번 주</button>
       <button class="ssf-chip on" id="_psPresetMonth">이번 달</button>
+      <button class="ssf-chip" id="_psPresetLastMonth">지난달</button>
       <button class="ssf-chip" id="_psPresetSemester">학기 전체</button>
     </div>
     <div style="position:relative;margin-bottom:14px;">
@@ -396,10 +406,16 @@ function openPeriodSummarySheet() {
     </div>
     <div style="font-size:11px;font-weight:700;color:var(--ink-3);margin:14px 0 6px;flex-shrink:0;">표시·전달 항목 — 체크한 항목만 위 목록과 복사 텍스트에 보여요</div>
     <div id="_psFields" style="display:flex;flex-wrap:wrap;gap:6px;flex-shrink:0;transition:opacity var(--dur-fast) var(--ease);"></div>
-    <button class="vh-add-btn is-green" id="_psCopy" style="margin:12px 0 0;flex-shrink:0;">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
-      텍스트 미리보기
-    </button>`;
+    <div style="display:flex;gap:8px;margin:12px 0 0;flex-shrink:0;">
+      <button class="vh-add-btn is-green" id="_psCopy" style="flex:1;margin:0;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+        텍스트 미리보기
+      </button>
+      ${_cardExportOn ? `<button class="vh-add-btn is-blue" id="_psCardExport" style="flex:1;margin:0;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+        카드 이미지
+      </button>` : ''}
+    </div>`;
   backdrop.appendChild(sheet);
   document.body.appendChild(backdrop);
   requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
@@ -472,9 +488,10 @@ function openPeriodSummarySheet() {
   });
 
   const chips = {
-    week:     sheet.querySelector('#_psPresetWeek'),
-    month:    sheet.querySelector('#_psPresetMonth'),
-    semester: sheet.querySelector('#_psPresetSemester'),
+    week:      sheet.querySelector('#_psPresetWeek'),
+    month:     sheet.querySelector('#_psPresetMonth'),
+    lastMonth: sheet.querySelector('#_psPresetLastMonth'),
+    semester:  sheet.querySelector('#_psPresetSemester'),
   };
   const setActiveChip = key => Object.entries(chips).forEach(([k, el]) => el.classList.toggle('on', k === key));
 
@@ -488,6 +505,11 @@ function openPeriodSummarySheet() {
     setActiveChip('month');
     startInput.value = monthStart; endInput.value = today; runQuery();
   });
+  chips.lastMonth.addEventListener('click', () => {
+    setActiveChip('lastMonth');
+    const { start, end } = _lastMonthRange();
+    startInput.value = start; endInput.value = end; runQuery();
+  });
   chips.semester.addEventListener('click', () => {
     setActiveChip('semester');
     startInput.value = _currentSemesterStartDate(); endInput.value = today; runQuery();
@@ -496,6 +518,11 @@ function openPeriodSummarySheet() {
     if (!summary.length) { showSuccessToast('미리볼 내용이 없습니다'); return; }
     const text = _buildPeriodSummaryText(summary, startInput.value, endInput.value, getCheckedFields());
     _openTextPreviewSheet(text, '기간 결산 미리보기');
+  });
+  const cardExportBtn = sheet.querySelector('#_psCardExport');
+  if (cardExportBtn) cardExportBtn.addEventListener('click', () => {
+    if (!summary.length) { showSuccessToast('내보낼 내용이 없습니다'); return; }
+    _openCardExportSheet(summary, startInput.value, endInput.value, getCheckedFields());
   });
 
   runQuery();
@@ -589,21 +616,20 @@ const PERIOD_SUMMARY_FIELDS = [
 // 잘한 학생이 먼저 보이도록 한다(통계 탭 Top3와 같은 결의 표현).
 // fields: 체크박스에서 고른 필드 key 배열 — 굳이 안 보여주고 싶은 항목은
 // 빼고 복사 가능.
-const _MEDALS = ['🥇','🥈','🥉'];
 function _buildPeriodSummaryText(summary, start, end, fields) {
   const active = summary.filter(s => s.attendRate !== null);
   const activeFields = PERIOD_SUMMARY_FIELDS.filter(f => fields.includes(f.key));
   let text = `📊 기간 결산 (${_fmtDateShort(start)}~${_fmtDateShort(end)})\n`;
   GROUPS.forEach(g => {
+    // 메달은 없앴지만 "잘한 학생이 먼저 보이는" 정렬 자체는 그대로 유지.
     const gs = active.filter(s => s.group === g)
       .sort((a, b) => b.periodMaxStreak - a.periodMaxStreak || b.attendRate - a.attendRate);
     if (!gs.length) return;
     text += `\n[${g}]\n`;
-    gs.forEach((s, i) => {
-      const medal = _MEDALS[i] ? `${_MEDALS[i]} ` : '';
+    gs.forEach(s => {
       const parts = activeFields.map(f => f.get(s)).filter(Boolean); // null(숨김 항목) 제외
       const suffix = parts.length ? ` - ${parts.join(' · ')}` : '';
-      text += `${medal}· ${s.name}${suffix}\n`;
+      text += `· ${s.name}${suffix}\n`;
     });
   });
   return text.trim();
@@ -641,5 +667,160 @@ function _openTextPreviewSheet(text, title) {
   sheet.querySelector('#_tpvCopy').addEventListener('click', () => {
     navigator.clipboard.writeText(text).then(() => { showSuccessToast('클립보드에 복사됐어요'); close(); });
   });
+}
+
+/* ════════════════════════════════
+   기간 결산 — 카드 이미지로 내보내기 (반별)
+   개발자 메뉴 "카드 이미지 내보내기" 스위치가 켜져 있을 때만 기간 결산
+   시트에 버튼이 뜬다(꺼도 텍스트 복사는 그대로 유지). html2canvas로
+   화면 밖에 그린 실제 DOM을 그대로 캡처하는 방식이라 CSS를 재사용할 수
+   있지만, 뷰어(교사) 기기의 라이트/다크 테마와 무관하게 카톡 등으로 나가는
+   이미지는 항상 같은 모습이어야 하므로 var(--x) 대신 고정 헥스만 쓴다.
+════════════════════════════════ */
+const _CARD_HEX = {
+  bg:'#f6f3ef', line:'#e3dfd8', ink:'#1e1b18', ink2:'#4a4540', ink3:'#8c867e',
+  blue:'#7fa0d4', blueDim:'rgba(127,160,212,0.13)',
+  green:'#72b896', greenDim:'rgba(114,184,150,0.12)',
+  red:'#d4959a', redDim:'rgba(212,149,154,0.12)',
+  amber:'#d4ad6e', amberDim:'rgba(212,173,110,0.12)',
+  purple:'#9b87c4', purpleDim:'rgba(155,135,196,0.13)',
+};
+
+// 필드별 배지 색 — 화면용 PERIOD_SUMMARY_FIELDS.tag()는 var(--x)를 쓰지만,
+// 이 카드는 고정 헥스만 써야 해서 같은 색 규칙을 별도로 매핑한다.
+function _cardFieldBadge(f, s) {
+  const text = f.get(s);
+  if (!text) return '';
+  let fg = _CARD_HEX.ink2, bg = _CARD_HEX.line;
+  if (f.key === 'rate') {
+    fg = s.attendRate >= 90 ? _CARD_HEX.green : s.attendRate >= 70 ? _CARD_HEX.amber : _CARD_HEX.red;
+    bg = s.attendRate >= 90 ? _CARD_HEX.greenDim : s.attendRate >= 70 ? _CARD_HEX.amberDim : _CARD_HEX.redDim;
+  } else if (f.key === 'hours') { fg = _CARD_HEX.blue; bg = _CARD_HEX.blueDim; }
+  else if (f.key === 'total' || f.key === 'period' || f.key === 'fine') { fg = _CARD_HEX.red; bg = _CARD_HEX.redDim; }
+  else if (f.key === 'streak') { fg = _CARD_HEX.green; bg = _CARD_HEX.greenDim; }
+  else if (f.key === 'late' || f.key === 'early') { fg = _CARD_HEX.amber; bg = _CARD_HEX.amberDim; }
+  else if (f.key === 'viol') { fg = _CARD_HEX.purple; bg = _CARD_HEX.purpleDim; }
+  return `<span style="display:inline-block;background:${bg};color:${fg};font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;">${_esc(text)}</span>`;
+}
+
+// 반 하나를 카드 한 장으로 — 메달은 없지만 성과순 정렬 순서를 그대로
+// 순번(1,2,3…)으로 보여준다(텍스트 복사와 같은 정렬 기준 공유).
+function _periodCardHtml(group, students, start, end, activeFieldDefs) {
+  const rows = students.map((s, i) => {
+    const badges = activeFieldDefs.map(f => _cardFieldBadge(f, s)).filter(Boolean).join('');
+    return `<div style="display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid ${_CARD_HEX.line};">
+      <div style="width:30px;height:30px;border-radius:50%;background:${_CARD_HEX.line};color:${_CARD_HEX.ink3};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0;">${i + 1}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:17px;font-weight:800;color:${_CARD_HEX.ink};">${_esc(s.name)}</div>
+        ${badges ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:7px;">${badges}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  return `<div style="width:640px;background:${_CARD_HEX.bg};border-radius:28px;padding:40px 44px;box-sizing:border-box;font-family:'Noto Sans KR',-apple-system,sans-serif;">
+    <div style="font-size:13px;font-weight:800;color:${_CARD_HEX.blue};letter-spacing:0.4px;margin-bottom:8px;">📊 기간 결산</div>
+    <div style="font-size:28px;font-weight:900;color:${_CARD_HEX.ink};letter-spacing:-0.6px;">${_esc(group)}</div>
+    <div style="font-size:14px;font-weight:700;color:${_CARD_HEX.ink3};margin-top:6px;">${_fmtDateShort(start)} ~ ${_fmtDateShort(end)} · ${students.length}명</div>
+    <div style="margin-top:22px;">${rows || `<div style="padding:30px 0;text-align:center;color:${_CARD_HEX.ink3};font-size:13px;font-weight:600;">기록이 없습니다.</div>`}</div>
+  </div>`;
+}
+
+function _openCardExportSheet(summary, start, end, fields) {
+  const active = summary.filter(s => s.attendRate !== null);
+  const activeFieldDefs = PERIOD_SUMMARY_FIELDS.filter(f => fields.includes(f.key));
+  const groupsWithData = GROUPS.filter(g => active.some(s => s.group === g));
+  if (!groupsWithData.length) { showSuccessToast('내보낼 내용이 없습니다'); return; }
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'custom-sheet-backdrop';
+  backdrop.style.zIndex = '3200';
+  const sheet = document.createElement('div');
+  sheet.className = 'custom-sheet';
+  sheet.style.cssText = 'max-height:88dvh;display:flex;flex-direction:column;padding-bottom:20px;';
+  sheet.innerHTML = `
+    <div class="custom-sheet-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <div style="font-size:15px;font-weight:800;color:var(--ink);letter-spacing:-0.4px;">카드 이미지로 내보내기</div>
+      <button id="_ceClose" aria-label="닫기" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--sh-xs);">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="ssf-chips" id="_ceGroupChips" style="margin-bottom:14px;"></div>
+    <div id="_ceImgWrap" style="flex:1;overflow-y:auto;display:flex;align-items:flex-start;justify-content:center;background:var(--bg-deep);border-radius:var(--radius);padding:14px;box-shadow:var(--sh-pressed);">
+      <div class="cd-skeleton" style="width:100%;height:320px;border-radius:16px;"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:14px;flex-shrink:0;">
+      <button class="vh-add-btn is-green" id="_ceDownload" style="flex:1;margin:0;">다운로드</button>
+      ${navigator.share ? `<button class="vh-add-btn is-blue" id="_ceShare" style="flex:1;margin:0;">공유</button>` : ''}
+    </div>`;
+  backdrop.appendChild(sheet);
+  document.body.appendChild(backdrop);
+  requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 420); };
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+  sheet.querySelector('#_ceClose').addEventListener('click', close);
+
+  const chipsEl  = sheet.querySelector('#_ceGroupChips');
+  const imgWrap  = sheet.querySelector('#_ceImgWrap');
+  const dlBtn    = sheet.querySelector('#_ceDownload');
+  const shareBtn = sheet.querySelector('#_ceShare');
+
+  chipsEl.innerHTML = groupsWithData.map((g, i) => `<button class="ssf-chip${i === 0 ? ' on' : ''}" data-g="${_esc(g)}">${_esc(g)}</button>`).join('');
+
+  let currentBlob = null, currentGroup = groupsWithData[0], currentUrl = null;
+
+  const render = (group) => {
+    currentGroup = group;
+    chipsEl.querySelectorAll('.ssf-chip').forEach(b => b.classList.toggle('on', b.dataset.g === group));
+    imgWrap.innerHTML = `<div class="cd-skeleton" style="width:100%;height:320px;border-radius:16px;"></div>`;
+
+    const students = active.filter(s => s.group === group)
+      .sort((a, b) => b.periodMaxStreak - a.periodMaxStreak || b.attendRate - a.attendRate);
+
+    const offscreen = document.createElement('div');
+    offscreen.style.cssText = 'position:fixed;left:-9999px;top:0;';
+    offscreen.innerHTML = _periodCardHtml(group, students, start, end, activeFieldDefs);
+    document.body.appendChild(offscreen);
+
+    html2canvas(offscreen.firstElementChild, { scale: 2, backgroundColor: null })
+      .then(canvas => {
+        offscreen.remove();
+        canvas.toBlob(blob => {
+          if (currentGroup !== group) return; // 캡처 도중 다른 반 칩을 눌렀으면 이 결과는 버림
+          if (currentUrl) URL.revokeObjectURL(currentUrl);
+          currentBlob = blob;
+          currentUrl = URL.createObjectURL(blob);
+          imgWrap.innerHTML = `<img src="${currentUrl}" style="max-width:100%;border-radius:16px;box-shadow:var(--sh-md);display:block;">`;
+        }, 'image/png');
+      })
+      .catch(() => {
+        offscreen.remove();
+        imgWrap.innerHTML = _emptyState('이미지를 만들지 못했습니다.');
+      });
+  };
+
+  chipsEl.querySelectorAll('.ssf-chip').forEach(btn => {
+    btn.addEventListener('click', () => render(btn.dataset.g));
+  });
+
+  dlBtn.addEventListener('click', () => {
+    if (!currentBlob) { showSuccessToast('이미지가 아직 준비되지 않았어요'); return; }
+    const a = document.createElement('a');
+    a.href = currentUrl;
+    a.download = `기간결산_${currentGroup}_${start}~${end}.png`;
+    a.click();
+  });
+  if (shareBtn) {
+    shareBtn.addEventListener('click', async () => {
+      if (!currentBlob) { showSuccessToast('이미지가 아직 준비되지 않았어요'); return; }
+      const file = new File([currentBlob], `기간결산_${currentGroup}.png`, { type: 'image/png' });
+      try {
+        if (navigator.canShare && !navigator.canShare({ files: [file] })) throw new Error('unsupported');
+        await navigator.share({ files: [file], title: '기간 결산 · ' + currentGroup });
+      } catch (_) { /* 사용자가 취소했거나 미지원 — 조용히 무시(다운로드 버튼으로 대체 가능) */ }
+    });
+  }
+
+  render(currentGroup);
 }
 
