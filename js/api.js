@@ -169,6 +169,18 @@ const API = (() => {
     return count;
   }
 
+  // 출석률 계산용 "출석 일수" — _calcAbsentCounts와 동일하게 하루 대표
+  // 세션 기준으로 센다. 예전엔 출석 "세션" 개수를 그대로 셌는데(하루에
+  // 3세션 출석하면 3), 결석은 "일" 단위로 세면서 출석은 "세션" 단위로
+  // 세는 바람에 단위가 안 맞아 출석률이 왜곡됐었다(세션이 많은 날 출석은
+  // 과하게 무겁게, 세션이 많은 날 결석은 과하게 가볍게 반영). 출석률을
+  // 결석 카운트·노카운트와 같은 "일" 단위로 통일한다.
+  function _calcPresentDays(records) {
+    let count = 0;
+    _forEachDayRepresentative(records, rec => { if (rec.status === '출석') count++; });
+    return count;
+  }
+
   // 노카운트 결석을 "하루 단위"로 센다 — 일괄 적용 등으로 하루에 여러 세션이
   // 전부 노카운트 결석이어도 그 날은 1회로만 집계한다.
   function _calcNoCountDays(records) {
@@ -487,7 +499,7 @@ const API = (() => {
         name:        s.name,
         group:       s.study_room,
         total,
-        attendCount: recsForRate.filter(r => r.status === '출석').length,
+        attendCount: _calcPresentDays(recsForRate),
         absentCount: _calcAbsentCounts(recsForRate),
       };
     });
@@ -963,7 +975,7 @@ const API = (() => {
     // 출석률·실질 결석은 "출석 인정" 사유 재분류를 반영, 최근 결석 이력·사유별
     // 집계는 실제 기록 그대로(어떤 사유로 몇 번 빠졌는지는 계속 남겨야 하므로).
     const recsForRate   = _applyPresentEquivalentReasons(records, presentReasonNames);
-    const attendCount   = recsForRate.filter(r => r.status === '출석').length;
+    const attendCount   = _calcPresentDays(recsForRate);
     const absentRecs    = records.filter(r => r.status === '결석');
     const countedAbsent = _calcAbsentCounts(recsForRate);        // 노카운트 + 출석 인정 사유 제외한 실질 결석
     const noCountAbsent = _calcNoCountDays(records);  // 하루 대표 세션 기준 — 일괄 적용으로 하루 3세션이어도 1회
@@ -1049,7 +1061,7 @@ const API = (() => {
 
       // 출석률·결석 집계용 — "출석 인정" 사유의 결석은 출석으로 재분류.
       const periodRecsForRate = _applyPresentEquivalentReasons(periodRecs, presentReasonNames);
-      const attendCount   = periodRecsForRate.filter(r => r.status === '출석').length;
+      const attendCount   = _calcPresentDays(periodRecsForRate);
       const countedAbsent = _calcAbsentCounts(periodRecsForRate);
       const total          = attendCount + countedAbsent;
       const attendRate      = total > 0 ? Math.round((attendCount / total) * 100) : null;
