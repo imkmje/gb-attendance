@@ -26,7 +26,7 @@ function loadStats() {
     return;
   }
   _renderStatsSkeleton();
-  API.calculateStats()
+  API.calculateStats(_reasonTypes.filter(r => r.countsAsPresent).map(r => r.name))
     .then(data=>{
       _cache.stats  = data;
       _cache.statsTs = Date.now();

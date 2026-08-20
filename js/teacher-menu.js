@@ -1788,11 +1788,19 @@ function _renderReasonList(sheet) {
     return;
   }
   list.innerHTML = _reasonTypes.map((r, i) => `
-    <div style="display:flex;align-items:center;gap:6px;padding:8px 10px;background:var(--surface);border-radius:var(--radius-sm);box-shadow:var(--sh-sm);">
-      <span style="flex:1;font-size:13px;font-weight:600;color:var(--ink);">${_esc(r)}</span>
-      <button onclick="_moveReasonType(${i},-1)" title="위로" aria-label="위로 이동" style="width:28px;height:28px;border:none;border-radius:6px;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;font-size:13px;line-height:1;">↑</button>
-      <button onclick="_moveReasonType(${i},1)"  title="아래로" aria-label="아래로 이동" style="width:28px;height:28px;border:none;border-radius:6px;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;font-size:13px;line-height:1;">↓</button>
-      <button onclick="_deleteReasonType(${i})" title="삭제" aria-label="사유 삭제" style="width:28px;height:28px;border:none;border-radius:6px;background:var(--red-dim);color:var(--red);cursor:pointer;font-size:16px;font-weight:900;line-height:1;">×</button>
+    <div style="display:flex;flex-direction:column;gap:6px;padding:8px 10px;background:var(--surface);border-radius:var(--radius-sm);box-shadow:var(--sh-sm);">
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span style="flex:1;font-size:13px;font-weight:600;color:var(--ink);">${_esc(r.name)}</span>
+        <button onclick="_moveReasonType(${i},-1)" title="위로" aria-label="위로 이동" style="width:28px;height:28px;border:none;border-radius:6px;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;font-size:13px;line-height:1;">↑</button>
+        <button onclick="_moveReasonType(${i},1)"  title="아래로" aria-label="아래로 이동" style="width:28px;height:28px;border:none;border-radius:6px;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;font-size:13px;line-height:1;">↓</button>
+        <button onclick="_deleteReasonType(${i})" title="삭제" aria-label="사유 삭제" style="width:28px;height:28px;border:none;border-radius:6px;background:var(--red-dim);color:var(--red);cursor:pointer;font-size:16px;font-weight:900;line-height:1;">×</button>
+      </div>
+      <div class="nocount-row" style="margin-top:0;">
+        <button class="nocount-sw${r.countsAsPresent ? ' on' : ''}" onclick="_toggleReasonCountsAsPresent(${i})" aria-label="출석 인정 전환" aria-pressed="${r.countsAsPresent ? 'true' : 'false'}">
+          <div class="nocount-sw-thumb"></div>
+        </button>
+        <span class="nocount-label${r.countsAsPresent ? ' on' : ''}">출석률 계산 시 출석 인정 <span style="font-weight:500;opacity:0.7;">(자습 시간엔 반영 안 됨 — 학교 자체 프로그램 등)</span></span>
+      </div>
     </div>`).join('');
 }
 
@@ -1800,8 +1808,8 @@ async function _addReasonType() {
   const input = document.getElementById('_reasonInput');
   const val = (input?.value || '').trim();
   if (!val) return;
-  if (_reasonTypes.includes(val)) { showSuccessToast('이미 있는 사유입니다'); return; }
-  _reasonTypes = [..._reasonTypes, val];
+  if (_reasonTypes.some(r => r.name === val)) { showSuccessToast('이미 있는 사유입니다'); return; }
+  _reasonTypes = [..._reasonTypes, { name: val, countsAsPresent: false }];
   input.value = '';
   _renderReasonList(null);
   try { await API.saveReasonTypes(_reasonTypes); showSuccessToast('저장 완료'); }
@@ -1812,7 +1820,16 @@ async function _deleteReasonType(idx) {
   const removed = _reasonTypes[idx];
   _reasonTypes = _reasonTypes.filter((_, i) => i !== idx);
   _renderReasonList(null);
-  try { await API.saveReasonTypes(_reasonTypes); showSuccessToast(`"${removed}" 삭제됨`); }
+  try { await API.saveReasonTypes(_reasonTypes); showSuccessToast(`"${removed.name}" 삭제됨`); }
+  catch (e) { showSuccessToast('저장 실패: ' + e.message); }
+}
+
+async function _toggleReasonCountsAsPresent(idx) {
+  const arr = [..._reasonTypes];
+  arr[idx] = { ...arr[idx], countsAsPresent: !arr[idx].countsAsPresent };
+  _reasonTypes = arr;
+  _renderReasonList(null);
+  try { await API.saveReasonTypes(_reasonTypes); showSuccessToast(_reasonTypes[idx].countsAsPresent ? '출석 인정으로 설정됨' : '출석 인정 해제됨', _reasonTypes[idx].name); }
   catch (e) { showSuccessToast('저장 실패: ' + e.message); }
 }
 

@@ -153,6 +153,16 @@ const API = (() => {
     return total;
   }
 
+  // 결석 사유가 개발자 메뉴에서 "출석률 계산 시 출석으로 인정"으로 설정돼
+  // 있으면(예: 학교 자체 프로그램과 자습 시간이 겹친 경우), 출석률 계산용으로만
+  // 그 결석 기록을 출석으로 바꿔서 반환한다 — 원본 배열/자습 누적 시간
+  // 계산(_calcStudyHours)에는 영향 없음(실제로 자습을 안 한 건 맞으므로).
+  function _applyPresentEquivalentReasons(records, presentReasonNames) {
+    if (!presentReasonNames || !presentReasonNames.length) return records;
+    const set = new Set(presentReasonNames);
+    return records.map(r => (r.status === '결석' && set.has(r.reason)) ? { ...r, status: '출석' } : r);
+  }
+
   function _calcAbsentCounts(records) {
     let count = 0;
     _forEachDayRepresentative(records, rec => { if (rec.status === '결석' && !rec.no_count) count++; });
@@ -443,7 +453,7 @@ const API = (() => {
    * 통계 (자습 시간 집계)
    * GAS: calculateStats() → [{ban, num, name, group, total, attendCount, absentCount}]
    */
-  async function calculateStats() {
+  async function calculateStats(presentReasonNames = []) {
     const [students, attendance] = await Promise.all([
       _get('students?order=study_room,class_num,student_num'),
       _get('attendance?select=student_id,session,status,record_date,no_count,early_leave_mins,late_mins'),
@@ -454,17 +464,22 @@ const API = (() => {
       (attByStudent[a.student_id] ??= []).push(a);
 
     return students.map(s => {
-      const recs      = attByStudent[s.id] ?? [];
-      let total       = 0;
-      let attendCount = 0;
+      const recs = attByStudent[s.id] ?? [];
+
+      // 자습 누적 시간은 실제로 자습한 세션만 반영 — 아래 "출석 인정" 재분류와 무관하게
+      // 원본 status 그대로 계산한다(학교 프로그램 참여 시간은 자습 시간이 아니므로).
+      let total = 0;
       for (const r of recs) {
         if (r.status === '출석') {
           const weight    = SESSION_WEIGHTS[r.session] ?? 0;
           const deduction = ((r.early_leave_mins ?? 0) + (r.late_mins ?? 0)) / 60;
-          total       += Math.max(0, weight - deduction);
-          attendCount += 1;
+          total += Math.max(0, weight - deduction);
         }
       }
+
+      // 출석률·결석 카운트용 — 개발자 메뉴에서 "출석 인정"으로 설정된 사유의
+      // 결석은 출석으로 쳐준다.
+      const recsForRate = _applyPresentEquivalentReasons(recs, presentReasonNames);
       return {
         id:          s.id,
         ban:         String(s.class_num),
@@ -472,8 +487,8 @@ const API = (() => {
         name:        s.name,
         group:       s.study_room,
         total,
-        attendCount,
-        absentCount: _calcAbsentCounts(recs),
+        attendCount: recsForRate.filter(r => r.status === '출석').length,
+        absentCount: _calcAbsentCounts(recsForRate),
       };
     });
   }
@@ -939,15 +954,18 @@ const API = (() => {
    * 연속결석·벌금현황·최근 결석 이력)
    * GAS 없음 — 신규
    */
-  async function getStudentInsight(studentId) {
+  async function getStudentInsight(studentId, presentReasonNames = []) {
     const [records, violations] = await Promise.all([
       _get(`attendance?student_id=eq.${studentId}&select=record_date,session,status,reason,no_count,early_leave_mins,late_mins&order=record_date.asc,session.asc`),
       _get(`violations?student_id=eq.${studentId}&select=viol_date,viol_type,action,paid`).catch(() => []),
     ]);
 
-    const attendCount   = records.filter(r => r.status === '출석').length;
+    // 출석률·실질 결석은 "출석 인정" 사유 재분류를 반영, 최근 결석 이력·사유별
+    // 집계는 실제 기록 그대로(어떤 사유로 몇 번 빠졌는지는 계속 남겨야 하므로).
+    const recsForRate   = _applyPresentEquivalentReasons(records, presentReasonNames);
+    const attendCount   = recsForRate.filter(r => r.status === '출석').length;
     const absentRecs    = records.filter(r => r.status === '결석');
-    const countedAbsent = _calcAbsentCounts(records);           // 노카운트 제외 실질 결석
+    const countedAbsent = _calcAbsentCounts(recsForRate);        // 노카운트 + 출석 인정 사유 제외한 실질 결석
     const noCountAbsent = _calcNoCountDays(records);  // 하루 대표 세션 기준 — 일괄 적용으로 하루 3세션이어도 1회
     const total         = attendCount + countedAbsent;           // 통계 탭과 동일한 정의
     const attendRate    = total > 0 ? Math.round((attendCount / total) * 100) : null;
@@ -1013,7 +1031,7 @@ const API = (() => {
    * 교사 내부 기록용이라 누적(전체) 기준으로 반환.
    * GAS 없음 — 신규
    */
-  async function getPeriodSummary(startDate, endDate) {
+  async function getPeriodSummary(startDate, endDate, presentReasonNames = []) {
     const [students, attendance, violations] = await Promise.all([
       _get('students?select=id,class_num,student_num,name,study_room&order=study_room,class_num,student_num'),
       _get('attendance?select=student_id,session,status,record_date,no_count,early_leave_mins,late_mins'),
@@ -1029,8 +1047,10 @@ const API = (() => {
       const periodRecs = allRecs.filter(r => r.record_date >= startDate && r.record_date <= endDate);
       const studentViolations = violByStudent[s.id] ?? [];
 
-      const attendCount   = periodRecs.filter(r => r.status === '출석').length;
-      const countedAbsent = _calcAbsentCounts(periodRecs);
+      // 출석률·결석 집계용 — "출석 인정" 사유의 결석은 출석으로 재분류.
+      const periodRecsForRate = _applyPresentEquivalentReasons(periodRecs, presentReasonNames);
+      const attendCount   = periodRecsForRate.filter(r => r.status === '출석').length;
+      const countedAbsent = _calcAbsentCounts(periodRecsForRate);
       const total          = attendCount + countedAbsent;
       const attendRate      = total > 0 ? Math.round((attendCount / total) * 100) : null;
 
@@ -1045,9 +1065,9 @@ const API = (() => {
         group: s.study_room,
         attendRate,
         absentCount:       countedAbsent,             // 기간 중 결석
-        totalAbsentCount:  _calcAbsentCounts(allRecs), // 누적(전체) 결석
-        totalStudyHours:   _calcStudyHours(allRecs),   // 누적(전체) 자습 시간 — 통계 탭과 동일한 정의
-        periodMaxStreak:   _maxPresentStreak(periodRecs),
+        totalAbsentCount:  _calcAbsentCounts(_applyPresentEquivalentReasons(allRecs, presentReasonNames)), // 누적(전체) 결석
+        totalStudyHours:   _calcStudyHours(allRecs),   // 누적(전체) 자습 시간 — 재분류 미적용(실제 자습 시간 그대로)
+        periodMaxStreak:   _maxPresentStreak(periodRecs), // 연속 스트릭은 이번 재분류 범위 밖(원본 기준 유지)
         lateCount:         periodRecs.filter(r => (r.late_mins ?? 0) > 0).length,        // 기간 중 지각
         earlyCount:        periodRecs.filter(r => (r.early_leave_mins ?? 0) > 0).length, // 기간 중 조퇴
         violationCount:    studentViolations.length, // 누적(전체) 위반

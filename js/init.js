@@ -109,7 +109,9 @@ window.onload = () => {
           .then(h => { _holidays = h || []; handleDateChange(true); _maybeShowAttendanceReminder(); })
           .catch(() => {});
         API.getReasonTypes()
-          .then(types => { _reasonTypes = types; })
+          // 예전엔 문자열 배열로 저장돼 있었음(countsAsPresent 속성 도입 전) — DB에
+          // 남아있는 옛 형식을 만나도 깨지지 않게 로드 시점에 객체 형태로 보정한다.
+          .then(types => { _reasonTypes = (types || []).map(t => typeof t === 'string' ? { name: t, countsAsPresent: false } : t); })
           .catch(() => {});
         API.getViolationTypes()
           .then(types => { _violationTypes = [...types, '직접 입력']; })

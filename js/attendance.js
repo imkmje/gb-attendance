@@ -224,7 +224,7 @@ function loadStudents(withLoading=true, forceLoad=false) {
 //   사유가 안 보이고, 그대로 재저장하면 저장돼 있던 사유가 지워지는 문제가 있었음.
 function _deriveReasonFields(s) {
   if (s.status !== '결석' || !s.reason) return { reasonType: '', reasonText: '' };
-  if (_reasonTypes.includes(s.reason)) return { reasonType: s.reason, reasonText: '' };
+  if (_reasonTypes.some(r => r.name === s.reason)) return { reasonType: s.reason, reasonText: '' };
   return { reasonType: '직접 입력', reasonText: s.reason };
 }
 
@@ -283,7 +283,7 @@ function renderStudents() {
           <div class="reason-drop-overflow"><div class="reason-drop-inner">
             <select class="cd-reason-select" onchange="changeReasonType(${idx},this.value,this)">
               <option value="" ${!s.reasonType?'selected':''}>결석 사유 선택</option>
-              ${_reasonTypes.map(r=>`<option value="${_esc(r)}" ${s.reasonType===r?'selected':''}>${_esc(r)}</option>`).join('')}
+              ${_reasonTypes.map(r=>`<option value="${_esc(r.name)}" ${s.reasonType===r.name?'selected':''}>${_esc(r.name)}</option>`).join('')}
               <option value="직접 입력" ${s.reasonType==='직접 입력'?'selected':''}>직접 입력</option>
             </select>
             <div style="position:relative;display:${s.reasonType==='직접 입력'?'block':'none'}">

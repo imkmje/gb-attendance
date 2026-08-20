@@ -253,7 +253,7 @@ function _openStudentInsightSheet(student) {
   // 붙잡아둔다. 응답이 이미 이 시간보다 오래 걸렸으면 추가 지연은 없음.
   const MIN_SKELETON_MS = 260;
   const _t0 = Date.now();
-  API.getStudentInsight(student.id)
+  API.getStudentInsight(student.id, _reasonTypes.filter(r => r.countsAsPresent).map(r => r.name))
     .then(insight => {
       const wait = Math.max(0, MIN_SKELETON_MS - (Date.now() - _t0));
       setTimeout(() => _renderStudentInsightBody(sheet.querySelector('#_diBody'), insight), wait);
@@ -448,7 +448,7 @@ function openPeriodSummarySheet() {
     }
     listEl.innerHTML = Array.from({length:3}).map(() => `<div style="background:var(--surface);border-radius:var(--radius);box-shadow:var(--sh-md);padding:14px;margin-bottom:10px;"><div class="cd-skeleton" style="height:12px;width:30%;margin-bottom:10px;"></div><div class="cd-skeleton" style="height:38px;width:100%;"></div></div>`).join('');
     summaryEl.innerHTML = `<div class="cd-skeleton" style="height:34px;width:200px;margin:0 auto;border-radius:var(--radius-pill);"></div>`;
-    API.getPeriodSummary(start, end)
+    API.getPeriodSummary(start, end, _reasonTypes.filter(r => r.countsAsPresent).map(r => r.name))
       .then(data => {
         summary = data || [];
         _renderPeriodSummary(summaryEl, listEl, summary, start, end, searchInput.value.trim(), getCheckedFields());
