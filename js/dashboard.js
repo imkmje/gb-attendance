@@ -8,6 +8,42 @@
 ════════════════════════════════ */
 let _dashMode = 'absent'; // 'absent' | 'all' — "결석자만"/"전체 명단" 세그먼트 상태
 
+// 세션 필터 — 체크된 세션 인덱스 집합(그 날짜의 _computeSessionOptions 순서 기준).
+// 비어있으면 "전체"(필터 없음). 시간표 탭의 세션 필터 칩(_schSessFilter)과 같은 방식.
+let _dashSessFilter = new Set();
+let _dashLastData = null, _dashLastRoster = null, _dashLastDate = null; // 필터만 바꿀 땐 재조회 없이 이 캐시로 다시 그림
+
+function _dashSessionTexts(date) {
+  if (!_dashSessFilter.size) return null; // null = 필터 없음
+  const sessions = _computeSessionOptions(date);
+  return new Set([..._dashSessFilter].map(i => sessions[i] && sessions[i].text).filter(Boolean));
+}
+
+function _buildDashSessChips(date) {
+  const chips = document.getElementById('dashSessChips');
+  if (!chips) return;
+  const sessions = _computeSessionOptions(date);
+  const labels = sessions.map(o => o.text.replace(' 자율학습', '').replace(/\(토\)/, ''));
+  if (!labels.length) { chips.innerHTML = ''; return; }
+  chips.innerHTML = labels.map((lbl, i) =>
+    `<button class="ssf-chip${_dashSessFilter.has(i) ? ' on' : ''}" data-i="${i}" onclick="_toggleDashSessFilter(${i})">${lbl}</button>`
+  ).join('');
+}
+
+function _toggleDashSessFilter(i) {
+  if (_dashSessFilter.has(i)) _dashSessFilter.delete(i); else _dashSessFilter.add(i);
+  document.querySelectorAll('#dashSessChips .ssf-chip').forEach(c => c.classList.toggle('on', _dashSessFilter.has(parseInt(c.dataset.i))));
+  _renderDashboardFromCache(); // 재조회 없이 캐시된 데이터로 즉시 다시 그림
+}
+
+// 모드 전환·새로고침 등 날짜가 그대로인 재호출과 달리, 날짜가 실제로 바뀌면
+// 요일에 따라 세션 구성 자체가 달라질 수 있어(평일 3개 vs 토요일 3개, 명칭도
+// 다름) 필터를 들고 있으면 헷갈리므로 초기화한다.
+function _renderDashboardFromCache() {
+  if (_dashLastData == null) return;
+  _dashMode === 'all' ? _renderDashboardAll(_dashLastData, _dashLastDate) : _renderDashboard(_dashLastData, _dashLastDate);
+}
+
 function _dashShiftDate(delta) {
   const input = document.getElementById('dashDateInput');
   const base = input.value ? new Date(input.value + 'T00:00:00') : new Date();
@@ -42,9 +78,11 @@ function loadDashboard() {
   const dateInput = document.getElementById('dashDateInput');
   if (!dateInput.value) dateInput.value = _todayStr();
   const date = dateInput.value;
+  if (date !== _dashLastDate) _dashSessFilter.clear(); // 날짜가 실제로 바뀔 때만 세션 필터 초기화
   const mode = _dashMode;
   const myToken = ++_dashReqToken;
 
+  _buildDashSessChips(date);
   const summary = document.getElementById('dashSummary');
   const list = document.getElementById('dashAbsentList');
   summary.innerHTML = `<div class="cd-skeleton" style="height:40px;width:220px;margin:0 auto;border-radius:var(--radius-pill);"></div>`;
@@ -63,6 +101,7 @@ function loadDashboard() {
   Promise.all([req, lightsReq])
     .then(([data, roster]) => {
       if (myToken !== _dashReqToken) return; // 이 사이 더 최신 요청이 시작됐으면 이 결과는 버림
+      _dashLastData = data; _dashLastRoster = roster; _dashLastDate = date;
       mode === 'all' ? _renderDashboardAll(data, date) : _renderDashboard(data, date);
       _renderDashLights(roster, date);
     })
@@ -152,20 +191,27 @@ function _renderDashboard(absences, date) {
   const d = new Date(date), dn = ['일','월','화','수','목','금','토'];
   const dl = `${d.getMonth()+1}월 ${d.getDate()}일 (${dn[d.getDay()]})`;
 
+  // 세션 필터가 켜져 있으면 선택한 세션의 결석 기록만 남기고, 그 세션엔
+  // 결석이 없는 학생은 아예 목록에서 제외한다 — "오자만 체크하면 오자만".
+  const allowedTexts = _dashSessionTexts(date);
+  const absList = allowedTexts
+    ? absences.map(a => ({ ...a, sessions: a.sessions.filter(x => allowedTexts.has(x.session)) })).filter(a => a.sessions.length)
+    : absences;
+
   summary.innerHTML = `<div style="text-align:center;">
     <span style="display:inline-flex;align-items:center;gap:8px;background:var(--surface);box-shadow:var(--sh-md);border-radius:var(--radius-pill);padding:10px 22px;font-size:13px;font-weight:700;color:var(--ink-2);">
-      ${dl} 결석 <span style="color:var(--red);font-weight:800;font-size:15px;">${absences.length}명</span>
+      ${dl} 결석 <span style="color:var(--red);font-weight:800;font-size:15px;">${absList.length}명</span>
     </span>
   </div>`;
 
-  if (!absences.length) {
-    list.innerHTML = _emptyState('결석자가 없습니다. 🎉');
+  if (!absList.length) {
+    list.innerHTML = _emptyState(allowedTexts ? '선택한 세션엔 결석자가 없습니다.' : '결석자가 없습니다. 🎉');
     return;
   }
 
-  window._dashRoster = absences;
+  window._dashRoster = absList;
   const html = GROUPS.map(g => {
-    const gs = absences.filter(a => a.group === g)
+    const gs = absList.filter(a => a.group === g)
       .sort((a,b) => parseInt(a.ban)-parseInt(b.ban) || parseInt(a.num)-parseInt(b.num));
     if (!gs.length) return '';
     const rows = gs.map(s => _dashStudentRowHtml(s, 'var(--red-dim)', 'var(--red)')).join('');
@@ -182,27 +228,37 @@ function _renderDashboardAll(roster, date) {
   const list = document.getElementById('dashAbsentList');
   const d = new Date(date), dn = ['일','월','화','수','목','금','토'];
   const dl = `${d.getMonth()+1}월 ${d.getDate()}일 (${dn[d.getDay()]})`;
+
+  // 세션 필터가 켜져 있으면 카드에 뜨는 태그·결석 판정 둘 다 선택한 세션만
+  // 기준으로 좁힌다. "전체 명단"은 이름 그대로 전원을 보여주는 화면이라
+  // 결석자만 모드와 달리 그 세션에 기록이 없다고 명단에서 빼진 않고
+  // "기록 없음" 태그로 표시한다(_dashStudentRowHtml이 이미 처리).
+  const allowedTexts = _dashSessionTexts(date);
+  const rosterFiltered = allowedTexts
+    ? roster.map(s => ({ ...s, sessions: s.sessions.filter(x => allowedTexts.has(x.session)) }))
+    : roster;
+
   // "결석자만" 모드는 노카운트 여부와 무관하게 결석 기록이 있으면 포함하므로,
   // 두 모드의 결석 인원수가 서로 다르게 보이지 않도록 동일한 기준을 쓴다.
   const isAbsent = s => s.sessions.some(x => x.status === '결석');
-  const absentCount = roster.filter(isAbsent).length;
+  const absentCount = rosterFiltered.filter(isAbsent).length;
 
   summary.innerHTML = `<div style="text-align:center;">
     <span style="display:inline-flex;align-items:center;gap:8px;background:var(--surface);box-shadow:var(--sh-md);border-radius:var(--radius-pill);padding:10px 22px;font-size:13px;font-weight:700;color:var(--ink-2);">
-      ${dl} 전체 <span style="color:var(--blue);font-weight:800;font-size:15px;">${roster.length}명</span>
+      ${dl} 전체 <span style="color:var(--blue);font-weight:800;font-size:15px;">${rosterFiltered.length}명</span>
       <span style="width:1px;height:12px;background:var(--bg-deep);"></span>
       결석 <span style="color:var(--red);font-weight:800;font-size:15px;">${absentCount}명</span>
     </span>
   </div>`;
 
-  if (!roster.length) {
+  if (!rosterFiltered.length) {
     list.innerHTML = _emptyState('명단이 없습니다.');
     return;
   }
 
-  window._dashRoster = roster;
+  window._dashRoster = rosterFiltered;
   const html = GROUPS.map(g => {
-    const gs = roster.filter(s => s.group === g)
+    const gs = rosterFiltered.filter(s => s.group === g)
       .sort((a,b) => parseInt(a.ban)-parseInt(b.ban) || parseInt(a.num)-parseInt(b.num));
     if (!gs.length) return '';
     const rows = gs.map(s => isAbsent(s)
