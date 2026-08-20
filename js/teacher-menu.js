@@ -1801,6 +1801,12 @@ function _renderReasonList(sheet) {
         </button>
         <span class="nocount-label${r.countsAsPresent ? ' on' : ''}">출석률 계산 시 출석 인정 <span style="font-weight:500;opacity:0.7;">(자습 시간엔 반영 안 됨 — 학교 자체 프로그램 등)</span></span>
       </div>
+      <div class="nocount-row" style="margin-top:0;">
+        <button class="nocount-sw${r.visible !== false ? ' on' : ''}" onclick="_toggleReasonVisible(${i})" aria-label="출석체크 화면 표시 전환" aria-pressed="${r.visible !== false ? 'true' : 'false'}">
+          <div class="nocount-sw-thumb"></div>
+        </button>
+        <span class="nocount-label${r.visible !== false ? ' on' : ''}">출석체크 화면에 표시 <span style="font-weight:500;opacity:0.7;">(꺼도 기록·설정은 유지 — 더는 안 쓰는 사유는 삭제 대신 이걸로)</span></span>
+      </div>
     </div>`).join('');
 }
 
@@ -1809,9 +1815,10 @@ async function _addReasonType() {
   const val = (input?.value || '').trim();
   if (!val) return;
   if (_reasonTypes.some(r => r.name === val)) { showSuccessToast('이미 있는 사유입니다'); return; }
-  _reasonTypes = [..._reasonTypes, { name: val, countsAsPresent: false }];
+  _reasonTypes = [..._reasonTypes, { name: val, countsAsPresent: false, visible: true }];
   input.value = '';
   _renderReasonList(null);
+  _cache.stats = null; // 출석 인정 사유 구성이 바뀌었으므로 통계 탭 캐시 무효화
   try { await API.saveReasonTypes(_reasonTypes); showSuccessToast('저장 완료'); }
   catch (e) { showSuccessToast('저장 실패: ' + e.message); }
 }
@@ -1820,6 +1827,7 @@ async function _deleteReasonType(idx) {
   const removed = _reasonTypes[idx];
   _reasonTypes = _reasonTypes.filter((_, i) => i !== idx);
   _renderReasonList(null);
+  _cache.stats = null; // 위와 동일
   try { await API.saveReasonTypes(_reasonTypes); showSuccessToast(`"${removed.name}" 삭제됨`); }
   catch (e) { showSuccessToast('저장 실패: ' + e.message); }
 }
@@ -1829,7 +1837,21 @@ async function _toggleReasonCountsAsPresent(idx) {
   arr[idx] = { ...arr[idx], countsAsPresent: !arr[idx].countsAsPresent };
   _reasonTypes = arr;
   _renderReasonList(null);
+  _cache.stats = null; // 출석 인정 여부가 바뀌면 통계 탭에 캐시된 옛 출석률이 남아있지 않도록
   try { await API.saveReasonTypes(_reasonTypes); showSuccessToast(_reasonTypes[idx].countsAsPresent ? '출석 인정으로 설정됨' : '출석 인정 해제됨', _reasonTypes[idx].name); }
+  catch (e) { showSuccessToast('저장 실패: ' + e.message); }
+}
+
+// 출석체크 화면의 사유 드롭다운에서만 숨긴다 — countsAsPresent 설정과 지난 기록은
+// 그대로 유지되므로, "더는 안 쓰는 사유"는 삭제 대신 이걸로 감추는 걸 권장.
+// 삭제하면 과거 기록의 사유 문자열은 남아있어도 _reasonTypes에서 항목 자체가
+// 없어져 출석 인정 재분류가 조용히 풀려버리기 때문(통계에 소급 영향).
+async function _toggleReasonVisible(idx) {
+  const arr = [..._reasonTypes];
+  arr[idx] = { ...arr[idx], visible: arr[idx].visible === false };
+  _reasonTypes = arr;
+  _renderReasonList(null);
+  try { await API.saveReasonTypes(_reasonTypes); showSuccessToast(_reasonTypes[idx].visible === false ? '출석체크 화면에서 숨김' : '출석체크 화면에 표시함', _reasonTypes[idx].name); }
   catch (e) { showSuccessToast('저장 실패: ' + e.message); }
 }
 

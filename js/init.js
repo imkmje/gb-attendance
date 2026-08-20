@@ -104,14 +104,25 @@ window.onload = () => {
       }
       handleDateChange();
       hideSplash();
+      // _reasonTypes는 통계 탭 등 계산 결과에 바로 영향을 주므로, 나머지
+      // 저우선순위 호출들처럼 800ms 늦추지 않고 그룹 목록 로드 직후 바로
+      // 시작한다. _reasonTypesReadyPromise를 기다리는 쪽(예: 통계 탭)은
+      // 이 호출이 실제로 끝난 뒤에야 _reasonTypes를 읽으므로, 로드 도중에
+      // 화면을 눌러도 아직 로드 전인 기본값으로 잘못 계산되지 않는다.
+      _reasonTypesReadyPromise = API.getReasonTypes()
+        // 예전엔 문자열 배열로 저장돼 있었음(countsAsPresent·visible 속성
+        // 도입 전) — DB에 남아있는 옛 형식이나, 그 사이 도입된 속성이 아직
+        // 없는 중간 형식을 만나도 깨지지 않게 로드 시점에 항상 완전한
+        // 객체 형태로 보정한다.
+        .then(types => {
+          _reasonTypes = (types || []).map(t => typeof t === 'string'
+            ? { name: t, countsAsPresent: false, visible: true }
+            : { name: t.name, countsAsPresent: !!t.countsAsPresent, visible: t.visible !== false });
+        })
+        .catch(() => {});
       setTimeout(() => {
         API.getHolidays()
           .then(h => { _holidays = h || []; handleDateChange(true); _maybeShowAttendanceReminder(); })
-          .catch(() => {});
-        API.getReasonTypes()
-          // 예전엔 문자열 배열로 저장돼 있었음(countsAsPresent 속성 도입 전) — DB에
-          // 남아있는 옛 형식을 만나도 깨지지 않게 로드 시점에 객체 형태로 보정한다.
-          .then(types => { _reasonTypes = (types || []).map(t => typeof t === 'string' ? { name: t, countsAsPresent: false } : t); })
           .catch(() => {});
         API.getViolationTypes()
           .then(types => { _violationTypes = [...types, '직접 입력']; })

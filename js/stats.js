@@ -26,7 +26,11 @@ function loadStats() {
     return;
   }
   _renderStatsSkeleton();
-  API.calculateStats(_reasonTypes.filter(r => r.countsAsPresent).map(r => r.name))
+  // _reasonTypes가 아직 서버에서 로드되기 전(페이지를 막 연 직후)에 통계 탭을
+  // 누르면 "출석 인정" 설정이 하나도 없는 기본값으로 잘못 계산될 수 있어,
+  // 로드가 끝날 때까지 기다린 뒤 계산한다.
+  Promise.resolve(_reasonTypesReadyPromise)
+    .then(() => API.calculateStats(_reasonTypes.filter(r => r.countsAsPresent).map(r => r.name)))
     .then(data=>{
       _cache.stats  = data;
       _cache.statsTs = Date.now();

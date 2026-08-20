@@ -283,7 +283,7 @@ function renderStudents() {
           <div class="reason-drop-overflow"><div class="reason-drop-inner">
             <select class="cd-reason-select" onchange="changeReasonType(${idx},this.value,this)">
               <option value="" ${!s.reasonType?'selected':''}>결석 사유 선택</option>
-              ${_reasonTypes.map(r=>`<option value="${_esc(r.name)}" ${s.reasonType===r.name?'selected':''}>${_esc(r.name)}</option>`).join('')}
+              ${_reasonTypes.filter(r=>r.visible!==false || s.reasonType===r.name).map(r=>`<option value="${_esc(r.name)}" ${s.reasonType===r.name?'selected':''}>${_esc(r.name)}</option>`).join('')}
               <option value="직접 입력" ${s.reasonType==='직접 입력'?'selected':''}>직접 입력</option>
             </select>
             <div style="position:relative;display:${s.reasonType==='직접 입력'?'block':'none'}">
