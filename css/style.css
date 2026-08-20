@@ -533,6 +533,10 @@ html[data-theme="dark"] .vh-seg-slider::after { background:linear-gradient(158de
 .vh-seg-count.amber { background:var(--amber-dim); color:var(--amber); }
 .vh-seg-count.blue  { background:var(--blue-dim);  color:var(--blue); }
 .vh-body { flex:1; overflow-y:auto; padding:14px 18px 24px; }
+/* 개발자 메뉴 탭 패널 — JS(_switchDevTab)가 active 패널만 style.display=''로 보여줌.
+   기본값을 여기서 none으로 깔아둬야 렌더 직후 JS가 돌기 전 한 프레임 동안
+   4개 패널이 전부 겹쳐 보이는 깜빡임이 없다. */
+._dev-tab-panel { display:none; }
 .vh-empty { text-align:center; padding:48px 0; color:var(--ink-3); font-size:14px; font-weight:600; }
 .cd-empty { text-align:center; padding:44px 16px; }
 .cd-empty-icon { width:50px; height:50px; border-radius:50%; background:var(--bg-deep); box-shadow:var(--sh-pressed); display:flex; align-items:center; justify-content:center; margin:0 auto 14px; color:var(--ink-3); }

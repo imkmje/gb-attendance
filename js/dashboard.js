@@ -756,7 +756,11 @@ function _openCardExportSheet(summary, start, end, fields) {
   backdrop.appendChild(sheet);
   document.body.appendChild(backdrop);
   requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
-  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 420); };
+  const close = () => {
+    backdrop.classList.remove('show');
+    if (currentUrl) URL.revokeObjectURL(currentUrl); // 시트를 반 전환 없이 바로 닫아도 blob URL이 새지 않도록
+    setTimeout(() => backdrop.remove(), 420);
+  };
   backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
   sheet.querySelector('#_ceClose').addEventListener('click', close);
 
@@ -767,12 +771,20 @@ function _openCardExportSheet(summary, start, end, fields) {
 
   chipsEl.innerHTML = groupsWithData.map((g, i) => `<button class="ssf-chip${i === 0 ? ' on' : ''}" data-g="${_esc(g)}">${_esc(g)}</button>`).join('');
 
-  let currentBlob = null, currentGroup = groupsWithData[0], currentUrl = null;
+  // currentBlob/currentUrl은 항상 blobGroup(=실제로 그 이미지가 그려진 반)과
+  // 함께 취급 — currentGroup(지금 선택된 칩)과 blobGroup이 다른 동안(캡처 진행 중)은
+  // 버튼을 비활성화해서, 캡처가 끝나기 전에 눌러 이전 반 이미지가 새 반 이름으로
+  // 다운로드/공유되는 걸 막는다.
+  let currentBlob = null, currentGroup = groupsWithData[0], currentUrl = null, blobGroup = null;
+  const setButtonsEnabled = on => {
+    [dlBtn, shareBtn].forEach(b => { if (!b) return; b.disabled = !on; b.style.opacity = on ? '1' : '0.5'; b.style.pointerEvents = on ? '' : 'none'; });
+  };
 
   const render = (group) => {
     currentGroup = group;
     chipsEl.querySelectorAll('.ssf-chip').forEach(b => b.classList.toggle('on', b.dataset.g === group));
     imgWrap.innerHTML = `<div class="cd-skeleton" style="width:100%;height:320px;border-radius:16px;"></div>`;
+    setButtonsEnabled(false);
 
     const students = active.filter(s => s.group === group)
       .sort((a, b) => b.periodMaxStreak - a.periodMaxStreak || b.attendRate - a.attendRate);
@@ -782,7 +794,10 @@ function _openCardExportSheet(summary, start, end, fields) {
     offscreen.innerHTML = _periodCardHtml(group, students, start, end, activeFieldDefs);
     document.body.appendChild(offscreen);
 
-    html2canvas(offscreen.firstElementChild, { scale: 2, backgroundColor: null })
+    // Promise.resolve().then(...)으로 감싸서, html2canvas 자체가 정의 안 돼
+    // 있는 경우(CDN 로드 실패 등 동기 throw)도 아래 .catch()가 받도록 한다.
+    Promise.resolve()
+      .then(() => html2canvas(offscreen.firstElementChild, { scale: 2, backgroundColor: null }))
       .then(canvas => {
         offscreen.remove();
         canvas.toBlob(blob => {
@@ -790,11 +805,14 @@ function _openCardExportSheet(summary, start, end, fields) {
           if (currentUrl) URL.revokeObjectURL(currentUrl);
           currentBlob = blob;
           currentUrl = URL.createObjectURL(blob);
+          blobGroup = group;
           imgWrap.innerHTML = `<img src="${currentUrl}" style="max-width:100%;border-radius:16px;box-shadow:var(--sh-md);display:block;">`;
+          setButtonsEnabled(true);
         }, 'image/png');
       })
       .catch(() => {
         offscreen.remove();
+        if (currentGroup !== group) return;
         imgWrap.innerHTML = _emptyState('이미지를 만들지 못했습니다.');
       });
   };
@@ -804,7 +822,7 @@ function _openCardExportSheet(summary, start, end, fields) {
   });
 
   dlBtn.addEventListener('click', () => {
-    if (!currentBlob) { showSuccessToast('이미지가 아직 준비되지 않았어요'); return; }
+    if (!currentBlob || blobGroup !== currentGroup) { showSuccessToast('이미지가 아직 준비되지 않았어요'); return; }
     const a = document.createElement('a');
     a.href = currentUrl;
     a.download = `기간결산_${currentGroup}_${start}~${end}.png`;
@@ -812,7 +830,7 @@ function _openCardExportSheet(summary, start, end, fields) {
   });
   if (shareBtn) {
     shareBtn.addEventListener('click', async () => {
-      if (!currentBlob) { showSuccessToast('이미지가 아직 준비되지 않았어요'); return; }
+      if (!currentBlob || blobGroup !== currentGroup) { showSuccessToast('이미지가 아직 준비되지 않았어요'); return; }
       const file = new File([currentBlob], `기간결산_${currentGroup}.png`, { type: 'image/png' });
       try {
         if (navigator.canShare && !navigator.canShare({ files: [file] })) throw new Error('unsupported');

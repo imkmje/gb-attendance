@@ -22,8 +22,11 @@ const VIOLATION_ACTIONS = ['경고', '벌금', '직접 입력'];
    n.0.0 대규모 업데이트 · 0.n.0 기능/디자인 개선 · 0.0.n 버그 수정
    최신순 — 새 배포 때마다 맨 위에 추가할 것
 ════════════════════════════════ */
-const APP_VERSION = '3.4.0';
+const APP_VERSION = '3.5.0';
 const CHANGELOG = [
+  { v:'3.5.0', d:'2026-08-20', t:'minor', title:'개발자 메뉴 구조 개편 — 섹션이 9개까지 늘어나 끝없이 스크롤하던 걸 "일정 / 스위치 / 데이터 / 사유·유형" 4개 탭으로 분류(위반 내역 시트와 같은 세그먼트 탭 UI 재사용). 마지막으로 보던 탭을 기억해뒀다가 다시 열 때 그대로 보여줌. 앞으로 늘어날 on/off 스위치·데이터 관리 도구는 각각 "스위치"·"데이터" 탭에 추가하도록 구조를 잡아둠' },
+  { v:'3.4.2', d:'2026-08-20', t:'patch', title:'모바일에서 출석체크 탭을 벗어났다 돌아오면 세션 필(오후/야간/심야) 슬라이더가 엉뚱한 위치·크기로 멈춰 있던 버그 수정 — 대시보드 탭 전환 때 이미 하던 것과 같은 방식으로, 홈 탭이 다시 보일 때마다 슬라이더·좌우 스크롤 페이드를 강제로 재측정하도록 함' },
+  { v:'3.4.1', d:'2026-08-20', t:'patch', title:'v3.4.0 카드 이미지 내보내기 코드 리뷰 후속 조치 — ① 반 전환 직후(캡처 진행 중) 다운로드·공유를 누르면 새 반 이름표로 이전 반 이미지가 나갈 수 있던 문제 수정(캡처 중엔 버튼 비활성화), ② html2canvas 로드 실패 시 오류 화면 대신 무한 로딩에 멈추던 문제 수정, ③ 카드 시트를 반 전환 없이 바로 닫으면 이미지 메모리(blob URL)가 계속 남아있던 누수 수정, ④ 활동 로그·카드 이미지 두 전역 on/off 스위치의 중복 코드를 공용 헬퍼로 통합' },
   { v:'3.4.0', d:'2026-08-20', t:'minor', title:'기간 결산 개선 3건 — ① 반별 "카드 이미지로 내보내기" 신설(카톡 등에 텍스트 대신 이미지로 공유, 개발자 메뉴에서 전체 교사 대상 on/off 가능·꺼도 텍스트 복사는 그대로 유지), ② 카톡 복사 텍스트의 메달 이모지(🥇🥈🥉) 제거(성과순 정렬은 유지), ③ 기간 선택 프리셋에 "지난달" 추가 — 매달 초 저번 달 결산 공지 낼 때 날짜를 손으로 잡지 않아도 됨' },
   { v:'3.3.1', d:'2026-08-20', t:'patch', title:'연속 출석 스트릭 계산이 토요일을 오전/오후 구분 없이 하루로 뭉쳐서, 오전만 결석하고 오후는 출석해도 그날 전체를 결석으로 쳐 스트릭이 실제보다 짧게 잡히던 버그 수정 — 결석 카운트(오전/오후 독립 집계)와 같은 기준으로 통일' },
   { v:'3.3.0', d:'2026-08-20', t:'minor', title:'출석률 계산 단위 통일 — 출석은 "세션" 개수, 결석은 "일" 개수로 서로 다르게 세던 걸(하루 3세션 출석하면 3, 하루 3세션 결석해도 대표 세션 1개로 1) 결석·노카운트·결석 카운트 수정과 같은 "하루 대표 세션" 기준으로 통일. 세션이 많은 날 출석/결석이 실제보다 과하게 무겁거나 가볍게 반영되던 왜곡이 사라짐(통계 탭·학생 인사이트·기간 결산 공통 적용, 누적 자습 시간·노카운트·결석 횟수는 원래부터 영향 없음)' },
@@ -358,7 +361,27 @@ function executeSwitchTab(tabName) {
 
   const ab  = document.getElementById('homeActionBar');
   const fab = document.getElementById('rosterFab');
-  if (tabName === 'home')        { ab.classList.remove('d-none'); fab.classList.remove('visible'); }
+  if (tabName === 'home')        {
+    ab.classList.remove('d-none'); fab.classList.remove('visible');
+    // 다른 탭에 있는 동안 view-home은 display:none이라 세션 필 슬라이더/
+    // 페이드가 실제 레이아웃과 무관하게 예전 값 그대로 멈춰 있었을 수 있음
+    // (예: 스크롤 축소 상태가 바뀌었거나 웹폰트가 그 사이 로드돼 버튼 폭이
+    // 달라진 경우) — 대시보드 탭 전환 때 dashModeIndicator를 다시 맞추는
+    // 것과 같은 이유로, 다시 보이게 된 직후 한 번 강제로 재측정한다.
+    // rAF 하나만 믿으면(탭 전환 직후처럼 브라우저가 프레임을 아직 안 그린
+    // 시점엔) 지연될 수 있어 _movePillSlider의 instant 모드와 같은 방식으로
+    // setTimeout을 함께 걸어 둘 중 먼저 오는 쪽이 실행하게 한다.
+    let _homeResyncRan = false;
+    const _resyncSessionPill = () => {
+      if (_homeResyncRan) return;
+      _homeResyncRan = true;
+      const activePill = document.querySelector('#sessionPillWrap .session-pill.active');
+      if (activePill) _movePillSlider(activePill, true);
+      _updatePillFade('sessionPillWrap');
+    };
+    requestAnimationFrame(() => requestAnimationFrame(_resyncSessionPill));
+    setTimeout(_resyncSessionPill, 120);
+  }
   else if (tabName === 'roster') { ab.classList.add('d-none');    fab.classList.add('visible'); }
   else                           { ab.classList.add('d-none');    fab.classList.remove('visible'); }
 

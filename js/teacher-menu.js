@@ -1492,7 +1492,31 @@ function _editFineRecord(viol, onSaved) {
 
 /* ════════════════════════════════
    개발자 메뉴
+   섹션이 계속 늘어나(공휴일·학기·보안·on/off 스위치·데이터·사유/유형…) 한
+   화면에 죽 나열하면 스크롤이 끝없이 길어지길래, 위반 내역 시트에서 쓰던
+   세그먼트 탭(vh-seg)과 같은 패턴으로 4개 카테고리에 나눠 담는다. 새 설정을
+   추가할 땐 이 배열에 넣기보다 — 이미 있는 카테고리(특히 "스위치"·"데이터"는
+   앞으로 계속 늘어날 걸 염두에 두고 만든 버킷) 중 맞는 곳에 섹션만 추가하면 됨.
 ════════════════════════════════ */
+const DEV_MENU_TABS = [
+  { key:'schedule', label:'일정' },      // 평일 공휴일, 학기 설정
+  { key:'toggles',  label:'스위치' },    // 비밀번호 잠금, 활동 로그, 카드 이미지 등 전역 on/off — 새 기능 토글은 여기로
+  { key:'data',     label:'데이터' },    // 출석 기록 초기화 등 데이터 관리 도구 — 앞으로 늘어날 것도 여기로
+  { key:'reasons',  label:'사유·유형' }, // 결석 사유, 위반 유형 관리
+];
+let _devActiveTab = 'schedule'; // 시트를 다시 열어도 마지막으로 보던 탭 유지
+
+function _switchDevTab(key) {
+  _devActiveTab = key;
+  const sheet = window._devSheet;
+  if (!sheet) return;
+  const idx = Math.max(0, DEV_MENU_TABS.findIndex(t => t.key === key));
+  sheet.querySelectorAll('#_devSegWrap .vh-seg-btn').forEach((b, i) => b.classList.toggle('active', i === idx));
+  const slider = sheet.querySelector('#_devSegSlider');
+  if (slider) { slider.style.width = (100 / DEV_MENU_TABS.length) + '%'; slider.style.transform = `translateX(${idx * 100}%)`; }
+  sheet.querySelectorAll('._dev-tab-panel').forEach(p => { p.style.display = (p.id === '_devTab-' + key) ? 'block' : 'none'; });
+}
+
 function handleHeaderClick() {
   _headerClickCount++;
   clearTimeout(_headerClickTimer);
@@ -1612,7 +1636,7 @@ function _renderDevMenuSheet() {
       </button>
     </div>
 
-    <button id="_devChangelogBtn" style="all:unset;box-sizing:border-box;display:flex;align-items:center;gap:12px;background:var(--purple-dim);border-radius:var(--radius);padding:12px 14px;cursor:pointer;width:100%;margin-bottom:22px;-webkit-tap-highlight-color:transparent;">
+    <button id="_devChangelogBtn" style="all:unset;box-sizing:border-box;display:flex;align-items:center;gap:12px;background:var(--purple-dim);border-radius:var(--radius);padding:12px 14px;cursor:pointer;width:100%;margin-bottom:18px;-webkit-tap-highlight-color:transparent;">
       <div style="width:34px;height:34px;border-radius:var(--radius-sm);background:var(--surface);display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:var(--sh-sm);">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
       </div>
@@ -1623,95 +1647,108 @@ function _renderDevMenuSheet() {
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--purple)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
     </button>
 
-    <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;">📅 평일 공휴일 설정</div>
-    <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px;box-shadow:var(--sh-pressed);margin-bottom:12px;">
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        <input type="date" id="_holDateInput" class="cd-input" style="flex:1;min-width:130px;">
-        <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:600;color:var(--ink-2);cursor:pointer;">
-          <input type="checkbox" id="_holAm" checked style="width:15px;height:15px;"> 오전
-        </label>
-        <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:600;color:var(--ink-2);cursor:pointer;">
-          <input type="checkbox" id="_holPm" checked style="width:15px;height:15px;"> 오후
-        </label>
-        <button onclick="_addHoliday()" style="padding:8px 16px;border-radius:var(--radius-pill);border:none;background:var(--blue);color:#fff;font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;box-shadow:var(--sh-blue);white-space:nowrap;">+ 추가</button>
-      </div>
+    <div class="vh-seg-wrap" id="_devSegWrap" style="margin-top:0;margin-bottom:20px;">
+      <div class="vh-seg-slider" id="_devSegSlider"></div>
+      ${DEV_MENU_TABS.map(t => `<button class="vh-seg-btn" id="_devSeg-${t.key}" onclick="_switchDevTab('${t.key}')">${t.label}</button>`).join('')}
     </div>
 
-    <div id="_holList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:24px;"></div>
-
-    <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;">🏫 학기 설정</div>
-    <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px;box-shadow:var(--sh-pressed);margin-bottom:24px;">
-      <div style="font-size:11px;color:var(--ink-3);margin-bottom:10px;line-height:1.5;">통계 탭 "1학기/2학기" 표시가 이 월·일을 기준으로 자동 전환돼요. (연도는 무시하고 매년 반복 적용)</div>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
-        <label style="font-size:12px;font-weight:700;color:var(--ink-2);width:76px;flex-shrink:0;">1학기 시작</label>
-        <input type="date" id="_semS1Input" class="cd-input" style="flex:1;">
-      </div>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
-        <label style="font-size:12px;font-weight:700;color:var(--ink-2);width:76px;flex-shrink:0;">2학기 시작</label>
-        <input type="date" id="_semS2Input" class="cd-input" style="flex:1;">
-      </div>
-      <button onclick="_saveSemesterConfig()" style="width:100%;padding:8px 16px;border-radius:var(--radius-pill);border:none;background:var(--blue);color:#fff;font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;box-shadow:var(--sh-blue);">저장</button>
-    </div>
-
-    <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;">🔐 교사 메뉴 보안</div>
-    <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px 14px;box-shadow:var(--sh-pressed);margin-bottom:24px;">
-      <div style="display:flex;align-items:center;gap:10px;">
-        <div style="flex:1;">
-          <div style="font-size:13px;font-weight:700;color:var(--ink-2);">비밀번호 잠금</div>
-          <div style="font-size:11px;color:var(--ink-3);margin-top:2px;">OFF 시 기어 아이콘 탭으로 바로 진입</div>
+    <div id="_devTab-schedule" class="_dev-tab-panel">
+      <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;">📅 평일 공휴일 설정</div>
+      <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px;box-shadow:var(--sh-pressed);margin-bottom:12px;">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <input type="date" id="_holDateInput" class="cd-input" style="flex:1;min-width:130px;">
+          <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:600;color:var(--ink-2);cursor:pointer;">
+            <input type="checkbox" id="_holAm" checked style="width:15px;height:15px;"> 오전
+          </label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:13px;font-weight:600;color:var(--ink-2);cursor:pointer;">
+            <input type="checkbox" id="_holPm" checked style="width:15px;height:15px;"> 오후
+          </label>
+          <button onclick="_addHoliday()" style="padding:8px 16px;border-radius:var(--radius-pill);border:none;background:var(--blue);color:#fff;font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;box-shadow:var(--sh-blue);white-space:nowrap;">+ 추가</button>
         </div>
-        <button id="_devPwToggle" onclick="_toggleTeacherPw()" style="padding:6px 16px;border-radius:var(--radius-pill);border:none;font-family:var(--font);font-size:13px;font-weight:800;cursor:pointer;min-width:52px;transition:background .2s,color .2s;"></button>
       </div>
-    </div>
 
-    <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;">🔔 활동 로그 / 공지사항</div>
-    <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px 14px;box-shadow:var(--sh-pressed);margin-bottom:24px;">
-      <div style="display:flex;align-items:center;gap:10px;">
-        <div style="flex:1;">
-          <div style="font-size:13px;font-weight:700;color:var(--ink-2);">헤더 종 아이콘 사용</div>
-          <div style="font-size:11px;color:var(--ink-3);margin-top:2px;">모든 교사에게 공통 적용 · OFF 시 종 아이콘 숨김, 세션 변경 자동 기록도 중단</div>
+      <div id="_holList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:24px;"></div>
+
+      <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;">🏫 학기 설정</div>
+      <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px;box-shadow:var(--sh-pressed);">
+        <div style="font-size:11px;color:var(--ink-3);margin-bottom:10px;line-height:1.5;">통계 탭 "1학기/2학기" 표시가 이 월·일을 기준으로 자동 전환돼요. (연도는 무시하고 매년 반복 적용)</div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+          <label style="font-size:12px;font-weight:700;color:var(--ink-2);width:76px;flex-shrink:0;">1학기 시작</label>
+          <input type="date" id="_semS1Input" class="cd-input" style="flex:1;">
         </div>
-        <button id="_devActLogToggle" onclick="_toggleActivityLog()" style="padding:6px 16px;border-radius:var(--radius-pill);border:none;font-family:var(--font);font-size:13px;font-weight:800;cursor:pointer;min-width:52px;transition:background .2s,color .2s;"></button>
-      </div>
-    </div>
-
-    <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;">🖼️ 기간 결산 카드 이미지</div>
-    <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px 14px;box-shadow:var(--sh-pressed);margin-bottom:24px;">
-      <div style="display:flex;align-items:center;gap:10px;">
-        <div style="flex:1;">
-          <div style="font-size:13px;font-weight:700;color:var(--ink-2);">"카드 이미지" 내보내기 버튼 사용</div>
-          <div style="font-size:11px;color:var(--ink-3);margin-top:2px;">모든 교사에게 공통 적용 · OFF 시 기간 결산 시트에서 버튼 숨김(텍스트 복사는 그대로 유지)</div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
+          <label style="font-size:12px;font-weight:700;color:var(--ink-2);width:76px;flex-shrink:0;">2학기 시작</label>
+          <input type="date" id="_semS2Input" class="cd-input" style="flex:1;">
         </div>
-        <button id="_devCardExportToggle" onclick="_toggleCardExport()" style="padding:6px 16px;border-radius:var(--radius-pill);border:none;font-family:var(--font);font-size:13px;font-weight:800;cursor:pointer;min-width:52px;transition:background .2s,color .2s;"></button>
+        <button onclick="_saveSemesterConfig()" style="width:100%;padding:8px 16px;border-radius:var(--radius-pill);border:none;background:var(--blue);color:#fff;font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;box-shadow:var(--sh-blue);">저장</button>
       </div>
     </div>
 
-    <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;">🗑️ 출석 기록 초기화</div>
-    <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px;box-shadow:var(--sh-pressed);margin-bottom:24px;">
-      <div style="font-size:11px;color:var(--red);font-weight:600;margin-bottom:8px;">지정한 날짜의 모든 출석 기록이 삭제됩니다.</div>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <input type="date" id="_resetDateInput" class="cd-input" style="flex:1;">
-        <button onclick="_devResetAttendance()" style="padding:8px 16px;border-radius:var(--radius-pill);border:none;background:var(--red);color:#fff;font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">초기화</button>
+    <div id="_devTab-toggles" class="_dev-tab-panel">
+      <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;">🔐 교사 메뉴 보안</div>
+      <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px 14px;box-shadow:var(--sh-pressed);margin-bottom:16px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="flex:1;">
+            <div style="font-size:13px;font-weight:700;color:var(--ink-2);">비밀번호 잠금</div>
+            <div style="font-size:11px;color:var(--ink-3);margin-top:2px;">OFF 시 기어 아이콘 탭으로 바로 진입</div>
+          </div>
+          <button id="_devPwToggle" onclick="_toggleTeacherPw()" style="padding:6px 16px;border-radius:var(--radius-pill);border:none;font-family:var(--font);font-size:13px;font-weight:800;cursor:pointer;min-width:52px;transition:background .2s,color .2s;"></button>
+        </div>
+      </div>
+
+      <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;">🔔 활동 로그 / 공지사항</div>
+      <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px 14px;box-shadow:var(--sh-pressed);margin-bottom:16px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="flex:1;">
+            <div style="font-size:13px;font-weight:700;color:var(--ink-2);">헤더 종 아이콘 사용</div>
+            <div style="font-size:11px;color:var(--ink-3);margin-top:2px;">모든 교사에게 공통 적용 · OFF 시 종 아이콘 숨김, 세션 변경 자동 기록도 중단</div>
+          </div>
+          <button id="_devActLogToggle" onclick="_toggleActivityLog()" style="padding:6px 16px;border-radius:var(--radius-pill);border:none;font-family:var(--font);font-size:13px;font-weight:800;cursor:pointer;min-width:52px;transition:background .2s,color .2s;"></button>
+        </div>
+      </div>
+
+      <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;">🖼️ 기간 결산 카드 이미지</div>
+      <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px 14px;box-shadow:var(--sh-pressed);">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="flex:1;">
+            <div style="font-size:13px;font-weight:700;color:var(--ink-2);">"카드 이미지" 내보내기 버튼 사용</div>
+            <div style="font-size:11px;color:var(--ink-3);margin-top:2px;">모든 교사에게 공통 적용 · OFF 시 기간 결산 시트에서 버튼 숨김(텍스트 복사는 그대로 유지)</div>
+          </div>
+          <button id="_devCardExportToggle" onclick="_toggleCardExport()" style="padding:6px 16px;border-radius:var(--radius-pill);border:none;font-family:var(--font);font-size:13px;font-weight:800;cursor:pointer;min-width:52px;transition:background .2s,color .2s;"></button>
+        </div>
       </div>
     </div>
 
-    <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;">📝 결석 사유 관리</div>
-    <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px;box-shadow:var(--sh-pressed);">
-      <div id="_reasonList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;"></div>
-      <div style="display:flex;gap:8px;">
-        <input type="text" id="_reasonInput" class="cd-input" placeholder="새 사유 입력" style="flex:1;" onkeydown="if(event.key==='Enter')_addReasonType()">
-        <button onclick="_addReasonType()" style="padding:8px 16px;border-radius:var(--radius-pill);border:none;background:var(--blue);color:#fff;font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;box-shadow:var(--sh-blue);">+ 추가</button>
+    <div id="_devTab-data" class="_dev-tab-panel">
+      <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;">🗑️ 출석 기록 초기화</div>
+      <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px;box-shadow:var(--sh-pressed);">
+        <div style="font-size:11px;color:var(--red);font-weight:600;margin-bottom:8px;">지정한 날짜의 모든 출석 기록이 삭제됩니다.</div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="date" id="_resetDateInput" class="cd-input" style="flex:1;">
+          <button onclick="_devResetAttendance()" style="padding:8px 16px;border-radius:var(--radius-pill);border:none;background:var(--red);color:#fff;font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">초기화</button>
+        </div>
       </div>
     </div>
 
-    <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin:20px 0 10px;">⚠️ 위반 유형 관리</div>
-    <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px;box-shadow:var(--sh-pressed);">
-      <div id="_violTypeList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;"></div>
-      <div style="display:flex;gap:8px;">
-        <input type="text" id="_violTypeInput" class="cd-input" placeholder="새 위반 유형 입력" style="flex:1;" onkeydown="if(event.key==='Enter')_addViolationType()">
-        <button onclick="_addViolationType()" style="padding:8px 16px;border-radius:var(--radius-pill);border:none;background:var(--blue);color:#fff;font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;box-shadow:var(--sh-blue);">+ 추가</button>
+    <div id="_devTab-reasons" class="_dev-tab-panel">
+      <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;">📝 결석 사유 관리</div>
+      <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px;box-shadow:var(--sh-pressed);">
+        <div id="_reasonList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;"></div>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="_reasonInput" class="cd-input" placeholder="새 사유 입력" style="flex:1;" onkeydown="if(event.key==='Enter')_addReasonType()">
+          <button onclick="_addReasonType()" style="padding:8px 16px;border-radius:var(--radius-pill);border:none;background:var(--blue);color:#fff;font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;box-shadow:var(--sh-blue);">+ 추가</button>
+        </div>
       </div>
-      <div style="font-size:10.5px;color:var(--ink-4);margin-top:8px;line-height:1.5;">'직접 입력'은 항상 마지막에 고정으로 붙어서 목록에 표시되지 않습니다.</div>
+
+      <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin:20px 0 10px;">⚠️ 위반 유형 관리</div>
+      <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px;box-shadow:var(--sh-pressed);">
+        <div id="_violTypeList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px;"></div>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="_violTypeInput" class="cd-input" placeholder="새 위반 유형 입력" style="flex:1;" onkeydown="if(event.key==='Enter')_addViolationType()">
+          <button onclick="_addViolationType()" style="padding:8px 16px;border-radius:var(--radius-pill);border:none;background:var(--blue);color:#fff;font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;box-shadow:var(--sh-blue);">+ 추가</button>
+        </div>
+        <div style="font-size:10.5px;color:var(--ink-4);margin-top:8px;line-height:1.5;">'직접 입력'은 항상 마지막에 고정으로 붙어서 목록에 표시되지 않습니다.</div>
+      </div>
     </div>`;
 
   backdrop.appendChild(sheet);
@@ -1722,6 +1759,8 @@ function _renderDevMenuSheet() {
   backdrop.addEventListener('click', e=>{ if(e.target===backdrop) close(); });
   sheet.querySelector('#_devClose').addEventListener('click', close);
   sheet.querySelector('#_devChangelogBtn').addEventListener('click', () => { close(); setTimeout(_openChangelogSheet, 370); });
+  window._devSheet = sheet;
+  _switchDevTab(_devActiveTab);
 
   sheet.querySelector('#_holDateInput').value = _todayStr();
   sheet.querySelector('#_resetDateInput').value = _todayStr();
@@ -1770,52 +1809,51 @@ function _toggleTeacherPw() {
   showSuccessToast('교사 메뉴 잠금 ' + (!on ? 'ON' : 'OFF'));
 }
 
-function _applyActivityLogBtn(btn) {
-  const on = _activityLogEnabled();
+// ON/OFF 텍스트+색상 표시는 어느 전역 설정 토글이든 똑같아서 공용으로 뺌.
+function _applyOnOffBtn(btn, on) {
   btn.textContent = on ? 'ON' : 'OFF';
   btn.style.background = on ? 'var(--green)' : 'var(--red)';
   btn.style.color = '#fff';
 }
 
-async function _toggleActivityLog() {
-  const prev = _activityLogOn;
+// 모든 교사에게 공통 적용되는 서버 저장형 on/off 스위치의 공통 처리 —
+// 즉시 반영(낙관적 업데이트) 후 저장 실패하면 원래 값으로 되돌린다.
+// get/set은 해당 전역 변수(_activityLogOn 등) 읽기/쓰기, sideEffect는
+// 값이 바뀔 때마다(성공/롤백 둘 다) 같이 실행해야 하는 화면 갱신(선택).
+async function _toggleGlobalFlag({ get, set, apiSave, btnId, label, sideEffect }) {
+  const prev = get();
   const next = !prev;
-  _activityLogOn = next;
-  const btn = document.getElementById('_devActLogToggle');
-  if (btn) _applyActivityLogBtn(btn);
-  _applyActivityBellVisibility();
+  set(next);
+  const btn = document.getElementById(btnId);
+  if (btn) _applyOnOffBtn(btn, next);
+  if (sideEffect) sideEffect();
   try {
-    await API.saveActivityLogEnabled(next);
-    showSuccessToast('활동 로그 ' + (next ? 'ON' : 'OFF'), '모든 교사에게 적용됩니다');
+    await apiSave(next);
+    showSuccessToast(label + ' ' + (next ? 'ON' : 'OFF'), '모든 교사에게 적용됩니다');
   } catch (err) {
-    _activityLogOn = prev;
-    if (btn) _applyActivityLogBtn(btn);
-    _applyActivityBellVisibility();
+    set(prev);
+    if (btn) _applyOnOffBtn(btn, prev);
+    if (sideEffect) sideEffect();
     Swal.fire('오류', err?.message || '설정을 저장하지 못했습니다.', 'error');
   }
 }
 
-function _applyCardExportBtn(btn) {
-  const on = _cardExportOn;
-  btn.textContent = on ? 'ON' : 'OFF';
-  btn.style.background = on ? 'var(--green)' : 'var(--red)';
-  btn.style.color = '#fff';
+function _applyActivityLogBtn(btn) { _applyOnOffBtn(btn, _activityLogEnabled()); }
+function _toggleActivityLog() {
+  return _toggleGlobalFlag({
+    get: () => _activityLogOn, set: v => { _activityLogOn = v; },
+    apiSave: API.saveActivityLogEnabled, btnId: '_devActLogToggle',
+    label: '활동 로그', sideEffect: _applyActivityBellVisibility,
+  });
 }
 
-async function _toggleCardExport() {
-  const prev = _cardExportOn;
-  const next = !prev;
-  _cardExportOn = next;
-  const btn = document.getElementById('_devCardExportToggle');
-  if (btn) _applyCardExportBtn(btn);
-  try {
-    await API.saveCardExportEnabled(next);
-    showSuccessToast('카드 이미지 내보내기 ' + (next ? 'ON' : 'OFF'), '모든 교사에게 적용됩니다');
-  } catch (err) {
-    _cardExportOn = prev;
-    if (btn) _applyCardExportBtn(btn);
-    Swal.fire('오류', err?.message || '설정을 저장하지 못했습니다.', 'error');
-  }
+function _applyCardExportBtn(btn) { _applyOnOffBtn(btn, _cardExportOn); }
+function _toggleCardExport() {
+  return _toggleGlobalFlag({
+    get: () => _cardExportOn, set: v => { _cardExportOn = v; },
+    apiSave: API.saveCardExportEnabled, btnId: '_devCardExportToggle',
+    label: '카드 이미지 내보내기',
+  });
 }
 
 function _renderReasonList(sheet) {
