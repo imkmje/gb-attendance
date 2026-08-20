@@ -848,8 +848,14 @@ const API = (() => {
     return rows.length;
   }
 
-  // 날짜별 결석 여부(하루 1개 대표값) — _calcAbsentCounts와 동일한 규칙으로
-  // "그 날 결석으로 칠지"를 판정한다. 연속 결석 스트릭 계산에 재사용.
+  // 날짜별 결석 여부 — _calcAbsentCounts(_forEachDayRepresentative)와 동일한
+  // 규칙으로 "그 날 결석으로 칠지"를 판정한다. 연속 결석/출석 스트릭 계산에 재사용.
+  // 평일은 하루 대표 세션 1개(심야>야간>오후 우선순위)로 항목 1개, 토요일은
+  // 오전/오후를 서로 독립된 건으로 쳐서 항목을 여러 개 낼 수 있다 — 예전엔
+  // 토요일 레코드를 전부 OR로 묶어 하루 1개로만 냈었는데, 그러면 오전만
+  // 결석·오후는 출석이어도 그날 전체가 결석으로 잡혀 스트릭이 결석 카운트
+  // (오전/오후 독립 집계)와 어긋났다. 세션명 오름차순 정렬(오전→오후1→오후2)로
+  // 항상 시간 순으로 스트릭에 반영되게 한다.
   function _dailyAbsentFlags(records) {
     const byDate = {};
     for (const r of records) {
@@ -863,16 +869,17 @@ const API = (() => {
       const parts = date.split('-');
       const dayOfWeek = new Date(+parts[0], +parts[1] - 1, +parts[2]).getDay();
       const isSat = dayOfWeek === 6;
-      let isAbsent = false, hasRecord = false;
       if (isSat) {
-        for (const r of recs) { hasRecord = true; if (r.status === '결석' && !r.no_count) isAbsent = true; }
+        const sorted = [...recs].sort((a, b) => a.session.localeCompare(b.session));
+        for (const r of sorted) {
+          out.push({ date, isAbsent: r.status === '결석' && !r.no_count });
+        }
       } else {
         for (const sess of WEEKDAY_PRIORITY) {
           const rec = recs.find(r => r.session === sess);
-          if (rec) { hasRecord = true; isAbsent = (rec.status === '결석' && !rec.no_count); break; }
+          if (rec) { out.push({ date, isAbsent: rec.status === '결석' && !rec.no_count }); break; }
         }
       }
-      if (hasRecord) out.push({ date, isAbsent });
     }
     return out;
   }
