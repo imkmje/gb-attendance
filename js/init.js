@@ -136,6 +136,9 @@ window.onload = () => {
         API.getCardExportEnabled()
           .then(on => { _cardExportOn = on; })
           .catch(() => {});
+        API.getAfterSchoolToggleEnabled()
+          .then(on => { _afterSchoolToggleOn = on; _updateAfterSchoolRow(); })
+          .catch(() => {});
         if (!_rosterLoaded) {
           API.getAllMemberList()
             .then(data => { _rosterData=data||[]; _rosterLoaded=true; })

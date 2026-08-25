@@ -112,7 +112,7 @@ function _isAfternoonSession() {
 function _updateAfterSchoolRow() {
   const row = document.getElementById('afterSchoolRow');
   if (!row) return;
-  const show = _isAfternoonSession();
+  const show = _isAfternoonSession() && _afterSchoolToggleOn;
   row.style.display = show ? 'flex' : 'none';
   if (!show) {
     _includeAfterSchool = false;

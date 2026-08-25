@@ -165,6 +165,8 @@ function _openTeacherMenu() {
           title:'결석 카운트 수정', sub:'출석 기록 수정 및 결석 카운트를 조정합니다', fn:_teacherEditAttendance },
         { bg:'var(--green-dim)',  fg:'var(--green)', svg:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
           title:'자습 세션 변경',  sub:'학생별 자습 참가 세션(O/방과후/-)을 편집합니다', fn:_teacherEditSchedule },
+        { bg:'var(--blue-dim)', fg:'var(--blue)', svg:'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+          title:'자습 시간 추가 인정', sub:'평소 세션이 아닌데 자습한 학생에게 시간을 추가로 인정합니다', fn:_teacherAddExtraStudy },
         { bg:'var(--amber-dim)', fg:'var(--amber)', svg:'<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
           title:'전체 벌금 현황',  sub:'전체 벌금 목록 조회 및 납부 상태를 수정합니다', fn:_teacherViewFines },
         { bg:'var(--purple-dim)', fg:'var(--purple)', svg:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01"/>',
@@ -499,6 +501,129 @@ function _renderAttEditor(student, records) {
     const rid = inp.closest('._ate-row').dataset.rid;
     const rec = records.find(r => r.id === rid);
     if (rec) bindReasonInput(inp, rid, rec);
+  });
+}
+
+// ── 1-b. 자습 시간 추가 인정 (평소 세션이 아닌데 자습한 학생) ──
+function _teacherAddExtraStudy() {
+  showLoading('학생 목록 불러오는 중...');
+  API.getAllMemberList()
+    .then(students => {
+      hideLoading();
+      _openStudentPickerSheetEx(students, student => _renderExtraStudySheet(student));
+    })
+    .catch(() => { hideLoading(); Swal.fire('오류', '학생 목록을 불러오지 못했습니다.', 'error'); });
+}
+
+function _renderExtraStudySheet(student) {
+  const backdrop = document.createElement('div');
+  backdrop.className = 'custom-sheet-backdrop';
+  backdrop.style.zIndex = '3200';
+  const sheet = document.createElement('div');
+  sheet.className = 'custom-sheet';
+  sheet.style.cssText = 'padding-bottom:32px;';
+
+  sheet.innerHTML = `
+    <div class="custom-sheet-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <div>
+        <div style="font-size:15px;font-weight:800;color:var(--ink);">${_esc(student.name)}</div>
+        <div style="font-size:12px;color:var(--ink-3);margin-top:2px;">${student.ban}반 ${student.num}번 · ${_esc(student.group)}</div>
+      </div>
+      <button id="_esClose" aria-label="닫기" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;box-shadow:var(--sh-xs);">✕</button>
+    </div>
+    <div style="font-size:11px;color:var(--ink-3);line-height:1.5;margin-bottom:14px;">평소 자습 세션이 아니어도, 실제로 자습한 날짜·세션을 선택하면 출석으로 기록되고 자습 시간에도 반영돼요.</div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
+      <label style="font-size:12px;font-weight:700;color:var(--ink-2);width:56px;flex-shrink:0;">날짜</label>
+      <input type="date" id="_esDateInput" class="cd-input" style="flex:1;">
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:18px;">
+      <label style="font-size:12px;font-weight:700;color:var(--ink-2);width:56px;flex-shrink:0;">세션</label>
+      <div style="position:relative;flex:1;">
+        <select id="_esSessionSelect" style="width:100%;padding:9px 36px 9px 12px;border-radius:var(--radius);border:1.5px solid var(--bg-deep);background:var(--surface);font-family:var(--font);font-size:13px;font-weight:600;color:var(--ink);appearance:none;-webkit-appearance:none;outline:none;"></select>
+        <svg style="position:absolute;right:10px;top:50%;transform:translateY(-50%);pointer-events:none;" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ink-3)" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+    </div>
+    <button id="_esConfirm" style="width:100%;padding:11px;border-radius:var(--radius-pill);border:none;background:var(--blue);color:#fff;font-family:var(--font);font-size:14px;font-weight:800;cursor:pointer;box-shadow:var(--sh-blue);">자습 시간 추가 인정</button>`;
+
+  backdrop.appendChild(sheet);
+  document.body.appendChild(backdrop);
+  requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
+
+  const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 420); };
+  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+  sheet.querySelector('#_esClose').addEventListener('click', close);
+
+  const dateInput   = sheet.querySelector('#_esDateInput');
+  const sessSelect  = sheet.querySelector('#_esSessionSelect');
+  const confirmBtn  = sheet.querySelector('#_esConfirm');
+
+  const _setConfirmEnabled = on => {
+    confirmBtn.disabled = !on;
+    confirmBtn.style.opacity = on ? '1' : '0.5';
+  };
+
+  // 공휴일 자습(HOL_AM/HOL_PM)은 별도 세션 개념이라 이 기능(고정 세션 6종
+  // 기준의 자습 시간 계산)이 지원하지 않음 — 그런 날은 옵션에서 제외.
+  const refreshSessions = () => {
+    const rawOpts = _computeSessionOptions(dateInput.value);
+    const opts = rawOpts.filter(o => !o.isHoliday);
+    if (!opts.length) {
+      const msg = rawOpts.length ? '공휴일 자습은 이 기능으로 추가할 수 없어요' : '이 날짜는 자습이 없어요';
+      sessSelect.innerHTML = `<option value="">${msg}</option>`;
+      sessSelect.disabled = true;
+      _setConfirmEnabled(false);
+      return;
+    }
+    sessSelect.disabled = false;
+    _setConfirmEnabled(true);
+    sessSelect.innerHTML = opts.map(o => `<option value="${_esc(o.text)}">${_esc(o.text)}</option>`).join('');
+  };
+
+  dateInput.value = _todayStr();
+  dateInput.addEventListener('change', refreshSessions);
+  refreshSessions();
+
+  confirmBtn.addEventListener('click', async () => {
+    const date = dateInput.value;
+    const sessionName = sessSelect.value;
+    if (!date || !sessionName) return;
+
+    _setConfirmEnabled(false);
+    try {
+      const existing = await API.getStudentAttendanceFull(student.id);
+      const dup = existing.find(r => r.date === date && r.session === sessionName);
+      if (dup && dup.status === '출석') {
+        Swal.fire({ title: '이미 인정된 기록이에요', text: `${date} ${sessionName}은 이미 출석으로 기록돼 있습니다.`, icon: 'info', confirmButtonText: '확인' });
+        _setConfirmEnabled(true);
+        return;
+      }
+      if (dup) {
+        const result = await Swal.fire({
+          title: '기존 기록을 덮어쓸까요?', text: `${date} ${sessionName}에 이미 '${dup.status}' 기록이 있어요. 출석으로 바꿀까요?`,
+          icon: 'warning', showCancelButton: true, confirmButtonText: '출석으로 변경', cancelButtonText: '취소',
+        });
+        if (!result.isConfirmed) { _setConfirmEnabled(true); return; }
+      }
+
+      const checkerName = (document.getElementById('checkerName')?.value || localStorage.getItem('checkerName') || '').trim();
+      await API.saveAttendance({
+        group: student.group, sessionName, date, checkerName,
+        students: [{ student_id: student.id, ban: student.ban, num: student.num, name: student.name, type: '출석', reason: '', noCount: false }],
+      });
+      if (_activityLogEnabled()) {
+        API.logActivity({
+          actor: checkerName, type: 'attendance', studentId: student.id,
+          message: `${student.name}(${student.ban}반 ${student.num}번) ${date} ${sessionName} 자습 시간 추가 인정`,
+        }).catch(() => {});
+      }
+      _cache.stats = null;
+      showSuccessToast('자습 시간 추가 인정됨', `${date} · ${sessionName}`);
+      close();
+    } catch (err) {
+      Swal.fire('오류', err?.message || '저장하지 못했습니다.', 'error');
+      _setConfirmEnabled(true);
+    }
   });
 }
 
@@ -1552,12 +1677,15 @@ function _openDevMenu() {
     API.getHolidays().catch(() => []),
     API.getActivityLogEnabled().catch(() => _activityLogOn),
     API.getCardExportEnabled().catch(() => _cardExportOn),
-  ]).then(([holidays, activityLogOn, cardExportOn]) => {
+    API.getAfterSchoolToggleEnabled().catch(() => _afterSchoolToggleOn),
+  ]).then(([holidays, activityLogOn, cardExportOn, afterSchoolToggleOn]) => {
     hideLoading();
     _holidays = holidays || [];
     _activityLogOn = activityLogOn;
     _cardExportOn = cardExportOn;
+    _afterSchoolToggleOn = afterSchoolToggleOn;
     _applyActivityBellVisibility();
+    _updateAfterSchoolRow();
     _renderDevMenuSheet();
   });
 }
@@ -1708,13 +1836,24 @@ function _renderDevMenuSheet() {
       </div>
 
       <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;">🖼️ 기간 결산 카드 이미지</div>
-      <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px 14px;box-shadow:var(--sh-pressed);">
+      <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px 14px;box-shadow:var(--sh-pressed);margin-bottom:16px;">
         <div style="display:flex;align-items:center;gap:10px;">
           <div style="flex:1;">
             <div style="font-size:13px;font-weight:700;color:var(--ink-2);">"카드 이미지" 내보내기 버튼 사용</div>
             <div style="font-size:11px;color:var(--ink-3);margin-top:2px;">모든 교사에게 공통 적용 · OFF 시 기간 결산 시트에서 버튼 숨김(텍스트 복사는 그대로 유지)</div>
           </div>
           <button id="_devCardExportToggle" onclick="_toggleCardExport()" style="padding:6px 16px;border-radius:var(--radius-pill);border:none;font-family:var(--font);font-size:13px;font-weight:800;cursor:pointer;min-width:52px;transition:background .2s,color .2s;"></button>
+        </div>
+      </div>
+
+      <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;">🏫 방과후 없는 날</div>
+      <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px 14px;box-shadow:var(--sh-pressed);">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="flex:1;">
+            <div style="font-size:13px;font-weight:700;color:var(--ink-2);">"방과후 없는 날" 토글 사용</div>
+            <div style="font-size:11px;color:var(--ink-3);margin-top:2px;">모든 교사에게 공통 적용 · OFF 시 오후 자율학습 화면에서 토글 숨김</div>
+          </div>
+          <button id="_devAfterSchoolToggle" onclick="_toggleAfterSchoolFeature()" style="padding:6px 16px;border-radius:var(--radius-pill);border:none;font-family:var(--font);font-size:13px;font-weight:800;cursor:pointer;min-width:52px;transition:background .2s,color .2s;"></button>
         </div>
       </div>
     </div>
@@ -1776,6 +1915,8 @@ function _renderDevMenuSheet() {
   if (actLogBtn) _applyActivityLogBtn(actLogBtn);
   const cardExportBtn = sheet.querySelector('#_devCardExportToggle');
   if (cardExportBtn) _applyCardExportBtn(cardExportBtn);
+  const afterSchoolBtn = sheet.querySelector('#_devAfterSchoolToggle');
+  if (afterSchoolBtn) _applyAfterSchoolToggleBtn(afterSchoolBtn);
 }
 
 async function _saveSemesterConfig() {
@@ -1853,6 +1994,15 @@ function _toggleCardExport() {
     get: () => _cardExportOn, set: v => { _cardExportOn = v; },
     apiSave: API.saveCardExportEnabled, btnId: '_devCardExportToggle',
     label: '카드 이미지 내보내기',
+  });
+}
+
+function _applyAfterSchoolToggleBtn(btn) { _applyOnOffBtn(btn, _afterSchoolToggleOn); }
+function _toggleAfterSchoolFeature() {
+  return _toggleGlobalFlag({
+    get: () => _afterSchoolToggleOn, set: v => { _afterSchoolToggleOn = v; },
+    apiSave: API.saveAfterSchoolToggleEnabled, btnId: '_devAfterSchoolToggle',
+    label: '방과후 없는 날 토글', sideEffect: _updateAfterSchoolRow,
   });
 }
 

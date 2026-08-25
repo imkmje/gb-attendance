@@ -1128,6 +1128,22 @@ const API = (() => {
   }
 
   /**
+   * 오후 자율학습 화면 "방과후 없는 날" 토글 사용 여부 (전역 설정 — 모든 교사 공통)
+   */
+  async function getAfterSchoolToggleEnabled() {
+    try {
+      const rows = await _get('settings?key=eq.after_school_toggle_enabled&select=value');
+      if (rows.length) return rows[0].value !== false;
+    } catch (_) {}
+    return true;
+  }
+
+  async function saveAfterSchoolToggleEnabled(enabled) {
+    await _req('POST', 'settings', { key: 'after_school_toggle_enabled', value: !!enabled },
+      { Prefer: 'resolution=merge-duplicates,return=minimal' });
+  }
+
+  /**
    * 활동 로그 / 공지사항 조회 (최신순)
    */
   async function getActivityLog(limit = 50) {
@@ -1187,6 +1203,8 @@ const API = (() => {
     saveActivityLogEnabled,
     getCardExportEnabled,
     saveCardExportEnabled,
+    getAfterSchoolToggleEnabled,
+    saveAfterSchoolToggleEnabled,
     getTodayAbsences,
     getDayRoster,
     getStudentInsight,
