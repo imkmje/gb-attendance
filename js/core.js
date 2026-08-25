@@ -22,8 +22,9 @@ const VIOLATION_ACTIONS = ['경고', '벌금', '직접 입력'];
    n.0.0 대규모 업데이트 · 0.n.0 기능/디자인 개선 · 0.0.n 버그 수정
    최신순 — 새 배포 때마다 맨 위에 추가할 것
 ════════════════════════════════ */
-const APP_VERSION = '3.8.0';
+const APP_VERSION = '3.9.0';
 const CHANGELOG = [
+  { v:'3.9.0', d:'2026-08-25', t:'minor', title:'출석 기록 수정 진입 경로 개선 — ① 학생 선택 시트·출석 기록 수정 화면에 뒤로가기 버튼 추가(닫고 교사 메뉴부터 비밀번호 재입력하며 다시 찾아가지 않아도 이전 화면으로 바로 복귀), ② 대시보드 결석자 명단·기간 결산의 학생 카드를 꾹 누르면 교사 메뉴를 거치지 않고 그 학생의 출석 기록 수정 화면으로 바로 진입(대시보드는 이미 인증된 상태라 비밀번호 재입력 불필요), ③ 교사 메뉴를 거쳐 들어온 출석 기록 수정 화면엔 "대시보드에서 꾹 눌러도 바로 열려요" 힌트 토스트 표시' },
   { v:'3.8.0', d:'2026-08-25', t:'minor', title:'"자습 시간 제외" 기능을 별도 메뉴로 뽑았다가 항목 수만 늘어서, 기존 "결석 카운트 수정"(→ "출석 기록 수정"으로 개명) 화면 하나로 통합 — 출석 기록마다 "자습 시간에서 제외" 토글 표시(학교 자체 프로그램 등으로 실제로는 자습을 못 했지만 출석은 유지해야 할 때, 상태는 안 건드리고 자습 누적 시간 집계에서만 제외), 화면 상단 "+"로 평소 세션이 아닌 날짜·세션의 출석 기록도 같은 화면에서 바로 추가. 교사 메뉴 항목 수는 그대로 유지. DB에 study_excluded 컬럼 추가 필요(data/attendance_study_excluded.sql 1회 실행)' },
   { v:'3.7.0', d:'2026-08-25', t:'minor', title:'교사 메뉴 개선 2건 — ① "자습 시간 추가 인정" 신설: 평소 자습 세션이 아닌 날·시간에 자습한 학생을 교사 메뉴에서 학생·날짜·세션 선택만으로 출석 처리해 자습 누적 시간에 반영(기존 기록 있으면 확인 후 덮어씀), ② "방과후 없는 날" 토글을 개발자 메뉴 스위치 탭에서 전체 교사 대상 on/off 가능하게 함(꺼지면 오후 자율학습 화면에서 토글 자체가 숨김)' },
   { v:'3.6.0', d:'2026-08-20', t:'minor', title:'대시보드에 세션 필터 칩 추가 — 결석자만/전체 명단 모드 위에 그날 세션(평일: 오후·야간·심야, 토요일: 오전·오후1·오후2) 체크 칩이 생겨서, 예를 들어 "야간"만 켜면 그 세션에 결석 기록이 있는 학생만(전체 명단에선 그 세션 태그만) 걸러서 볼 수 있음. 기본은 전체 표시, 여러 개 켜면 합집합, 날짜를 바꾸면 필터 초기화, 필터만 바꿀 땐 서버 재조회 없이 즉시 다시 그림' },
@@ -126,6 +127,46 @@ let _lockChipTimer = null;
 let _rosterData        = [];
 let _rosterLoaded      = false;
 let _rosterActivePill  = 0;
+
+// 카드 엘리먼트 하나에 "짧게 탭 = onTap, 길게 누르기(520ms) = onLongPress"
+// 제스처를 붙인다. roster.js의 위반 등록 롱프레스와 같은 타이밍·이동 보정
+// (8px 넘게 움직이면 취소)을 쓰되, 카드가 렌더될 때마다 새로 만들어지는
+// 화면(대시보드 등)에서 매번 개별 바인딩해도 리스너가 누적되지 않도록
+// 엘리먼트 단위로 뺐다 — 델리게이션 대상 컨테이너가 재사용되는지 신경 쓸
+// 필요 없이 호출부에서 카드마다 한 번씩만 부르면 됨.
+function _bindCardTapAndHold(el, onTap, onLongPress) {
+  let timer = null, isLong = false, moved = false, startY = 0, startX = 0;
+
+  el.addEventListener('click', () => {
+    if (isLong) { isLong = false; return; }
+    onTap();
+  });
+
+  el.addEventListener('touchstart', e => {
+    isLong = false; moved = false;
+    startY = e.touches[0].clientY; startX = e.touches[0].clientX;
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      if (moved) return;
+      isLong = true;
+      if (navigator.vibrate) navigator.vibrate([30, 20, 30]);
+      el.style.transform = 'scale(0.96)';
+      onLongPress();
+    }, 520);
+  }, { passive: true });
+
+  el.addEventListener('touchmove', e => {
+    if (Math.abs(e.touches[0].clientY - startY) > 8 || Math.abs(e.touches[0].clientX - startX) > 8) {
+      moved = true;
+      clearTimeout(timer);
+      el.style.transform = '';
+    }
+  }, { passive: true });
+
+  const cleanup = () => { clearTimeout(timer); el.style.transform = ''; };
+  el.addEventListener('touchend', cleanup, { passive: true });
+  el.addEventListener('touchcancel', cleanup, { passive: true });
+}
 
 // 학생이 1명도 없는 자습반은 "기존 반을 골라서 보는" 화면(명단 필터,
 // 규정 위반 등록 대상 고르기 등)에서 자동으로 숨긴다. 반대로 학생을 새로

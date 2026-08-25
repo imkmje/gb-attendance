@@ -178,10 +178,14 @@ function _dashStudentRowHtml(s, badgeBg, badgeFg) {
 function _bindDashRows(list) {
   list.querySelectorAll('._dash-student').forEach((el, i) => {
     el.style.animationDelay = (i * 20) + 'ms';
-    el.addEventListener('click', () => {
-      const s = (window._dashRoster || []).find(a => a.id === el.dataset.sid);
-      if (s) _openStudentInsightSheet(s);
-    });
+    const getStudent = () => (window._dashRoster || []).find(a => a.id === el.dataset.sid);
+    // 짧게 탭 = 학생 인사이트(조회), 꾹 누르기 = 출석 기록 수정으로 바로
+    // 진입(교사 메뉴를 거치지 않음 — 대시보드는 이미 인증된 상태라 다시
+    // 비밀번호를 넣을 필요가 없음).
+    _bindCardTapAndHold(el,
+      () => { const s = getStudent(); if (s) _openStudentInsightSheet(s); },
+      () => { const s = getStudent(); if (s) _teacherShowAttEditor(s); },
+    );
   });
 }
 
@@ -622,10 +626,11 @@ function _renderPeriodSummary(summaryEl, listEl, summary, start, end, searchQuer
   }).join('');
   listEl.innerHTML = html;
   listEl.querySelectorAll('._ps-row').forEach(el => {
-    el.addEventListener('click', () => {
-      const s = active.find(x => x.id === el.dataset.sid);
-      if (s) _openStudentInsightSheet(s);
-    });
+    const getStudent = () => active.find(x => x.id === el.dataset.sid);
+    _bindCardTapAndHold(el,
+      () => { const s = getStudent(); if (s) _openStudentInsightSheet(s); },
+      () => { const s = getStudent(); if (s) _teacherShowAttEditor(s); },
+    );
   });
 }
 

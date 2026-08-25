@@ -243,8 +243,10 @@ function _openTeacherMenu() {
   });
 }
 
-// ── 공통: 학생 선택 시트 (콜백 버전) — 반 드롭다운 → 학생 목록 ──
-function _openStudentPickerSheetEx(students, callback) {
+// ── 공통: 학생 선택 시트 (콜백 버전) — 반 드롭다운 → 학생 목록.
+// onBack을 넘기면 헤더에 뒤로가기 버튼이 생겨서, 닫고 처음(교사 메뉴)부터
+// 다시 인증·탐색하지 않고 바로 이전 화면으로 돌아갈 수 있다.
+function _openStudentPickerSheetEx(students, callback, onBack) {
   const backdrop = document.createElement('div');
   backdrop.className = 'custom-sheet-backdrop';
   backdrop.style.zIndex = '3100';
@@ -260,7 +262,12 @@ function _openStudentPickerSheetEx(students, callback) {
 
   sheet.innerHTML = `
     <div class="custom-sheet-handle"></div>
-    <div style="font-size:15px;font-weight:800;color:var(--ink);margin-bottom:12px;letter-spacing:-0.4px;">학생 선택</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+      ${onBack ? `<button id="_spxBack" aria-label="뒤로" style="width:26px;height:26px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:var(--sh-xs);">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>` : ''}
+      <div style="font-size:15px;font-weight:800;color:var(--ink);letter-spacing:-0.4px;">학생 선택</div>
+    </div>
     <div style="position:relative;margin-bottom:12px;">
       <select id="_spxGroup" style="width:100%;padding:11px 40px 11px 14px;border-radius:var(--radius);border:1.5px solid var(--bg-deep);background:var(--surface);font-family:var(--font);font-size:14px;font-weight:600;color:var(--ink);appearance:none;-webkit-appearance:none;outline:none;">
         ${groupOpts}
@@ -306,6 +313,7 @@ function _openStudentPickerSheetEx(students, callback) {
   const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 420); };
   backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
   sheet.querySelector('#_spxGroup').addEventListener('change', function() { renderStudents(this.value); });
+  if (onBack) sheet.querySelector('#_spxBack').addEventListener('click', () => { close(); setTimeout(onBack, 370); });
 }
 
 // ── 1. 출석 기록 수정 — 조회/상태변경/노카운트/사유, 자습 시간 제외,
@@ -315,15 +323,22 @@ function _teacherEditAttendance() {
   API.getAllMemberList()
     .then(students => {
       hideLoading();
-      _openStudentPickerSheetEx(students, student => _teacherShowAttEditor(student));
+      _openStudentPickerSheetEx(
+        students,
+        student => _teacherShowAttEditor(student, students),
+        () => _openTeacherMenu(),
+      );
     })
     .catch(() => { hideLoading(); Swal.fire('오류', '학생 목록을 불러오지 못했습니다.', 'error'); });
 }
 
-function _teacherShowAttEditor(student) {
+// students: 학생 선택 시트에서 넘어온 반 전체 명단(뒤로가기용, 대시보드
+// 카드 꾹 누르기 등 학생 선택 시트를 거치지 않은 경로에서는 undefined —
+// 그 경우 _renderAttEditor는 뒤로가기 버튼을 숨긴다.
+function _teacherShowAttEditor(student, students) {
   showLoading('출석 기록 불러오는 중...');
   API.getStudentAttendanceFull(student.id)
-    .then(records => { hideLoading(); _renderAttEditor(student, records); })
+    .then(records => { hideLoading(); _renderAttEditor(student, records, students); })
     .catch(() => { hideLoading(); Swal.fire('오류', '출석 기록을 불러오지 못했습니다.', 'error'); });
 }
 
@@ -332,7 +347,11 @@ const _ATE_SESSION_ABBR = {
   '오전 자율학습(토)':'토오전', '오후1 자율학습(토)':'토오후1', '오후2 자율학습(토)':'토오후2',
 };
 
-function _renderAttEditor(student, records) {
+// students: 학생 선택 시트에서 넘어온 반 전체 명단 — 있으면 뒤로가기
+// 버튼(학생 선택으로 복귀)과 "대시보드에서 꾹 누르기" 힌트 토스트를 보여줌.
+// 대시보드 카드를 꾹 눌러 바로 들어온 경우(students 없음)는 이미 그
+// 지름길을 쓰고 있는 중이라 힌트가 필요 없어서 자동으로 숨겨진다.
+function _renderAttEditor(student, records, students) {
   const backdrop = document.createElement('div');
   backdrop.className = 'custom-sheet-backdrop';
   backdrop.style.zIndex = '3200';
@@ -374,9 +393,14 @@ function _renderAttEditor(student, records) {
   sheet.innerHTML = `
     <div class="custom-sheet-handle"></div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-      <div>
-        <div style="font-size:15px;font-weight:800;color:var(--ink);">${_esc(student.name)}</div>
-        <div style="font-size:12px;color:var(--ink-3);margin-top:2px;">${student.ban}반 ${student.num}번 · ${_esc(student.group)}</div>
+      <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+        ${students ? `<button id="_aeBack" aria-label="뒤로" style="width:28px;height:28px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:var(--sh-xs);">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>` : ''}
+        <div style="min-width:0;">
+          <div style="font-size:15px;font-weight:800;color:var(--ink);">${_esc(student.name)}</div>
+          <div style="font-size:12px;color:var(--ink-3);margin-top:2px;">${student.ban}반 ${student.num}번 · ${_esc(student.group)}</div>
+        </div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
         <button id="_aeAdd" aria-label="기록 추가" title="평소 세션이 아닌데 자습한 기록 추가" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--blue-dim);color:var(--blue);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--sh-xs);">
@@ -396,6 +420,11 @@ function _renderAttEditor(student, records) {
   document.body.appendChild(backdrop);
   requestAnimationFrame(() => requestAnimationFrame(() => backdrop.classList.add('show')));
 
+  if (students) {
+    const hintEl = _cdToast({ type:'blue', title:'대시보드에서 학생 카드를 꾹 눌러도 바로 열려요', sub:'' });
+    setTimeout(() => { hintEl.classList.add('out'); setTimeout(() => hintEl.remove(), 280); }, 2400);
+  }
+
   let _aeChanged = false;
   const close = () => {
     backdrop.classList.remove('show');
@@ -408,6 +437,16 @@ function _renderAttEditor(student, records) {
   };
   backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
   sheet.querySelector('#_aeClose').addEventListener('click', close);
+  if (students) {
+    sheet.querySelector('#_aeBack').addEventListener('click', () => {
+      close();
+      setTimeout(() => _openStudentPickerSheetEx(
+        students,
+        s => _teacherShowAttEditor(s, students),
+        () => _openTeacherMenu(),
+      ), 370);
+    });
+  }
 
   let _reasonTimer = null;
   const listEl = sheet.querySelector('#_aeList');
@@ -676,7 +715,7 @@ function _teacherEditSchedule() {
       hideLoading();
       _openStudentPickerSheetEx(students, student => {
         _teacherLoadSchedule(student);
-      });
+      }, () => _openTeacherMenu());
     })
     .catch(() => { hideLoading(); Swal.fire('오류', '학생 목록을 불러오지 못했습니다.', 'error'); });
 }
@@ -1017,7 +1056,7 @@ function _teacherManageStudent() {
   API.getAllMemberList()
     .then(students => {
       hideLoading();
-      _openStudentPickerSheetEx(students, student => _teacherStudentActions(student));
+      _openStudentPickerSheetEx(students, student => _teacherStudentActions(student), () => _openTeacherMenu());
     })
     .catch(() => { hideLoading(); Swal.fire('오류', '학생 목록을 불러오지 못했습니다.', 'error'); });
 }
