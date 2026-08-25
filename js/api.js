@@ -140,11 +140,14 @@ const API = (() => {
 
   // 누적 자습 시간 — 통계 탭(calculateStats)과 기간 결산이 동일한 계산을
   // 공유. 출석한 세션의 가중치(SESSION_WEIGHTS)에서 조퇴·지각 분(分)을
-  // 시간으로 환산해 뺀다.
+  // 시간으로 환산해 뺀다. study_excluded인 기록은 출석 처리는 유지하되
+  // (결석 카운트 등엔 영향 없음) 자습 시간 집계에서만 빠진다 — 학교 자체
+  // 프로그램 준비 등으로 실제로는 자습을 안 한 경우를 "교사 메뉴 → 자습
+  // 시간 제외 처리"로 표시했을 때 쓰인다.
   function _calcStudyHours(records) {
     let total = 0;
     for (const r of records) {
-      if (r.status === '출석') {
+      if (r.status === '출석' && !r.study_excluded) {
         const weight    = SESSION_WEIGHTS[r.session] ?? 0;
         const deduction = ((r.early_leave_mins ?? 0) + (r.late_mins ?? 0)) / 60;
         total += Math.max(0, weight - deduction);
@@ -567,6 +570,7 @@ const API = (() => {
       checker:       r.checker || '',
       earlyLeaveMins: r.early_leave_mins ?? 0,
       lateMins:       r.late_mins ?? 0,
+      studyExcluded: r.study_excluded ?? false,
     }));
   }
 
@@ -586,9 +590,10 @@ const API = (() => {
 
   async function updateAttendanceRecord(recordId, updates) {
     const patch = {};
-    if (updates.status  !== undefined) patch.status   = updates.status;
-    if (updates.reason  !== undefined) patch.reason   = updates.reason;
-    if (updates.noCount !== undefined) patch.no_count = updates.noCount;
+    if (updates.status        !== undefined) patch.status         = updates.status;
+    if (updates.reason        !== undefined) patch.reason         = updates.reason;
+    if (updates.noCount       !== undefined) patch.no_count       = updates.noCount;
+    if (updates.studyExcluded !== undefined) patch.study_excluded = updates.studyExcluded;
     // return=representation 으로 실제 반영 여부 확인 (return=minimal은 0행 매칭도 204 반환)
     const rows = await _req('PATCH', `attendance?id=eq.${recordId}`, patch, { Prefer: 'return=representation' });
     if (!rows || rows.length === 0) throw new Error('업데이트 실패: 기록을 찾을 수 없습니다');
@@ -1053,7 +1058,7 @@ const API = (() => {
   async function getPeriodSummary(startDate, endDate, presentReasonNames = []) {
     const [students, attendance, violations] = await Promise.all([
       _get('students?select=id,class_num,student_num,name,study_room&order=study_room,class_num,student_num'),
-      _get('attendance?select=student_id,session,status,record_date,no_count,early_leave_mins,late_mins'),
+      _get('attendance?select=student_id,session,status,record_date,no_count,early_leave_mins,late_mins,study_excluded'),
       _get('violations?select=student_id,action,paid').catch(() => []),
     ]);
     const attByStudent = {};

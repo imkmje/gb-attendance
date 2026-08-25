@@ -111,7 +111,16 @@ async function installSupabaseMock(page, overrides = {}) {
     if (method === 'PATCH') {
       let body = {};
       try { body = JSON.parse(req.postData() || '{}'); } catch {}
-      _applyFilters(store[table], filters).forEach(row => Object.assign(row, body));
+      const matched = _applyFilters(store[table], filters);
+      matched.forEach(row => Object.assign(row, body));
+      // 실제 Supabase(PostgREST)는 Prefer: return=representation 헤더가 있으면
+      // 갱신된 행을 그대로 응답 본문에 담아 돌려준다. api.js의
+      // updateAttendanceRecord가 이 응답으로 "실제 반영됐는지"(빈 배열이면
+      // 매칭된 행 없음)를 판단하므로, 목도 같은 헤더를 봐야 그 코드 경로를
+      // 제대로 재현해서 테스트할 수 있다.
+      if ((req.headers().prefer || '').includes('return=representation')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(matched) });
+      }
       return route.fulfill({ status: 204, body: '' });
     }
     if (method === 'DELETE') {

@@ -162,11 +162,9 @@ function _openTeacherMenu() {
       label: '출결 관리',
       items: [
         { bg:'var(--blue-dim)',   fg:'var(--blue)',  svg:'<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
-          title:'결석 카운트 수정', sub:'출석 기록 수정 및 결석 카운트를 조정합니다', fn:_teacherEditAttendance },
+          title:'출석 기록 수정', sub:'출석 기록 수정·추가, 자습 시간 제외, 결석 카운트 조정을 한 화면에서 처리합니다', fn:_teacherEditAttendance },
         { bg:'var(--green-dim)',  fg:'var(--green)', svg:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
           title:'자습 세션 변경',  sub:'학생별 자습 참가 세션(O/방과후/-)을 편집합니다', fn:_teacherEditSchedule },
-        { bg:'var(--blue-dim)', fg:'var(--blue)', svg:'<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
-          title:'자습 시간 추가 인정', sub:'평소 세션이 아닌데 자습한 학생에게 시간을 추가로 인정합니다', fn:_teacherAddExtraStudy },
         { bg:'var(--amber-dim)', fg:'var(--amber)', svg:'<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',
           title:'전체 벌금 현황',  sub:'전체 벌금 목록 조회 및 납부 상태를 수정합니다', fn:_teacherViewFines },
         { bg:'var(--purple-dim)', fg:'var(--purple)', svg:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01"/>',
@@ -310,7 +308,8 @@ function _openStudentPickerSheetEx(students, callback) {
   sheet.querySelector('#_spxGroup').addEventListener('change', function() { renderStudents(this.value); });
 }
 
-// ── 1. 출석 수정 / 결석 카운트 조작 ───────────────────
+// ── 1. 출석 기록 수정 — 조회/상태변경/노카운트/사유, 자습 시간 제외,
+//      기록 추가(평소 세션이 아닌데 자습한 학생)를 한 화면에서 처리 ──
 function _teacherEditAttendance() {
   showLoading('학생 목록 불러오는 중...');
   API.getAllMemberList()
@@ -328,6 +327,11 @@ function _teacherShowAttEditor(student) {
     .catch(() => { hideLoading(); Swal.fire('오류', '출석 기록을 불러오지 못했습니다.', 'error'); });
 }
 
+const _ATE_SESSION_ABBR = {
+  '오후 자율학습':'오후', '야간 자율학습':'야간', '심야 자율학습':'심야',
+  '오전 자율학습(토)':'토오전', '오후1 자율학습(토)':'토오후1', '오후2 자율학습(토)':'토오후2',
+};
+
 function _renderAttEditor(student, records) {
   const backdrop = document.createElement('div');
   backdrop.className = 'custom-sheet-backdrop';
@@ -339,25 +343,26 @@ function _renderAttEditor(student, records) {
   sheet.style.flexDirection = 'column';
   sheet.style.paddingBottom = '20px';
 
-  const SESSION_ABBR = {
-    '오후 자율학습':'오후', '야간 자율학습':'야간', '심야 자율학습':'심야',
-    '오전 자율학습(토)':'토오전', '오후1 자율학습(토)':'토오후1', '오후2 자율학습(토)':'토오후2',
-  };
-
   const makeRow = r => {
     const isAbsent = r.status === '결석';
     const nc = r.noCount;
+    const se = r.studyExcluded;
     return `<div class="_ate-row" data-rid="${r.id}" style="background:var(--surface);border-radius:var(--radius-sm);box-shadow:var(--sh-sm);padding:12px 14px;display:flex;flex-direction:column;gap:8px;">
       <div style="display:flex;align-items:center;gap:8px;">
         <span style="font-size:13px;font-weight:700;color:var(--ink-2);">${r.date}</span>
-        <span style="font-size:11px;font-weight:600;color:var(--ink-3);background:var(--bg-deep);border-radius:var(--radius-pill);padding:2px 8px;">${SESSION_ABBR[r.session]||r.session}</span>
+        <span style="font-size:11px;font-weight:600;color:var(--ink-3);background:var(--bg-deep);border-radius:var(--radius-pill);padding:2px 8px;">${_ATE_SESSION_ABBR[r.session]||r.session}</span>
         <span class="_ate-status" style="margin-left:auto;cursor:pointer;font-size:12px;font-weight:700;border-radius:var(--radius-pill);padding:4px 12px;transition:background .15s,color .15s;background:${isAbsent?'var(--red-dim)':'var(--green-dim)'};color:${isAbsent?'var(--red)':'var(--green)'};">${r.status}</span>
         <button class="_ate-del" aria-label="기록 삭제" style="background:none;border:none;color:var(--ink-4);cursor:pointer;padding:2px 4px;font-size:14px;flex-shrink:0;line-height:1;">✕</button>
       </div>
       ${isAbsent ? `<div class="_ate-extra" style="display:flex;align-items:center;gap:8px;">
         <button class="_ate-nc" style="flex-shrink:0;border:none;border-radius:var(--radius-pill);padding:4px 10px;cursor:pointer;font-family:var(--font);font-size:11px;font-weight:700;transition:background .15s,color .15s;background:${nc?'var(--green-dim)':'var(--bg-deep)'};color:${nc?'var(--green)':'var(--ink-3)'};">노카운트</button>
         <input class="_ate-reason" type="text" value="${r.reason||''}" placeholder="결석 사유" style="flex:1;background:var(--bg-deep);border:none;border-radius:var(--radius-pill);padding:5px 12px;font-family:var(--font);font-size:12px;font-weight:600;color:var(--ink-2);outline:none;">
-      </div>` : ''}
+      </div>` : `<div class="nocount-row" style="margin-top:0;">
+        <button class="_ate-study-excl nocount-sw${se?' on':''}" aria-label="자습 시간 제외 전환" aria-pressed="${se?'true':'false'}">
+          <div class="nocount-sw-thumb"></div>
+        </button>
+        <span class="_ate-study-excl-label nocount-label${se?' on':''}">자습 시간에서 제외 <span style="font-weight:500;opacity:0.7;">(출석은 유지 — 학교 프로그램 준비 등으로 실제 자습을 못 한 경우)</span></span>
+      </div>`}
     </div>`;
   };
 
@@ -365,7 +370,6 @@ function _renderAttEditor(student, records) {
   // 일괄 적용 등으로 하루에 야간+심야 두 세션이 다 결석이어도 1회로만 잡혀야
   // 하는데, 예전엔 세션 레코드 개수를 그대로 세서 같은 날인데도 2회로 잡혔었음.
   const _toRawRecs = recs => recs.map(r => ({ record_date: r.date, session: r.session, status: r.status, no_count: r.noCount }));
-  const absentCnt = API.calcAbsentCounts(_toRawRecs(records));
 
   sheet.innerHTML = `
     <div class="custom-sheet-handle"></div>
@@ -374,16 +378,19 @@ function _renderAttEditor(student, records) {
         <div style="font-size:15px;font-weight:800;color:var(--ink);">${_esc(student.name)}</div>
         <div style="font-size:12px;color:var(--ink-3);margin-top:2px;">${student.ban}반 ${student.num}번 · ${_esc(student.group)}</div>
       </div>
-      <button id="_aeClose" aria-label="닫기" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;box-shadow:var(--sh-xs);">✕</button>
+      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+        <button id="_aeAdd" aria-label="기록 추가" title="평소 세션이 아닌데 자습한 기록 추가" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--blue-dim);color:var(--blue);cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:var(--sh-xs);">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <button id="_aeClose" aria-label="닫기" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;box-shadow:var(--sh-xs);">✕</button>
+      </div>
     </div>
     <div style="display:flex;gap:12px;margin-bottom:12px;padding:10px 12px;background:var(--bg-deep);border-radius:var(--radius-sm);">
       <span style="font-size:12px;font-weight:600;color:var(--ink-3);">기록 <b style="color:var(--ink);" id="_aeTotalCnt">${records.length}회</b></span>
       <span style="color:var(--ink-4);">·</span>
-      <span style="font-size:12px;font-weight:600;color:var(--red);">결석 카운트 <b id="_aeAbsentCnt">${absentCnt}회</b></span>
+      <span style="font-size:12px;font-weight:600;color:var(--red);">결석 카운트 <b id="_aeAbsentCnt">0회</b></span>
     </div>
-    <div id="_aeList" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:8px;">
-      ${records.length ? records.map(makeRow).join('') : '<div style="text-align:center;padding:28px;color:var(--ink-3);font-size:13px;font-weight:600;">출석 기록이 없습니다.</div>'}
-    </div>`;
+    <div id="_aeList" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:8px;"></div>`;
 
   backdrop.appendChild(sheet);
   document.body.appendChild(backdrop);
@@ -403,15 +410,7 @@ function _renderAttEditor(student, records) {
   sheet.querySelector('#_aeClose').addEventListener('click', close);
 
   let _reasonTimer = null;
-
-  // 상단 "기록 N회 · 결석 카운트 N회" 헤더 — 시트를 열어둔 채로 상태/노카운트를
-  // 토글하거나 기록을 삭제해도 처음 연 시점 값에 멈춰있던 문제 수정.
-  const _updateAeHeaderCounts = () => {
-    const totalEl = sheet.querySelector('#_aeTotalCnt');
-    const absentEl = sheet.querySelector('#_aeAbsentCnt');
-    if (totalEl) totalEl.textContent = `${records.length}회`;
-    if (absentEl) absentEl.textContent = `${API.calcAbsentCounts(_toRawRecs(records))}회`;
-  };
+  const listEl = sheet.querySelector('#_aeList');
 
   const bindReasonInput = (inp, rid, rec) => {
     inp.addEventListener('input', () => {
@@ -422,9 +421,46 @@ function _renderAttEditor(student, records) {
     });
   };
 
-  sheet.querySelector('#_aeList').addEventListener('click', async e => {
+  // 목록 전체를 다시 그린다 — 기록 추가(_aeAdd) 뒤 서버에서 새로 받아온
+  // records로 갱신할 때 재사용. 개별 토글/삭제는 여전히 DOM 부분 갱신으로
+  // 처리(재검색 없이 즉시 반영).
+  const renderList = () => {
+    listEl.innerHTML = records.length ? records.map(makeRow).join('') : '<div style="text-align:center;padding:28px;color:var(--ink-3);font-size:13px;font-weight:600;">출석 기록이 없습니다.</div>';
+    listEl.querySelectorAll('._ate-reason').forEach(inp => {
+      const rid = inp.closest('._ate-row').dataset.rid;
+      const rec = records.find(r => r.id === rid);
+      if (rec) bindReasonInput(inp, rid, rec);
+    });
+  };
+
+  // 상단 "기록 N회 · 결석 카운트 N회" 헤더 — 시트를 열어둔 채로 상태/노카운트를
+  // 토글하거나 기록을 삭제·추가해도 처음 연 시점 값에 멈춰있던 문제 수정.
+  const _updateAeHeaderCounts = () => {
+    const totalEl = sheet.querySelector('#_aeTotalCnt');
+    const absentEl = sheet.querySelector('#_aeAbsentCnt');
+    if (totalEl) totalEl.textContent = `${records.length}회`;
+    if (absentEl) absentEl.textContent = `${API.calcAbsentCounts(_toRawRecs(records))}회`;
+  };
+
+  renderList();
+  _updateAeHeaderCounts();
+
+  sheet.querySelector('#_aeAdd').addEventListener('click', () => {
+    _openAddAttendanceSubSheet(student, records, async () => {
+      showLoading('갱신 중...');
+      try { records = await API.getStudentAttendanceFull(student.id); }
+      catch { /* 실패해도 기존 목록은 유지 */ }
+      hideLoading();
+      renderList();
+      _updateAeHeaderCounts();
+      _aeChanged = true;
+    });
+  });
+
+  listEl.addEventListener('click', async e => {
     const statusBtn = e.target.closest('._ate-status');
     const ncBtn     = e.target.closest('._ate-nc');
+    const seBtn     = e.target.closest('._ate-study-excl');
     const delBtn    = e.target.closest('._ate-del');
 
     if (statusBtn) {
@@ -436,30 +472,25 @@ function _renderAttEditor(student, records) {
       statusBtn.textContent = rec.status;
       statusBtn.style.background = isAbs ? 'var(--red-dim)' : 'var(--green-dim)';
       statusBtn.style.color      = isAbs ? 'var(--red)'     : 'var(--green)';
-
-      const existExtra = row.querySelector('._ate-extra');
-      if (isAbs && !existExtra) {
-        const extra = document.createElement('div');
-        extra.className = '_ate-extra';
-        extra.style.cssText = 'display:flex;align-items:center;gap:8px;';
-        extra.innerHTML = `<button class="_ate-nc" style="flex-shrink:0;border:none;border-radius:var(--radius-pill);padding:4px 10px;cursor:pointer;font-family:var(--font);font-size:11px;font-weight:700;background:var(--bg-deep);color:var(--ink-3);">노카운트</button>
-          <input class="_ate-reason" type="text" value="" placeholder="결석 사유" style="flex:1;background:var(--bg-deep);border:none;border-radius:var(--radius-pill);padding:5px 12px;font-family:var(--font);font-size:12px;font-weight:600;color:var(--ink-2);outline:none;">`;
-        row.appendChild(extra);
-        bindReasonInput(extra.querySelector('._ate-reason'), rid, rec);
-        rec.reason = ''; rec.noCount = false;
-      } else if (!isAbs && existExtra) {
-        existExtra.remove();
-        rec.reason = ''; rec.noCount = false;
-      }
-      _updateAeHeaderCounts();
+      rec.reason = ''; rec.noCount = false; rec.studyExcluded = false;
 
       try {
-        const updates = { status: rec.status };
-        if (!isAbs) { updates.reason = ''; updates.noCount = false; }
+        const updates = { status: rec.status, reason: '', noCount: false, studyExcluded: false };
         await API.updateAttendanceRecord(rid, updates);
         _aeChanged = true;
         showSuccessToast('상태 변경됨', rec.status);
       } catch (err) { _cdToast({ type:'red', title:'저장 실패', sub: err?.message }); }
+      // 결석↔출석 전환은 아래쪽 추가정보 행(노카운트+사유 / 자습 시간 제외)이
+      // 통째로 바뀌므로 그 행만 다시 그린다(전체 목록 재조회 없이).
+      const row2 = listEl.querySelector(`._ate-row[data-rid="${rid}"]`);
+      if (row2) {
+        row2.outerHTML = makeRow(rec);
+        if (isAbs) {
+          const reasonInp = listEl.querySelector(`._ate-row[data-rid="${rid}"] ._ate-reason`);
+          if (reasonInp) bindReasonInput(reasonInp, rid, rec);
+        }
+      }
+      _updateAeHeaderCounts();
     }
 
     if (ncBtn) {
@@ -475,6 +506,35 @@ function _renderAttEditor(student, records) {
         _aeChanged = true;
         showSuccessToast(rec.noCount ? '노카운트 설정됨' : '노카운트 해제됨');
       } catch (err) { _cdToast({ type:'red', title:'저장 실패', sub: err?.message }); }
+    }
+
+    if (seBtn) {
+      const row = seBtn.closest('._ate-row');
+      const rid = row.dataset.rid;
+      const rec = records.find(r => r.id === rid); if (!rec) return;
+      rec.studyExcluded = !rec.studyExcluded;
+      seBtn.classList.toggle('on', rec.studyExcluded);
+      seBtn.setAttribute('aria-pressed', rec.studyExcluded ? 'true' : 'false');
+      const lbl = row.querySelector('._ate-study-excl-label');
+      if (lbl) lbl.classList.toggle('on', rec.studyExcluded);
+      try {
+        await API.updateAttendanceRecord(rid, { studyExcluded: rec.studyExcluded });
+        _aeChanged = true;
+        showSuccessToast(rec.studyExcluded ? '자습 시간 제외됨' : '자습 시간 제외 해제됨');
+        if (_activityLogEnabled()) {
+          const checkerName = (document.getElementById('checkerName')?.value || localStorage.getItem('checkerName') || '').trim();
+          API.logActivity({
+            actor: checkerName, type: 'attendance', studentId: student.id,
+            message: `${student.name}(${student.ban}반 ${student.num}번) ${rec.date} ${rec.session} 자습 시간 ${rec.studyExcluded ? '제외' : '제외 해제'}(출석 유지)`,
+          }).catch(() => {});
+        }
+      } catch (err) {
+        rec.studyExcluded = !rec.studyExcluded;
+        seBtn.classList.toggle('on', rec.studyExcluded);
+        seBtn.setAttribute('aria-pressed', rec.studyExcluded ? 'true' : 'false');
+        if (lbl) lbl.classList.toggle('on', rec.studyExcluded);
+        _cdToast({ type:'red', title:'저장 실패', sub: err?.message });
+      }
     }
 
     if (delBtn) {
@@ -496,55 +556,37 @@ function _renderAttEditor(student, records) {
       } catch { _cdToast({ type:'red', title:'삭제 실패' }); }
     }
   });
-
-  sheet.querySelectorAll('._ate-reason').forEach(inp => {
-    const rid = inp.closest('._ate-row').dataset.rid;
-    const rec = records.find(r => r.id === rid);
-    if (rec) bindReasonInput(inp, rid, rec);
-  });
 }
 
-// ── 1-b. 자습 시간 추가 인정 (평소 세션이 아닌데 자습한 학생) ──
-function _teacherAddExtraStudy() {
-  showLoading('학생 목록 불러오는 중...');
-  API.getAllMemberList()
-    .then(students => {
-      hideLoading();
-      _openStudentPickerSheetEx(students, student => _renderExtraStudySheet(student));
-    })
-    .catch(() => { hideLoading(); Swal.fire('오류', '학생 목록을 불러오지 못했습니다.', 'error'); });
-}
-
-function _renderExtraStudySheet(student) {
+// ── 1-b. "+ 기록 추가" 서브시트 — 평소 자습 세션이 아닌 날짜·세션에
+// 자습한 학생을 출석으로 추가(자습 누적 시간에도 반영). 결석 카운트
+// 수정 화면(_renderAttEditor)에서만 열리는 보조 화면이라 별도 메뉴
+// 항목으로 두지 않고 여기 하나로 합쳤다 — 로직이 겹쳐 따로 두면
+// 관리 포인트만 늘어남.
+function _openAddAttendanceSubSheet(student, records, onAdded) {
   const backdrop = document.createElement('div');
   backdrop.className = 'custom-sheet-backdrop';
-  backdrop.style.zIndex = '3200';
+  backdrop.style.zIndex = '3300';
   const sheet = document.createElement('div');
   sheet.className = 'custom-sheet';
   sheet.style.cssText = 'padding-bottom:32px;';
 
   sheet.innerHTML = `
     <div class="custom-sheet-handle"></div>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-      <div>
-        <div style="font-size:15px;font-weight:800;color:var(--ink);">${_esc(student.name)}</div>
-        <div style="font-size:12px;color:var(--ink-3);margin-top:2px;">${student.ban}반 ${student.num}번 · ${_esc(student.group)}</div>
-      </div>
-      <button id="_esClose" aria-label="닫기" style="width:30px;height:30px;border-radius:50%;border:none;background:var(--bg-deep);color:var(--ink-3);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;box-shadow:var(--sh-xs);">✕</button>
-    </div>
-    <div style="font-size:11px;color:var(--ink-3);line-height:1.5;margin-bottom:14px;">평소 자습 세션이 아니어도, 실제로 자습한 날짜·세션을 선택하면 출석으로 기록되고 자습 시간에도 반영돼요.</div>
+    <div style="font-size:15px;font-weight:800;color:var(--ink);margin-bottom:4px;letter-spacing:-0.4px;">기록 추가</div>
+    <div style="font-size:11px;color:var(--ink-3);line-height:1.5;margin-bottom:14px;">평소 자습 세션이 아니어도, 실제로 자습한 날짜·세션을 고르면 출석으로 기록되고 자습 시간에도 반영돼요.</div>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
       <label style="font-size:12px;font-weight:700;color:var(--ink-2);width:56px;flex-shrink:0;">날짜</label>
-      <input type="date" id="_esDateInput" class="cd-input" style="flex:1;">
+      <input type="date" id="_aaDateInput" class="cd-input" style="flex:1;">
     </div>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:18px;">
       <label style="font-size:12px;font-weight:700;color:var(--ink-2);width:56px;flex-shrink:0;">세션</label>
       <div style="position:relative;flex:1;">
-        <select id="_esSessionSelect" style="width:100%;padding:9px 36px 9px 12px;border-radius:var(--radius);border:1.5px solid var(--bg-deep);background:var(--surface);font-family:var(--font);font-size:13px;font-weight:600;color:var(--ink);appearance:none;-webkit-appearance:none;outline:none;"></select>
+        <select id="_aaSessionSelect" style="width:100%;padding:9px 36px 9px 12px;border-radius:var(--radius);border:1.5px solid var(--bg-deep);background:var(--surface);font-family:var(--font);font-size:13px;font-weight:600;color:var(--ink);appearance:none;-webkit-appearance:none;outline:none;"></select>
         <svg style="position:absolute;right:10px;top:50%;transform:translateY(-50%);pointer-events:none;" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--ink-3)" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
       </div>
     </div>
-    <button id="_esConfirm" style="width:100%;padding:11px;border-radius:var(--radius-pill);border:none;background:var(--blue);color:#fff;font-family:var(--font);font-size:14px;font-weight:800;cursor:pointer;box-shadow:var(--sh-blue);">자습 시간 추가 인정</button>`;
+    <button id="_aaConfirm" style="width:100%;padding:11px;border-radius:var(--radius-pill);border:none;background:var(--blue);color:#fff;font-family:var(--font);font-size:14px;font-weight:800;cursor:pointer;box-shadow:var(--sh-blue);">추가</button>`;
 
   backdrop.appendChild(sheet);
   document.body.appendChild(backdrop);
@@ -552,11 +594,10 @@ function _renderExtraStudySheet(student) {
 
   const close = () => { backdrop.classList.remove('show'); setTimeout(() => backdrop.remove(), 420); };
   backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
-  sheet.querySelector('#_esClose').addEventListener('click', close);
 
-  const dateInput   = sheet.querySelector('#_esDateInput');
-  const sessSelect  = sheet.querySelector('#_esSessionSelect');
-  const confirmBtn  = sheet.querySelector('#_esConfirm');
+  const dateInput   = sheet.querySelector('#_aaDateInput');
+  const sessSelect  = sheet.querySelector('#_aaSessionSelect');
+  const confirmBtn  = sheet.querySelector('#_aaConfirm');
 
   const _setConfirmEnabled = on => {
     confirmBtn.disabled = !on;
@@ -590,22 +631,21 @@ function _renderExtraStudySheet(student) {
     if (!date || !sessionName) return;
 
     _setConfirmEnabled(false);
-    try {
-      const existing = await API.getStudentAttendanceFull(student.id);
-      const dup = existing.find(r => r.date === date && r.session === sessionName);
-      if (dup && dup.status === '출석') {
-        Swal.fire({ title: '이미 인정된 기록이에요', text: `${date} ${sessionName}은 이미 출석으로 기록돼 있습니다.`, icon: 'info', confirmButtonText: '확인' });
-        _setConfirmEnabled(true);
-        return;
-      }
-      if (dup) {
-        const result = await Swal.fire({
-          title: '기존 기록을 덮어쓸까요?', text: `${date} ${sessionName}에 이미 '${dup.status}' 기록이 있어요. 출석으로 바꿀까요?`,
-          icon: 'warning', showCancelButton: true, confirmButtonText: '출석으로 변경', cancelButtonText: '취소',
-        });
-        if (!result.isConfirmed) { _setConfirmEnabled(true); return; }
-      }
+    const dup = records.find(r => r.date === date && r.session === sessionName);
+    if (dup && dup.status === '출석') {
+      Swal.fire({ title: '이미 기록돼 있어요', text: `${date} ${sessionName}은 이미 출석으로 기록돼 있습니다.`, icon: 'info', confirmButtonText: '확인' });
+      _setConfirmEnabled(true);
+      return;
+    }
+    if (dup) {
+      const result = await Swal.fire({
+        title: '기존 기록을 덮어쓸까요?', text: `${date} ${sessionName}에 이미 '${dup.status}' 기록이 있어요. 출석으로 바꿀까요?`,
+        icon: 'warning', showCancelButton: true, confirmButtonText: '출석으로 변경', cancelButtonText: '취소',
+      });
+      if (!result.isConfirmed) { _setConfirmEnabled(true); return; }
+    }
 
+    try {
       const checkerName = (document.getElementById('checkerName')?.value || localStorage.getItem('checkerName') || '').trim();
       await API.saveAttendance({
         group: student.group, sessionName, date, checkerName,
@@ -620,6 +660,7 @@ function _renderExtraStudySheet(student) {
       _cache.stats = null;
       showSuccessToast('자습 시간 추가 인정됨', `${date} · ${sessionName}`);
       close();
+      onAdded();
     } catch (err) {
       Swal.fire('오류', err?.message || '저장하지 못했습니다.', 'error');
       _setConfirmEnabled(true);
