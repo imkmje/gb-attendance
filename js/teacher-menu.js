@@ -1826,14 +1826,13 @@ function _openChangelogSheet() {
 }
 
 function _renderDevMenuSheet() {
+  // 팝업(오버레이)이 아니라 화면 전체를 덮는 페이지 전환처럼 보이도록
+  // devmenu-fullscreen 변형 사용(css/style.css 참고) — 구조·핸들러는 기존 시트와 동일.
   const backdrop = document.createElement('div');
-  backdrop.className = 'custom-sheet-backdrop';
+  backdrop.className = 'custom-sheet-backdrop devmenu-fullscreen';
   backdrop.style.zIndex = '3000';
   const sheet = document.createElement('div');
-  sheet.className = 'custom-sheet';
-  sheet.style.paddingBottom = '40px';
-  sheet.style.maxHeight = '88vh';
-  sheet.style.overflowY = 'auto';
+  sheet.className = 'custom-sheet devmenu-fullscreen';
 
   sheet.innerHTML = `
     <div class="custom-sheet-handle"></div>

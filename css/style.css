@@ -351,6 +351,15 @@ html[data-theme="dark"] .custom-sheet::after { background:linear-gradient(155deg
 .custom-sheet-btn::after { content:''; position:absolute; inset:0; background:linear-gradient(155deg, rgba(255,255,255,0.18) 0%, transparent 50%); pointer-events:none; }
 @media (hover:hover) { .custom-sheet-btn:hover  { transform:translateY(-1px); } }
 .custom-sheet-btn:active { transform:scale(0.97); }
+
+/* 개발자 메뉴 — 반투명 배경에 뜨는 "팝업" 대신 화면 전체를 덮는 페이지 전환처럼 보이게
+   하는 변형. 구조(.custom-sheet-backdrop/.custom-sheet)는 그대로 재사용하고 시각만
+   override — 클래스 2개짜리 선택자라 아래 폭 960px 이상 "중앙 모달 카드" 규칙보다
+   항상 우선한다(폭 상관없이 항상 전체화면). */
+.custom-sheet-backdrop.devmenu-fullscreen { background:var(--bg); backdrop-filter:none; -webkit-backdrop-filter:none; align-items:stretch; justify-content:stretch; padding:0; }
+.custom-sheet.devmenu-fullscreen { width:100%; max-width:none; height:100%; max-height:none; border-radius:0; box-shadow:none; padding:calc(20px + env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom)); overflow-y:auto; }
+.custom-sheet-backdrop.devmenu-fullscreen.show .custom-sheet.devmenu-fullscreen { transform:translateY(0); }
+.devmenu-fullscreen .custom-sheet-handle { display:none; }
 .csb-save   { background:var(--blue);    color:#fff;         box-shadow:var(--sh-blue); }
 .csb-ignore { background:var(--red-dim); color:var(--red);   border:1px solid rgba(212,149,154,0.25); }
 .csb-cancel { background:var(--bg-deep); color:var(--ink-3); box-shadow:var(--sh-xs); }
