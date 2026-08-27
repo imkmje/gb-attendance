@@ -2086,14 +2086,10 @@ function _toggleAfterSchoolFeature() {
   });
 }
 
-function _renderReasonList(sheet) {
-  const list = sheet ? sheet.querySelector('#_reasonList') : document.getElementById('_reasonList');
-  if (!list) return;
-  if (!_reasonTypes.length) {
-    list.innerHTML = '<div style="text-align:center;padding:12px;color:var(--ink-3);font-size:13px;font-weight:600;">등록된 사유가 없습니다.</div>';
-    return;
-  }
-  list.innerHTML = _reasonTypes.map((r, i) => `
+let _reasonHiddenExpanded = false;
+
+function _reasonRowHtml(r, i) {
+  return `
     <div style="display:flex;flex-direction:column;gap:6px;padding:8px 10px;background:var(--surface);border-radius:var(--radius-sm);box-shadow:var(--sh-sm);">
       <div style="display:flex;align-items:center;gap:6px;">
         <span style="flex:1;font-size:13px;font-weight:600;color:var(--ink);">${_esc(r.name)}</span>
@@ -2113,7 +2109,43 @@ function _renderReasonList(sheet) {
         </button>
         <span class="nocount-label${r.visible !== false ? ' on' : ''}">출석체크 화면에 표시 <span style="font-weight:500;opacity:0.7;">(꺼도 기록·설정은 유지 — 더는 안 쓰는 사유는 삭제 대신 이걸로)</span></span>
       </div>
-    </div>`).join('');
+    </div>`;
+}
+
+function _renderReasonList(sheet) {
+  const root = sheet || document;
+  const list = root.querySelector('#_reasonList');
+  if (!list) return;
+  if (!_reasonTypes.length) {
+    list.innerHTML = '<div style="text-align:center;padding:12px;color:var(--ink-3);font-size:13px;font-weight:600;">등록된 사유가 없습니다.</div>';
+    return;
+  }
+
+  const visibleRows = [];
+  const hiddenRows = [];
+  _reasonTypes.forEach((r, i) => (r.visible === false ? hiddenRows : visibleRows).push(_reasonRowHtml(r, i)));
+
+  let html = visibleRows.length
+    ? visibleRows.join('')
+    : '<div style="text-align:center;padding:12px;color:var(--ink-3);font-size:13px;font-weight:600;">표시 중인 사유가 없습니다.</div>';
+
+  if (hiddenRows.length) {
+    html += `
+      <div style="margin-top:4px;">
+        <button onclick="_toggleReasonHiddenSection()" style="width:100%;display:flex;align-items:center;justify-content:space-between;gap:6px;padding:8px 10px;border:none;border-radius:var(--radius-sm);background:none;color:var(--ink-3);cursor:pointer;font-family:var(--font);font-size:12px;font-weight:700;">
+          <span>숨긴 사유 (${hiddenRows.length})</span>
+          <span style="transition:transform 0.2s;${_reasonHiddenExpanded ? 'transform:rotate(180deg);' : ''}">⌄</span>
+        </button>
+        ${_reasonHiddenExpanded ? `<div style="display:flex;flex-direction:column;gap:6px;">${hiddenRows.join('')}</div>` : ''}
+      </div>`;
+  }
+
+  list.innerHTML = html;
+}
+
+function _toggleReasonHiddenSection() {
+  _reasonHiddenExpanded = !_reasonHiddenExpanded;
+  _renderReasonList(null);
 }
 
 async function _addReasonType() {
