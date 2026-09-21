@@ -224,6 +224,7 @@ function loadStudents(withLoading=true, forceLoad=false) {
 //   사유가 안 보이고, 그대로 재저장하면 저장돼 있던 사유가 지워지는 문제가 있었음.
 function _deriveReasonFields(s) {
   if (s.status !== '결석' || !s.reason) return { reasonType: '', reasonText: '' };
+  if (s.reason === '그린라이트') return { reasonType: '그린라이트', reasonText: '' };
   if (_reasonTypes.some(r => r.name === s.reason)) return { reasonType: s.reason, reasonText: '' };
   return { reasonType: '직접 입력', reasonText: s.reason };
 }
@@ -283,6 +284,7 @@ function renderStudents() {
           <div class="reason-drop-overflow"><div class="reason-drop-inner">
             <select class="cd-reason-select" onchange="changeReasonType(${idx},this.value,this)">
               <option value="" ${!s.reasonType?'selected':''}>결석 사유 선택</option>
+              ${(s.greenLight>0||s.reasonType==='그린라이트')?`<option value="그린라이트" ${s.reasonType==='그린라이트'?'selected':''}>🟢 그린라이트 사용${s.greenLight>0?` (${s.greenLight}개 남음)`:''}</option>`:''}
               ${_reasonTypes.filter(r=>r.visible!==false || s.reasonType===r.name).map(r=>`<option value="${_esc(r.name)}" ${s.reasonType===r.name?'selected':''}>${_esc(r.name)}</option>`).join('')}
               <option value="직접 입력" ${s.reasonType==='직접 입력'?'selected':''}>직접 입력</option>
             </select>
@@ -291,7 +293,7 @@ function renderStudents() {
               <span class="clear-input-btn" onclick="clearReasonText(${idx},this)" role="button" tabindex="0" aria-label="입력 지우기">&times;</span>
             </div>
             <div class="nocount-row" onclick="event.stopPropagation()" onpointerdown="event.stopPropagation()" onpointerup="event.stopPropagation()">
-              <button class="nocount-sw${s.noCount?' on':''}" id="nocount-sw-${idx}" onclick="toggleNoCount(${idx},this)" aria-label="노카운트 전환" aria-pressed="${s.noCount?'true':'false'}">
+              <button class="nocount-sw${s.noCount?' on':''}" id="nocount-sw-${idx}" onclick="toggleNoCount(${idx},this)" aria-label="노카운트 전환" aria-pressed="${s.noCount?'true':'false'}"${s.reasonType==='그린라이트'?' disabled style="opacity:0.5;pointer-events:none;"':''}>
                 <div class="nocount-sw-thumb"></div>
               </button>
               <span class="nocount-label${s.noCount?' on':''}" id="nocount-lbl-${idx}">노카운트 <span style="font-weight:500;opacity:0.7;">(결석 횟수 미산입)</span></span>
@@ -427,7 +429,25 @@ function toggleStatus(idx,card,clientX,clientY) {
     updateDashboard();
   });
 }
-function changeReasonType(idx,val,sel){ currentStudents[idx].reasonType=val; const inp=sel.nextElementSibling; if(inp)inp.style.display=(val==='직접 입력'?'block':'none'); }
+function changeReasonType(idx,val,sel){
+  const s=currentStudents[idx];
+  s.reasonType=val;
+  const inp=sel.nextElementSibling; if(inp)inp.style.display=(val==='직접 입력'?'block':'none');
+
+  // 그린라이트 사용 시 노카운트를 자동으로 켜고 수동 토글을 잠근다 —
+  // 목표 달성 보상이니 결석 카운트가 절대 남으면 안 됨(수동 해제로 새는 것 방지)
+  const ncSw=document.getElementById(`nocount-sw-${idx}`);
+  const ncLbl=document.getElementById(`nocount-lbl-${idx}`);
+  if(val==='그린라이트'){
+    s.noCount=true;
+    if(ncSw){ ncSw.classList.add('on'); ncSw.setAttribute('aria-pressed','true'); ncSw.disabled=true; ncSw.style.opacity='0.5'; ncSw.style.pointerEvents='none'; }
+    if(ncLbl) ncLbl.classList.add('on');
+  } else if(ncSw && ncSw.disabled){
+    s.noCount=false;
+    ncSw.classList.remove('on'); ncSw.setAttribute('aria-pressed','false'); ncSw.disabled=false; ncSw.style.opacity=''; ncSw.style.pointerEvents='';
+    if(ncLbl) ncLbl.classList.remove('on');
+  }
+}
 function changeReasonText(idx,val){ currentStudents[idx].reasonText=val; }
 function clearReasonText(idx,btn){ const inp=btn.previousElementSibling; inp.value=''; currentStudents[idx].reasonText=''; }
 function toggleNoCount(idx, btn) {

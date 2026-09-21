@@ -192,6 +192,94 @@ const API = (() => {
     return count;
   }
 
+  // ─── 그린라이트 (목표 달성 결석 허용권) ────────────────
+  // 학생별 잔여 개수(students.green_light_count)를 저장하고, 결석 사유가
+  // '그린라이트'인 기록이 "하루 대표 세션"(결석 카운트와 동일 기준 —
+  // 평일은 심야>야간>오후 우선순위 중 존재하는 첫 세션 하나, 토요일은
+  // 세션별 독립)이 될 때만 1개를 소비/환불한다. 그래야 하루에 여러 세션을
+  // 그린라이트로 찍어도 1개만 빠지고, 결석 카운트가 안 잡히는 세션(대표가
+  // 아닌 세션)을 그린라이트로 찍는 실수로는 개수가 안 빠진다.
+  const GREEN_LIGHT_REASON = '그린라이트';
+
+  // records: [{session, reason}] — 하루치. 대표 세션의 reason(없으면 null)을 반환.
+  function _dayRepReason(records, sessionName, isSat) {
+    if (isSat) {
+      const r = records.find(x => x.session === sessionName);
+      return r ? (r.reason || null) : null;
+    }
+    for (const sess of WEEKDAY_PRIORITY) {
+      const r = records.find(x => x.session === sess);
+      if (r) return r.reason || null;
+    }
+    return null;
+  }
+
+  async function _applyGreenLightDelta(studentId, delta) {
+    const rows = await _get(`students?id=eq.${studentId}&select=green_light_count`);
+    const current = rows[0]?.green_light_count ?? 0;
+    const next = Math.max(0, current + delta);
+    await _patch(`students?id=eq.${studentId}`, { green_light_count: next });
+  }
+
+  // 특정 학생의 특정 날짜·세션 기록 사유가 oldReason → newReason으로 바뀔 때
+  // (newReason이 null이면 기록 삭제) 그린라이트 소비/환불이 필요한지 판정해 반영한다.
+  // saveAttendance(세션 저장) / updateAttendanceRecord(출석 기록 수정) /
+  // deleteAttendanceRecord(기록 삭제) 세 경로가 모두 이 함수 하나를 공유한다.
+  async function _syncGreenLightOnRecordChange(studentId, date, sessionName, oldReason, newReason) {
+    oldReason = oldReason || null;
+    newReason = newReason || null;
+    if (oldReason === newReason) return;
+
+    const isSat = _dayKey(date) === 'sat';
+    // 이미 DB에 반영된 최신 상태(afterRecs)를 가져와, sessionName의 사유만
+    // oldReason으로 되돌려 저장 전 상태(beforeRecs)를 재구성한다.
+    const afterRecs = await _get(`attendance?record_date=eq.${date}&student_id=eq.${studentId}&select=session,reason`);
+    const beforeRecs = afterRecs.filter(r => r.session !== sessionName);
+    if (oldReason !== null) beforeRecs.push({ session: sessionName, reason: oldReason });
+
+    const oldRep = _dayRepReason(beforeRecs, sessionName, isSat);
+    const newRep = _dayRepReason(afterRecs,  sessionName, isSat);
+    if (oldRep === newRep) return;
+
+    if (oldRep !== GREEN_LIGHT_REASON && newRep === GREEN_LIGHT_REASON) await _applyGreenLightDelta(studentId, -1);
+    else if (oldRep === GREEN_LIGHT_REASON && newRep !== GREEN_LIGHT_REASON) await _applyGreenLightDelta(studentId, +1);
+  }
+
+  /**
+   * 그린라이트 일괄 지급
+   * entries: [{ban, num, name, count}] — 반+번호로 명단 매칭, 기존 개수에 더함(교체 아님)
+   * source: '내신' | '모의고사' — 활동 로그 기록용 라벨(저장되는 개수 자체는 하나로 합산)
+   * 반환: { matched:[{ban,num,name,dbName,count,before,after}], unmatched:[entry,...] }
+   */
+  async function grantGreenLights(entries, source, actor) {
+    const students = await _get('students?select=id,class_num,student_num,name,green_light_count');
+    const byKey = new Map(students.map(s => [`${s.class_num}-${s.student_num}`, s]));
+
+    const matched = [];
+    const unmatched = [];
+    for (const e of entries) {
+      const s = byKey.get(`${e.ban}-${e.num}`);
+      if (!s) { unmatched.push(e); continue; }
+      const before = s.green_light_count ?? 0;
+      matched.push({ ...e, id: s.id, dbName: s.name, before, after: before + e.count });
+    }
+
+    const CONCURRENCY = 8;
+    for (let i = 0; i < matched.length; i += CONCURRENCY) {
+      const batch = matched.slice(i, i + CONCURRENCY);
+      await Promise.all(batch.map(m => _patch(`students?id=eq.${m.id}`, { green_light_count: m.after })));
+    }
+
+    if (matched.length) {
+      await _post('activity_log', matched.map(m => ({
+        actor: actor || '', type: 'green_light', student_id: m.id,
+        message: `${m.dbName}(${m.ban}반 ${m.num}번) 그린라이트 +${m.count}개 지급(${source}) — 잔여 ${m.after}개`,
+      }))).catch(() => {});
+    }
+
+    return { matched, unmatched };
+  }
+
   // ─── 공개 API ─────────────────────────────
 
   /**
@@ -217,7 +305,7 @@ const API = (() => {
     const dayOfWeek = new Date(+parts[0], +parts[1]-1, +parts[2]).getDay(); // 0=일, 6=토
 
     const [students, attendance] = await Promise.all([
-      _get(`students?study_room=eq.${encodeURIComponent(groupName)}&order=class_num,student_num`),
+      _get(`students?study_room=eq.${encodeURIComponent(groupName)}&order=class_num,student_num&select=id,class_num,student_num,name,schedule,green_light_count`),
       _get(`attendance?record_date=eq.${date}&session=eq.${encodeURIComponent(sessionName)}&select=student_id,status,reason,no_count,checker,early_leave_mins,late_mins`),
     ]);
 
@@ -274,6 +362,7 @@ const API = (() => {
           isRecurring:    recurringEarly != null,
           lateMins:       att?.late_mins ?? 0,
           todaySessions:  todaySessionMap[s.id] ?? {},
+          greenLight:     s.green_light_count ?? 0,
         };
       });
 
@@ -286,7 +375,7 @@ const API = (() => {
    */
   async function getAllMemberList() {
     const [students, attendance, violations] = await Promise.all([
-      _get('students?order=study_room,class_num,student_num'),
+      _get('students?order=study_room,class_num,student_num&select=id,class_num,student_num,name,study_room,green_light_count'),
       _get('attendance?select=student_id,record_date,session,status,no_count'),
       _get('violations?select=student_id'),
     ]);
@@ -307,6 +396,7 @@ const API = (() => {
       group:       s.study_room,
       violCount:   violCount[s.id]                          ?? 0,
       absentCount: _calcAbsentCounts(attByStudent[s.id] ?? []),
+      greenLight:  s.green_light_count ?? 0,
     }));
   }
 
@@ -321,6 +411,19 @@ const API = (() => {
     const { group, sessionName, students, date, checkerName } = payload;
 
     const studentIds = students.map(s => s.student_id).filter(Boolean);
+
+    // 그린라이트 소비/환불 판정을 위해, 이 날짜의 학생별 "전체 세션" 기존 기록을
+    // 삭제 전에 확보해둔다 — 이 세션에 기록이 아예 없던 경우(존재 자체가 새로
+    // 생김)와 있었지만 사유가 비어있던 경우를 구분해야, 대표 세션 우선순위
+    // 판정(존재 여부 자체가 기준)이 saveAttendance 밖의 단건 수정과 동일하게 맞음.
+    let beforeDayMap = {};
+    if (studentIds.length > 0) {
+      const dayRecs = await _get(
+        `attendance?record_date=eq.${date}&student_id=in.(${studentIds.join(',')})&select=student_id,session,reason`
+      );
+      for (const r of dayRecs) (beforeDayMap[r.student_id] ??= []).push({ session: r.session, reason: r.reason || null });
+    }
+
     if (studentIds.length > 0) {
       await _del(
         `attendance?record_date=eq.${date}&session=eq.${encodeURIComponent(sessionName)}&student_id=in.(${studentIds.join(',')})`
@@ -340,6 +443,24 @@ const API = (() => {
     }));
 
     await _post('attendance', rows);
+
+    // 그린라이트 소비/환불 — 저장 전/후 그 날짜의 대표 세션 사유를 비교해서만 반영.
+    // 저장 자체는 이미 끝났으므로 실패해도 조용히 무시(개수는 개발자 메뉴 → 데이터 →
+    // 그린라이트 일괄 지급에서 수동 보정 가능).
+    const isSat = _dayKey(date) === 'sat';
+    const glDeltaByStudent = {};
+    for (const s of students) {
+      if (!s.student_id) continue;
+      const before = beforeDayMap[s.student_id] || [];
+      const after  = before.filter(r => r.session !== sessionName).concat([{ session: sessionName, reason: s.reason || null }]);
+      const oldRep = _dayRepReason(before, sessionName, isSat);
+      const newRep = _dayRepReason(after,  sessionName, isSat);
+      if (oldRep === newRep) continue;
+      if (oldRep !== GREEN_LIGHT_REASON && newRep === GREEN_LIGHT_REASON) glDeltaByStudent[s.student_id] = (glDeltaByStudent[s.student_id] || 0) - 1;
+      else if (oldRep === GREEN_LIGHT_REASON && newRep !== GREEN_LIGHT_REASON) glDeltaByStudent[s.student_id] = (glDeltaByStudent[s.student_id] || 0) + 1;
+    }
+    await Promise.all(Object.entries(glDeltaByStudent).map(([sid, delta]) => _applyGreenLightDelta(sid, delta).catch(() => {})));
+
     return '출결 현황이 정상적으로 저장되었습니다.';
   }
 
@@ -594,17 +715,45 @@ const API = (() => {
     if (updates.reason        !== undefined) patch.reason         = updates.reason;
     if (updates.noCount       !== undefined) patch.no_count       = updates.noCount;
     if (updates.studyExcluded !== undefined) patch.study_excluded = updates.studyExcluded;
+
+    // 사유가 바뀌는 경우, 그린라이트 소비/환불 판정에 필요한 이전 상태를 패치 전에 확보
+    let glCtx = null;
+    if (updates.reason !== undefined) {
+      const before = await _get(`attendance?id=eq.${recordId}&select=student_id,record_date,session,reason`);
+      if (before[0]) glCtx = before[0];
+    }
+
     // return=representation 으로 실제 반영 여부 확인 (return=minimal은 0행 매칭도 204 반환)
     const rows = await _req('PATCH', `attendance?id=eq.${recordId}`, patch, { Prefer: 'return=representation' });
     if (!rows || rows.length === 0) throw new Error('업데이트 실패: 기록을 찾을 수 없습니다');
+
+    if (glCtx) {
+      const oldReason = glCtx.reason || null;
+      const newReason = updates.reason || null;
+      if (oldReason !== newReason) {
+        await _syncGreenLightOnRecordChange(
+          glCtx.student_id, String(glCtx.record_date).slice(0, 10), glCtx.session, oldReason, newReason
+        ).catch(() => {});
+      }
+    }
   }
 
   async function deleteAttendanceRecord(recordId) {
+    // 삭제될 기록이 그린라이트였다면 삭제 후 자동 환불하기 위해 미리 조회
+    const before = await _get(`attendance?id=eq.${recordId}&select=student_id,record_date,session,reason`);
+    const rec = before[0];
+
     const res = await fetch(`${SUPABASE_URL}/rest/v1/attendance?id=eq.${recordId}`, {
       method: 'DELETE',
       headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
     });
     if (!res.ok) throw new Error(`DELETE attendance: ${res.status}`);
+
+    if (rec && rec.reason) {
+      await _syncGreenLightOnRecordChange(
+        rec.student_id, String(rec.record_date).slice(0, 10), rec.session, rec.reason, null
+      ).catch(() => {});
+    }
   }
 
   async function addStudent(data) {
@@ -1221,5 +1370,6 @@ const API = (() => {
     getStudentRecordCounts,
     getAttendanceCountByDate,
     calcAbsentCounts: _calcAbsentCounts,
+    grantGreenLights,
   };
 })();

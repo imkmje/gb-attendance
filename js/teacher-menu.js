@@ -1710,6 +1710,7 @@ const DEV_MENU_TABS = [
   { key:'reasons',  label:'사유·유형' }, // 결석 사유, 위반 유형 관리
 ];
 let _devActiveTab = 'schedule'; // 시트를 다시 열어도 마지막으로 보던 탭 유지
+let _glPendingGrant = null; // 그린라이트 일괄 지급 — 미리보기 결과(확정 전까지 보관)
 
 function _switchDevTab(key) {
   _devActiveTab = key;
@@ -1939,12 +1940,27 @@ function _renderDevMenuSheet() {
 
     <div id="_devTab-data" class="_dev-tab-panel">
       <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;">🗑️ 출석 기록 초기화</div>
-      <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px;box-shadow:var(--sh-pressed);">
+      <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px;box-shadow:var(--sh-pressed);margin-bottom:20px;">
         <div style="font-size:11px;color:var(--red);font-weight:600;margin-bottom:8px;">지정한 날짜의 모든 출석 기록이 삭제됩니다.</div>
         <div style="display:flex;gap:8px;align-items:center;">
           <input type="date" id="_resetDateInput" class="cd-input" style="flex:1;">
           <button onclick="_devResetAttendance()" style="padding:8px 16px;border-radius:var(--radius-pill);border:none;background:var(--red);color:#fff;font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">초기화</button>
         </div>
+      </div>
+
+      <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;">🟢 그린라이트 일괄 지급</div>
+      <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px;box-shadow:var(--sh-pressed);">
+        <div style="font-size:11px;color:var(--ink-3);margin-bottom:10px;line-height:1.5;">내신·모의고사 목표를 달성한 학생에게 그린라이트(결석 허용권)를 지급합니다. 엑셀의 반·번호·이름·개수 열을 그대로 복사해 붙여넣으면 반+번호로 명단과 자동 매칭되고, 기존 잔여 개수에 더해집니다.</div>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+          <label style="font-size:12px;font-weight:700;color:var(--ink-2);flex-shrink:0;">출처</label>
+          <select id="_glSourceSelect" class="cd-select" style="flex:1;">
+            <option value="내신">내신</option>
+            <option value="모의고사">모의고사</option>
+          </select>
+        </div>
+        <textarea id="_glPasteInput" class="cd-input" rows="5" placeholder="엑셀에서 복사해 붙여넣기 — 반  번호  이름  개수&#10;예) 1  3  홍길동  1" style="width:100%;resize:vertical;margin-bottom:8px;"></textarea>
+        <button onclick="_previewGreenLightGrant()" style="width:100%;padding:8px 16px;border-radius:var(--radius-pill);border:none;background:var(--blue);color:#fff;font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;box-shadow:var(--sh-blue);">미리보기</button>
+        <div id="_glPreviewArea"></div>
       </div>
     </div>
 
@@ -2342,5 +2358,120 @@ function _devResetAttendance() {
       });
     })
     .catch(() => { hideLoading(); Swal.fire('오류', '확인하지 못했습니다.', 'error'); });
+}
+
+/* ── 그린라이트 일괄 지급 ──────────────────────
+   내신/모의고사 성적으로 산출한 그린라이트 개수를 엑셀에서 복사해 붙여넣으면
+   반+번호로 명단과 매칭해 기존 잔여 개수에 더한다(교체 아님). 매칭 실패
+   행은 반영하지 않고 빨간 글씨로 따로 보여준다. */
+function _parseGreenLightPaste(text) {
+  const lines = (text || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const rows = [];
+  const badLines = [];
+  for (const line of lines) {
+    // 엑셀 복사는 탭 구분이 기본. 수동 입력 대비 쉼표·연속 공백도 허용.
+    let parts = line.split('\t').map(c => c.trim()).filter(c => c !== '');
+    if (parts.length < 3) parts = line.split(/,|\s{2,}/).map(c => c.trim()).filter(c => c !== '');
+    if (parts.length < 3) { badLines.push(line); continue; }
+
+    const ban = parts[0].replace(/[^0-9]/g, '');
+    const num = parts[1].replace(/[^0-9]/g, '');
+    // 반/번호/이름/개수(4열) 또는 반/번호/개수(3열, 이름 생략) 모두 허용
+    const name = parts.length >= 4 ? parts[2] : '';
+    const countStr = parts.length >= 4 ? parts[3] : parts[2];
+    const count = parseInt(String(countStr).replace(/[^0-9]/g, ''), 10);
+
+    if (!ban || !num || !count || count <= 0) { badLines.push(line); continue; }
+    rows.push({ ban, num, name, count });
+  }
+  return { rows, badLines };
+}
+
+async function _previewGreenLightGrant() {
+  const text = document.getElementById('_glPasteInput')?.value || '';
+  const { rows, badLines } = _parseGreenLightPaste(text);
+  if (!rows.length) {
+    showSuccessToast('읽을 수 있는 내용이 없습니다', '반·번호·개수 순서를 확인해 주세요');
+    return;
+  }
+
+  showLoading('명단 확인 중...');
+  try {
+    const members = await API.getAllMemberList();
+    hideLoading();
+    const byKey = new Map(members.map(m => [`${m.ban}-${m.num}`, m]));
+    const matched = [];
+    const unmatched = [];
+    for (const r of rows) {
+      const m = byKey.get(`${r.ban}-${r.num}`);
+      if (m) matched.push({ ...r, dbName: m.name, before: m.greenLight ?? 0 });
+      else unmatched.push(r);
+    }
+    _glPendingGrant = { matched, unmatched, badLines };
+    _renderGreenLightPreview();
+  } catch (e) {
+    hideLoading();
+    Swal.fire('오류', e?.message || '명단을 불러오지 못했습니다.', 'error');
+  }
+}
+
+function _renderGreenLightPreview() {
+  const area = document.getElementById('_glPreviewArea');
+  if (!area || !_glPendingGrant) return;
+  const { matched, unmatched, badLines } = _glPendingGrant;
+  const failCount = unmatched.length + badLines.length;
+
+  const matchedRows = matched.map(m => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:var(--surface);border-radius:var(--radius-sm);box-shadow:var(--sh-xs);">
+      <span style="font-size:12px;font-weight:600;color:var(--ink-2);">${m.ban}반 ${m.num}번 ${_esc(m.dbName)}</span>
+      <span style="font-size:12px;font-weight:800;color:var(--green);">+${m.count} <span style="font-weight:600;color:var(--ink-3);">(${m.before}→${m.before + m.count})</span></span>
+    </div>`).join('');
+
+  const failRows = [
+    ...unmatched.map(u => `${u.ban}반 ${u.num}번${u.name ? ' ' + _esc(u.name) : ''} — 명단에서 못 찾음`),
+    ...badLines.map(l => `${_esc(l)} — 형식을 읽지 못함`),
+  ].map(t => `<div style="font-size:11px;color:var(--red);line-height:1.6;">⚠ ${t}</div>`).join('');
+
+  area.innerHTML = `
+    <div style="font-size:12px;font-weight:700;color:var(--ink-2);margin:14px 0 6px;">미리보기 — 매칭 ${matched.length}명${failCount ? ` · 실패 ${failCount}건` : ''}</div>
+    <div style="display:flex;flex-direction:column;gap:4px;max-height:220px;overflow-y:auto;margin-bottom:8px;">
+      ${matchedRows || '<div style="font-size:12px;color:var(--ink-3);">매칭된 학생이 없습니다.</div>'}
+    </div>
+    ${failRows ? `<div style="display:flex;flex-direction:column;gap:2px;margin-bottom:10px;">${failRows}</div>` : ''}
+    ${matched.length ? `<button onclick="_confirmGreenLightGrant()" style="width:100%;padding:9px 16px;border-radius:var(--radius-pill);border:none;background:var(--green);color:#fff;font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;">지급 확정 (${matched.length}명)</button>` : ''}
+  `;
+}
+
+async function _confirmGreenLightGrant() {
+  if (!_glPendingGrant || !_glPendingGrant.matched.length) return;
+  const source = document.getElementById('_glSourceSelect')?.value || '내신';
+  const n = _glPendingGrant.matched.length;
+
+  const confirmed = await Swal.fire({
+    title: '그린라이트 지급',
+    html: `<b>${n}명</b>에게 그린라이트를 지급할까요?<br><span style="color:var(--ink-3);font-size:12px;">기존 잔여 개수에 더해집니다(출처: ${source}).</span>`,
+    icon: 'question', showCancelButton: true, confirmButtonText: '지급', cancelButtonText: '취소',
+  });
+  if (!confirmed.isConfirmed) return;
+
+  showLoading('지급 중...');
+  try {
+    const checkerName = (document.getElementById('checkerName')?.value || localStorage.getItem('checkerName') || '').trim();
+    const entries = _glPendingGrant.matched.map(m => ({ ban: m.ban, num: m.num, name: m.dbName, count: m.count }));
+    const result = await API.grantGreenLights(entries, source, checkerName);
+    hideLoading();
+    showSuccessToast('그린라이트 지급 완료', `${result.matched.length}명 반영됨`);
+
+    const pasteInput = document.getElementById('_glPasteInput');
+    if (pasteInput) pasteInput.value = '';
+    const area = document.getElementById('_glPreviewArea');
+    if (area) area.innerHTML = '';
+    _glPendingGrant = null;
+    _cache.stats = null;
+    _rosterLoaded = false; // 명단 탭 배지가 최신 개수로 갱신되도록
+  } catch (e) {
+    hideLoading();
+    Swal.fire('오류', e?.message || '지급하지 못했습니다.', 'error');
+  }
 }
 

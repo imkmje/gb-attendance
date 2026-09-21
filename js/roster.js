@@ -195,12 +195,14 @@ function _rosterCardHtml(s) {
     ? `<div class="rc-viol-badge"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> 위반 ${s.violCount}회</div>` : '';
   const absentBadge = s.absentCount > 0
     ? `<div class="rc-absent-badge">결석 ${s.absentCount}회</div>` : '';
+  const greenBadge  = s.greenLight > 0
+    ? `<div class="rc-greenlight-badge">🟢 그린라이트 ${s.greenLight}</div>` : '';
   const violClass   = s.violCount > 0 ? ' has-violation' : '';
   return `<div class="roster-card${violClass}" data-sid="${s.ban}_${s.num}_${encodeURIComponent(s.name)}_${encodeURIComponent(s.group)}_${s.id}">
     <div class="rc-num">${s.ban}반 ${s.num}번</div>
     <div class="rc-name">${_esc(s.name)}</div>
     <div style="display:flex;flex-wrap:wrap;gap:3px;justify-content:center;margin-top:4px;">
-      ${absentBadge}${violBadge}
+      ${greenBadge}${absentBadge}${violBadge}
     </div>
   </div>`;
 }
