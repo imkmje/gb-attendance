@@ -491,7 +491,7 @@ html[data-theme="dark"] .roster-card::after { background:linear-gradient(158deg,
 .roster-card.has-violation { border-bottom-color:var(--red); }
 .rc-viol-badge { display:inline-flex; align-items:center; gap:3px; font-size:9px; font-weight:700; color:var(--red); background:var(--red-dim); border-radius:var(--radius-pill); padding:1px 6px; white-space:nowrap; }
 .rc-absent-badge { display:inline-flex; align-items:center; font-size:9px; font-weight:700; color:var(--amber); background:var(--amber-dim); border-radius:var(--radius-pill); padding:1px 6px; white-space:nowrap; }
-.rc-greenlight-badge { display:inline-flex; align-items:center; gap:2px; font-size:9px; font-weight:700; color:var(--green); background:var(--green-dim); border-radius:var(--radius-pill); padding:1px 6px; white-space:nowrap; }
+.rc-greenlight-badge { display:inline-flex; align-items:center; font-size:9px; font-weight:700; color:var(--green); background:var(--green-dim); border-radius:var(--radius-pill); padding:1px 6px; white-space:nowrap; }
 
 /* 위반 내역 조회 Sheet */
 .vh-sheet {

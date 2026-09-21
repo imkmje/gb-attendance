@@ -12,7 +12,7 @@ test('명단 탭 카드에 그린라이트 잔여 개수 배지가 표시된다'
   await expect(page.locator('#view-roster')).toHaveClass(/active/);
 
   const card1 = page.locator('.roster-card', { hasText: '김민준' });
-  await expect(card1.locator('.rc-greenlight-badge')).toHaveText('🟢 그린라이트 2');
+  await expect(card1.locator('.rc-greenlight-badge')).toHaveText('그린라이트 2개');
 
   const card2 = page.locator('.roster-card', { hasText: '이서연' });
   await expect(card2.locator('.rc-greenlight-badge')).toHaveCount(0);

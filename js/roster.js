@@ -196,7 +196,7 @@ function _rosterCardHtml(s) {
   const absentBadge = s.absentCount > 0
     ? `<div class="rc-absent-badge">결석 ${s.absentCount}회</div>` : '';
   const greenBadge  = s.greenLight > 0
-    ? `<div class="rc-greenlight-badge">🟢 그린라이트 ${s.greenLight}</div>` : '';
+    ? `<div class="rc-greenlight-badge">그린라이트 ${s.greenLight}개</div>` : '';
   const violClass   = s.violCount > 0 ? ' has-violation' : '';
   return `<div class="roster-card${violClass}" data-sid="${s.ban}_${s.num}_${encodeURIComponent(s.name)}_${encodeURIComponent(s.group)}_${s.id}">
     <div class="rc-num">${s.ban}반 ${s.num}번</div>
