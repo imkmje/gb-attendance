@@ -1711,6 +1711,8 @@ const DEV_MENU_TABS = [
 ];
 let _devActiveTab = 'schedule'; // 시트를 다시 열어도 마지막으로 보던 탭 유지
 let _glPendingGrant = null; // 그린라이트 일괄 지급 — 미리보기 결과(확정 전까지 보관)
+let _glIndivMembers = null; // 그린라이트 개별 조정 — 검색용 명단 캐시(첫 검색 시 로드, 반영 후 무효화)
+let _glIndivSelected = null; // 그린라이트 개별 조정 — 현재 선택된 학생
 
 function _switchDevTab(key) {
   _devActiveTab = key;
@@ -1948,19 +1950,28 @@ function _renderDevMenuSheet() {
         </div>
       </div>
 
-      <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;">🟢 그린라이트 일괄 지급</div>
+      <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px;">🟢 그린라이트 일괄 지급/회수</div>
       <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px;box-shadow:var(--sh-pressed);">
-        <div style="font-size:11px;color:var(--ink-3);margin-bottom:10px;line-height:1.5;">내신·모의고사 목표를 달성한 학생에게 그린라이트(결석 허용권)를 지급합니다. 엑셀의 반·번호·이름·개수 열을 그대로 복사해 붙여넣으면 반+번호로 명단과 자동 매칭되고, 기존 잔여 개수에 더해집니다.</div>
+        <div style="font-size:11px;color:var(--ink-3);margin-bottom:10px;line-height:1.5;">내신·모의고사 목표를 달성한 학생에게 그린라이트(결석 허용권)를 지급합니다. 엑셀의 반·번호·이름·개수 열을 그대로 복사해 붙여넣으면 반+번호로 명단과 자동 매칭되고, 기존 잔여 개수에 더해집니다. 개수 앞에 <b>-</b>를 붙이면 회수(차감)로 처리됩니다(예: 잘못 지급한 경우 정정).</div>
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
           <label style="font-size:12px;font-weight:700;color:var(--ink-2);flex-shrink:0;">출처</label>
           <select id="_glSourceSelect" class="cd-select" style="flex:1;">
             <option value="내신">내신</option>
             <option value="모의고사">모의고사</option>
+            <option value="정정·회수">정정·회수</option>
           </select>
         </div>
-        <textarea id="_glPasteInput" class="cd-input" rows="5" placeholder="엑셀에서 복사해 붙여넣기 — 반  번호  이름  개수&#10;예) 1  3  홍길동  1" style="width:100%;resize:vertical;margin-bottom:8px;"></textarea>
+        <textarea id="_glPasteInput" class="cd-input" rows="5" placeholder="엑셀에서 복사해 붙여넣기 — 반  번호  이름  개수&#10;예) 1  3  홍길동  1&#10;회수는 개수 앞에 -  예) 1  3  홍길동  -1" style="width:100%;resize:vertical;margin-bottom:8px;"></textarea>
         <button onclick="_previewGreenLightGrant()" style="width:100%;padding:8px 16px;border-radius:var(--radius-pill);border:none;background:var(--blue);color:#fff;font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;box-shadow:var(--sh-blue);">미리보기</button>
         <div id="_glPreviewArea"></div>
+      </div>
+
+      <div style="font-size:12px;font-weight:700;letter-spacing:0.4px;text-transform:uppercase;color:var(--ink-3);margin:20px 0 10px;">🟢 그린라이트 개별 조정</div>
+      <div style="background:var(--bg-deep);border-radius:var(--radius-sm);padding:12px;box-shadow:var(--sh-pressed);">
+        <div style="font-size:11px;color:var(--ink-3);margin-bottom:10px;line-height:1.5;">엑셀 없이 학생 한 명만 빠르게 부여·회수합니다. 이름으로 검색해 선택하세요.</div>
+        <input type="text" id="_glIndivSearchInput" class="cd-input" placeholder="학생 이름 검색" style="width:100%;margin-bottom:8px;" oninput="_filterGlIndivCandidates(this.value)">
+        <div id="_glIndivResults" style="display:flex;flex-direction:column;gap:4px;max-height:180px;overflow-y:auto;"></div>
+        <div id="_glIndivPanel"></div>
       </div>
     </div>
 
@@ -2360,10 +2371,11 @@ function _devResetAttendance() {
     .catch(() => { hideLoading(); Swal.fire('오류', '확인하지 못했습니다.', 'error'); });
 }
 
-/* ── 그린라이트 일괄 지급 ──────────────────────
+/* ── 그린라이트 일괄 지급/회수 ──────────────────────
    내신/모의고사 성적으로 산출한 그린라이트 개수를 엑셀에서 복사해 붙여넣으면
-   반+번호로 명단과 매칭해 기존 잔여 개수에 더한다(교체 아님). 매칭 실패
-   행은 반영하지 않고 빨간 글씨로 따로 보여준다. */
+   반+번호로 명단과 매칭해 기존 잔여 개수에 더한다(교체 아님). 개수 앞에 -를
+   붙이면 회수(차감)로 처리한다 — 잘못 지급한 경우 등 교사 임의 정정용.
+   매칭 실패 행은 반영하지 않고 빨간 글씨로 따로 보여준다. */
 function _parseGreenLightPaste(text) {
   const lines = (text || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   const rows = [];
@@ -2378,10 +2390,12 @@ function _parseGreenLightPaste(text) {
     const num = parts[1].replace(/[^0-9]/g, '');
     // 반/번호/이름/개수(4열) 또는 반/번호/개수(3열, 이름 생략) 모두 허용
     const name = parts.length >= 4 ? parts[2] : '';
-    const countStr = parts.length >= 4 ? parts[3] : parts[2];
-    const count = parseInt(String(countStr).replace(/[^0-9]/g, ''), 10);
+    const countStr = String(parts.length >= 4 ? parts[3] : parts[2]).trim();
+    const sign = countStr.startsWith('-') ? -1 : 1;
+    const digits = countStr.replace(/[^0-9]/g, '');
+    const count = digits ? sign * parseInt(digits, 10) : NaN;
 
-    if (!ban || !num || !count || count <= 0) { badLines.push(line); continue; }
+    if (!ban || !num || !count) { badLines.push(line); continue; } // count가 0/NaN이면 무의미하므로 제외
     rows.push({ ban, num, name, count });
   }
   return { rows, badLines };
@@ -2404,8 +2418,10 @@ async function _previewGreenLightGrant() {
     const unmatched = [];
     for (const r of rows) {
       const m = byKey.get(`${r.ban}-${r.num}`);
-      if (m) matched.push({ ...r, dbName: m.name, before: m.greenLight ?? 0 });
-      else unmatched.push(r);
+      if (m) {
+        const before = m.greenLight ?? 0;
+        matched.push({ ...r, dbName: m.name, before, after: Math.max(0, before + r.count) });
+      } else unmatched.push(r);
     }
     _glPendingGrant = { matched, unmatched, badLines };
     _renderGreenLightPreview();
@@ -2421,11 +2437,15 @@ function _renderGreenLightPreview() {
   const { matched, unmatched, badLines } = _glPendingGrant;
   const failCount = unmatched.length + badLines.length;
 
-  const matchedRows = matched.map(m => `
+  const matchedRows = matched.map(m => {
+    const isRevoke = m.count < 0;
+    const sign = isRevoke ? '' : '+'; // count 자체에 음수 부호가 이미 붙어있음
+    return `
     <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:var(--surface);border-radius:var(--radius-sm);box-shadow:var(--sh-xs);">
       <span style="font-size:12px;font-weight:600;color:var(--ink-2);">${m.ban}반 ${m.num}번 ${_esc(m.dbName)}</span>
-      <span style="font-size:12px;font-weight:800;color:var(--green);">+${m.count} <span style="font-weight:600;color:var(--ink-3);">(${m.before}→${m.before + m.count})</span></span>
-    </div>`).join('');
+      <span style="font-size:12px;font-weight:800;color:${isRevoke ? 'var(--red)' : 'var(--green)'};">${sign}${m.count} <span style="font-weight:600;color:var(--ink-3);">(${m.before}→${m.after})</span></span>
+    </div>`;
+  }).join('');
 
   const failRows = [
     ...unmatched.map(u => `${u.ban}반 ${u.num}번${u.name ? ' ' + _esc(u.name) : ''} — 명단에서 못 찾음`),
@@ -2438,7 +2458,7 @@ function _renderGreenLightPreview() {
       ${matchedRows || '<div style="font-size:12px;color:var(--ink-3);">매칭된 학생이 없습니다.</div>'}
     </div>
     ${failRows ? `<div style="display:flex;flex-direction:column;gap:2px;margin-bottom:10px;">${failRows}</div>` : ''}
-    ${matched.length ? `<button onclick="_confirmGreenLightGrant()" style="width:100%;padding:9px 16px;border-radius:var(--radius-pill);border:none;background:var(--green);color:#fff;font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;">지급 확정 (${matched.length}명)</button>` : ''}
+    ${matched.length ? `<button onclick="_confirmGreenLightGrant()" style="width:100%;padding:9px 16px;border-radius:var(--radius-pill);border:none;background:var(--green);color:#fff;font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;">반영 확정 (${matched.length}명)</button>` : ''}
   `;
 }
 
@@ -2448,19 +2468,19 @@ async function _confirmGreenLightGrant() {
   const n = _glPendingGrant.matched.length;
 
   const confirmed = await Swal.fire({
-    title: '그린라이트 지급',
-    html: `<b>${n}명</b>에게 그린라이트를 지급할까요?<br><span style="color:var(--ink-3);font-size:12px;">기존 잔여 개수에 더해집니다(출처: ${source}).</span>`,
-    icon: 'question', showCancelButton: true, confirmButtonText: '지급', cancelButtonText: '취소',
+    title: '그린라이트 반영',
+    html: `<b>${n}명</b>에게 그린라이트를 반영할까요?<br><span style="color:var(--ink-3);font-size:12px;">기존 잔여 개수에 더해지거나(회수는 차감) 반영됩니다(출처: ${source}).</span>`,
+    icon: 'question', showCancelButton: true, confirmButtonText: '반영', cancelButtonText: '취소',
   });
   if (!confirmed.isConfirmed) return;
 
-  showLoading('지급 중...');
+  showLoading('반영 중...');
   try {
     const checkerName = (document.getElementById('checkerName')?.value || localStorage.getItem('checkerName') || '').trim();
     const entries = _glPendingGrant.matched.map(m => ({ ban: m.ban, num: m.num, name: m.dbName, count: m.count }));
     const result = await API.grantGreenLights(entries, source, checkerName);
     hideLoading();
-    showSuccessToast('그린라이트 지급 완료', `${result.matched.length}명 반영됨`);
+    showSuccessToast('그린라이트 반영 완료', `${result.matched.length}명 반영됨`);
 
     const pasteInput = document.getElementById('_glPasteInput');
     if (pasteInput) pasteInput.value = '';
@@ -2471,7 +2491,118 @@ async function _confirmGreenLightGrant() {
     _rosterLoaded = false; // 명단 탭 배지가 최신 개수로 갱신되도록
   } catch (e) {
     hideLoading();
-    Swal.fire('오류', e?.message || '지급하지 못했습니다.', 'error');
+    Swal.fire('오류', e?.message || '반영하지 못했습니다.', 'error');
+  }
+}
+
+/* ── 그린라이트 개별 조정 ──────────────────────
+   엑셀 형식 없이 학생 한 명만 검색해서 바로 부여/회수한다. 내부적으로는
+   grantGreenLights를 1건짜리 배열로 호출해 매칭·클램프·활동 로그를 그대로 재사용. */
+async function _filterGlIndivCandidates(query) {
+  const q = query.trim();
+  const results = document.getElementById('_glIndivResults');
+  if (!results) return;
+  if (!q) { results.innerHTML = ''; return; }
+
+  if (!_glIndivMembers) {
+    try { _glIndivMembers = await API.getAllMemberList(); }
+    catch { results.innerHTML = '<div style="font-size:12px;color:var(--red);">명단을 불러오지 못했습니다.</div>'; return; }
+  }
+
+  const matches = _glIndivMembers.filter(m => m.name.includes(q)).slice(0, 8);
+  results.innerHTML = matches.length
+    ? matches.map(m => `
+      <button onclick="_selectGlIndivStudent('${m.id}')" style="all:unset;box-sizing:border-box;display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:var(--surface);border-radius:var(--radius-sm);box-shadow:var(--sh-xs);cursor:pointer;">
+        <span style="font-size:12px;font-weight:600;color:var(--ink-2);">${m.ban}반 ${m.num}번 ${_esc(m.name)}</span>
+        <span style="font-size:11px;font-weight:700;color:${(m.greenLight ?? 0) > 0 ? 'var(--green)' : 'var(--ink-4)'};">잔여 ${m.greenLight ?? 0}개</span>
+      </button>`).join('')
+    : '<div style="font-size:12px;color:var(--ink-3);padding:4px 2px;">일치하는 학생이 없습니다.</div>';
+}
+
+function _selectGlIndivStudent(id) {
+  const m = _glIndivMembers?.find(x => x.id === id);
+  if (!m) return;
+  _glIndivSelected = m;
+  const searchInput = document.getElementById('_glIndivSearchInput');
+  const results = document.getElementById('_glIndivResults');
+  if (searchInput) searchInput.value = '';
+  if (results) results.innerHTML = '';
+  _renderGlIndivPanel();
+}
+
+function _renderGlIndivPanel() {
+  const panel = document.getElementById('_glIndivPanel');
+  if (!panel) return;
+  const m = _glIndivSelected;
+  if (!m) { panel.innerHTML = ''; return; }
+  panel.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:var(--surface);border-radius:var(--radius-sm);box-shadow:var(--sh-xs);margin:10px 0 8px;">
+      <span style="font-size:13px;font-weight:700;color:var(--ink);">${m.ban}반 ${m.num}번 ${_esc(m.name)}</span>
+      <span style="font-size:12px;font-weight:800;color:var(--green);">잔여 ${m.greenLight ?? 0}개</span>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;">
+      <button onclick="_stepGlIndivAmount(-1)" aria-label="1개 감소" style="width:32px;height:32px;flex-shrink:0;border-radius:50%;border:none;background:var(--red-dim);color:var(--red);font-size:16px;font-weight:800;cursor:pointer;">−</button>
+      <input type="number" id="_glIndivAmount" value="1" class="cd-input" style="flex:1;text-align:center;">
+      <button onclick="_stepGlIndivAmount(1)" aria-label="1개 증가" style="width:32px;height:32px;flex-shrink:0;border-radius:50%;border:none;background:var(--green-dim);color:var(--green);font-size:16px;font-weight:800;cursor:pointer;">+</button>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;">
+      <label style="font-size:12px;font-weight:700;color:var(--ink-2);flex-shrink:0;">출처</label>
+      <select id="_glIndivSourceSelect" class="cd-select" style="flex:1;">
+        <option value="내신">내신</option>
+        <option value="모의고사">모의고사</option>
+        <option value="정정·회수">정정·회수</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="_applyGlIndivAdjust()" style="flex:1;padding:8px 16px;border-radius:var(--radius-pill);border:none;background:var(--blue);color:#fff;font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;box-shadow:var(--sh-blue);">적용</button>
+      <button onclick="_cancelGlIndivSelection()" style="padding:8px 16px;border-radius:var(--radius-pill);border:none;background:var(--bg-deep);color:var(--ink-3);font-family:var(--font);font-size:13px;font-weight:700;cursor:pointer;">취소</button>
+    </div>`;
+}
+
+function _stepGlIndivAmount(delta) {
+  const inp = document.getElementById('_glIndivAmount');
+  if (!inp) return;
+  inp.value = (parseInt(inp.value, 10) || 0) + delta;
+}
+
+function _cancelGlIndivSelection() {
+  _glIndivSelected = null;
+  _renderGlIndivPanel();
+}
+
+async function _applyGlIndivAdjust() {
+  const m = _glIndivSelected;
+  if (!m) return;
+  const amount = parseInt(document.getElementById('_glIndivAmount')?.value, 10);
+  if (!amount) { showSuccessToast('개수를 입력해 주세요', '0이 아닌 값을 입력해 주세요'); return; }
+  const source = document.getElementById('_glIndivSourceSelect')?.value || '정정·회수';
+  const before = m.greenLight ?? 0;
+  const after = Math.max(0, before + amount);
+
+  const confirmed = await Swal.fire({
+    title: amount < 0 ? '그린라이트 회수' : '그린라이트 지급',
+    html: `${_esc(m.name)}(${m.ban}반 ${m.num}번) 학생에게 ${amount > 0 ? '+' : ''}${amount}개를 반영할까요?<br><span style="color:var(--ink-3);font-size:12px;">${before}개 → ${after}개</span>`,
+    icon: 'question', showCancelButton: true, confirmButtonText: '반영', cancelButtonText: '취소',
+  });
+  if (!confirmed.isConfirmed) return;
+
+  showLoading('반영 중...');
+  try {
+    const checkerName = (document.getElementById('checkerName')?.value || localStorage.getItem('checkerName') || '').trim();
+    const result = await API.grantGreenLights([{ ban: m.ban, num: m.num, name: m.name, count: amount }], source, checkerName);
+    hideLoading();
+    if (!result.matched.length) { Swal.fire('오류', '학생을 찾지 못했습니다.', 'error'); return; }
+    showSuccessToast('그린라이트 반영 완료', `${m.name} · 잔여 ${result.matched[0].after}개`);
+
+    _glIndivMembers = null; // 다음 검색 때 최신 값으로 다시 불러오도록 캐시 무효화
+    _glIndivSelected = null;
+    const panel = document.getElementById('_glIndivPanel');
+    if (panel) panel.innerHTML = '';
+    _cache.stats = null;
+    _rosterLoaded = false;
+  } catch (e) {
+    hideLoading();
+    Swal.fire('오류', e?.message || '반영하지 못했습니다.', 'error');
   }
 }
 

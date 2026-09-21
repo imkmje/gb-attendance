@@ -259,11 +259,11 @@ html[data-theme="dark"] .student-card::after { background:linear-gradient(155deg
 html[data-theme="dark"] .student-card { background:var(--surface); }
 html[data-theme="dark"] .student-card.present { background:#231f1b; box-shadow:var(--sh-pressed); border-left-color:var(--green); opacity:0.85; }
 html[data-theme="dark"] .student-card.absent { background:#221d1c; box-shadow:0 2px 4px rgba(0,0,0,0.28), 0 8px 24px rgba(0,0,0,0.32), 0 0 0 1px rgba(212,149,154,0.28) inset, 0 1px 0 rgba(255,255,255,0.06) inset; border-left-color:var(--red); opacity:1; }
-.s-meta { font-size:11px; font-weight:600; color:var(--ink-3); margin-bottom:3px; display:flex; align-items:center; gap:4px; }
+.s-meta { font-size:11px; font-weight:600; color:var(--ink-3); margin-bottom:3px; display:flex; align-items:center; gap:4px; flex-wrap:wrap; row-gap:2px; }
 .s-name { font-size:18px; font-weight:700; color:var(--ink); letter-spacing:-0.4px; line-height:1.15; transition:color var(--dur-normal) var(--ease); }
 .s-badge { font-size:12px; font-weight:700; border-radius:var(--radius-pill); padding:4px 12px; flex-shrink:0; transition:background var(--dur-normal) var(--ease), color var(--dur-normal) var(--ease), opacity var(--dur-instant) ease, transform var(--dur-fast) var(--spring); transform-origin:center; }
 .s-badge.present { background:var(--green-dim); color:var(--green); } .s-badge.absent { background:var(--red-dim); color:var(--red); }
-.absent-count-badge { font-size:10px; font-weight:700; color:var(--red); background:var(--red-dim); border-radius:var(--radius-pill); padding:1px 7px; margin-left:2px; }
+.absent-count-badge { font-size:10px; font-weight:700; color:var(--red); background:var(--red-dim); border-radius:var(--radius-pill); padding:1px 7px; margin-left:2px; white-space:nowrap; }
 
 .reason-drop { display:grid; grid-template-rows:0fr; opacity:0; transition:grid-template-rows 300ms cubic-bezier(0.4,0,0.2,1), opacity 180ms var(--ease); }
 .reason-drop-overflow { overflow:hidden; }
@@ -489,9 +489,9 @@ html[data-theme="dark"] .roster-card::after { background:linear-gradient(158deg,
 .rc-name { font-size:14px; font-weight:700; color:var(--ink); letter-spacing:-0.3px; line-height:1.2; }
 .rc-badge { display:inline-block; font-size:9px; font-weight:700; color:var(--green); background:var(--green-dim); border-radius:var(--radius-pill); padding:1px 6px; margin-top:4px; }
 .roster-card.has-violation { border-bottom-color:var(--red); }
-.rc-viol-badge { display:inline-flex; align-items:center; gap:3px; font-size:9px; font-weight:700; color:var(--red); background:var(--red-dim); border-radius:var(--radius-pill); padding:1px 6px; }
-.rc-absent-badge { display:inline-flex; align-items:center; font-size:9px; font-weight:700; color:var(--amber); background:var(--amber-dim); border-radius:var(--radius-pill); padding:1px 6px; }
-.rc-greenlight-badge { display:inline-flex; align-items:center; gap:2px; font-size:9px; font-weight:700; color:var(--green); background:var(--green-dim); border-radius:var(--radius-pill); padding:1px 6px; }
+.rc-viol-badge { display:inline-flex; align-items:center; gap:3px; font-size:9px; font-weight:700; color:var(--red); background:var(--red-dim); border-radius:var(--radius-pill); padding:1px 6px; white-space:nowrap; }
+.rc-absent-badge { display:inline-flex; align-items:center; font-size:9px; font-weight:700; color:var(--amber); background:var(--amber-dim); border-radius:var(--radius-pill); padding:1px 6px; white-space:nowrap; }
+.rc-greenlight-badge { display:inline-flex; align-items:center; gap:2px; font-size:9px; font-weight:700; color:var(--green); background:var(--green-dim); border-radius:var(--radius-pill); padding:1px 6px; white-space:nowrap; }
 
 /* 위반 내역 조회 Sheet */
 .vh-sheet {

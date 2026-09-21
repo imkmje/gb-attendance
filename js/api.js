@@ -246,9 +246,10 @@ const API = (() => {
   }
 
   /**
-   * 그린라이트 일괄 지급
-   * entries: [{ban, num, name, count}] — 반+번호로 명단 매칭, 기존 개수에 더함(교체 아님)
-   * source: '내신' | '모의고사' — 활동 로그 기록용 라벨(저장되는 개수 자체는 하나로 합산)
+   * 그린라이트 일괄 지급/회수
+   * entries: [{ban, num, name, count}] — 반+번호로 명단 매칭, 기존 개수에 더함(교체 아님).
+   *          count가 음수면 회수(차감) — 잘못 지급한 경우 등 교사 임의 정정용. 0 밑으로는 안 내려감.
+   * source: '내신' | '모의고사' | '정정·회수' — 활동 로그 기록용 라벨(저장되는 개수 자체는 하나로 합산)
    * 반환: { matched:[{ban,num,name,dbName,count,before,after}], unmatched:[entry,...] }
    */
   async function grantGreenLights(entries, source, actor) {
@@ -261,7 +262,7 @@ const API = (() => {
       const s = byKey.get(`${e.ban}-${e.num}`);
       if (!s) { unmatched.push(e); continue; }
       const before = s.green_light_count ?? 0;
-      matched.push({ ...e, id: s.id, dbName: s.name, before, after: before + e.count });
+      matched.push({ ...e, id: s.id, dbName: s.name, before, after: Math.max(0, before + e.count) });
     }
 
     const CONCURRENCY = 8;
@@ -271,10 +272,14 @@ const API = (() => {
     }
 
     if (matched.length) {
-      await _post('activity_log', matched.map(m => ({
-        actor: actor || '', type: 'green_light', student_id: m.id,
-        message: `${m.dbName}(${m.ban}반 ${m.num}번) 그린라이트 +${m.count}개 지급(${source}) — 잔여 ${m.after}개`,
-      }))).catch(() => {});
+      await _post('activity_log', matched.map(m => {
+        const isRevoke = m.count < 0;
+        const amountStr = (isRevoke ? '' : '+') + m.count; // 음수는 count 자체에 부호가 있음
+        return {
+          actor: actor || '', type: 'green_light', student_id: m.id,
+          message: `${m.dbName}(${m.ban}반 ${m.num}번) 그린라이트 ${amountStr}개 ${isRevoke ? '회수' : '지급'}(${source}) — 잔여 ${m.after}개`,
+        };
+      })).catch(() => {});
     }
 
     return { matched, unmatched };
