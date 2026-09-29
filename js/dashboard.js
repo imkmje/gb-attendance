@@ -650,8 +650,8 @@ function _fmtDateShort(dateStr) {
 const PERIOD_SUMMARY_FIELDS = [
   { key:'rate', label:'출석률', get: s => `출석률 ${s.attendRate}%`,
     tag: s => { const c=s.attendRate>=90?'var(--green)':s.attendRate>=70?'var(--amber)':'var(--red)'; const d=s.attendRate>=90?'var(--green-dim)':s.attendRate>=70?'var(--amber-dim)':'var(--red-dim)'; return `<span class="sch-dr-s" style="background:${d};color:${c};">출석률 ${s.attendRate}%</span>`; } },
-  { key:'hours', label:'누적 자습 시간', get: s => `누적 자습 시간 ${s.totalStudyHours.toFixed(1)}시간`,
-    tag: s => `<span class="sch-dr-s" style="background:var(--blue-dim);color:var(--blue);">누적 자습 시간 ${s.totalStudyHours.toFixed(1)}시간</span>` },
+  { key:'hours', label:'자습 시간', get: s => `자습 시간 ${s.periodStudyHours.toFixed(1)}시간`,
+    tag: s => `<span class="sch-dr-s" style="background:var(--blue-dim);color:var(--blue);">자습 시간 ${s.periodStudyHours.toFixed(1)}시간</span>` },
   { key:'total', label:'누적 결석', get: s => `누적결석 ${s.totalAbsentCount}회`,
     tag: s => `<span class="sch-dr-s" style="background:var(--red-dim);color:var(--red);">누적결석 ${s.totalAbsentCount}회</span>` },
   { key:'period', label:'기간 중 결석', get: s => `기간중결석 ${s.absentCount}회`,

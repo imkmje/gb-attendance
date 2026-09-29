@@ -48,7 +48,7 @@ test('기간 결산·통계 탭이 1000행 넘는 기록을 모두 집계하고 
   });
 
   const expectedHours = DAYS * 5 - 1.5 - 1.5;
-  expect(result.s.totalStudyHours).toBeCloseTo(expectedHours);
+  expect(result.s.periodStudyHours).toBeCloseTo(expectedHours);
   expect(result.st.total).toBeCloseTo(expectedHours); // 통계 탭과 기간 결산이 같은 값
   expect(result.s.periodMaxStreak).toBe(DAYS);         // 출석 인정 사유는 연속 자습을 끊지 않음
   expect(result.s.attendRate).toBe(100);
@@ -81,4 +81,10 @@ test('최대 연속 자습에서 토요일은 하루 1일로 세고, 기록된 �
   const s = await page.evaluate(async () =>
     (await API.getPeriodSummary('2026-09-01', '2026-09-30', [])).find(x => x.id === 'stu-2'));
   expect(s.periodMaxStreak).toBe(3);
+
+  // 자습 시간은 선택한 기간만 집계한다(9/4 심야 1.5 + 9/5 토 오전 3 + 오후1 2 + 9/7 심야 1.5)
+  const firstWeek = await page.evaluate(async () =>
+    (await API.getPeriodSummary('2026-09-01', '2026-09-07', [])).find(x => x.id === 'stu-2'));
+  expect(firstWeek.periodStudyHours).toBeCloseTo(8);
+  expect(s.periodStudyHours).toBeCloseTo(8 + 3 + 1.5 + 1.5);
 });

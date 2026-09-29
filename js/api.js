@@ -1245,7 +1245,7 @@ const API = (() => {
 
   /**
    * 대시보드 — 기간 결산. 지정한 기간(startDate~endDate) 동안의
-   * 출석률·기간 중 결석 횟수·기간 내 최대 연속 자습과, 참고용으로
+   * 출석률·기간 중 결석 횟수·기간 중 자습 시간·기간 내 최대 연속 자습과, 참고용으로
    * 누적(전체 기록 기준) 결석 횟수를 학생 전원에 대해 함께 계산해서 반환.
    * "최대 연속 자습"은 기간 자체를 이미 조정할 수 있으므로 기간 기준
    * 하나만 둔다(학기 전체를 보고 싶으면 기간을 학기 전체로 잡으면 됨).
@@ -1288,7 +1288,9 @@ const API = (() => {
         attendRate,
         absentCount:       countedAbsent,             // 기간 중 결석
         totalAbsentCount:  _calcAbsentCounts(_applyPresentEquivalentReasons(allRecs, presentReasonNames)), // 누적(전체) 결석
-        totalStudyHours:   _calcStudyHours(allRecs),   // 누적(전체) 자습 시간 — 재분류 미적용(실제 자습 시간 그대로)
+        // 선택한 기간 중 자습 시간 — 매달 공지용이라 기간을 따라가야 한다(학기 누적이
+        // 필요하면 기간을 학기 전체로 잡으면 됨). 재분류 미적용(실제 자습 시간 그대로).
+        periodStudyHours:  _calcStudyHours(periodRecs),
         // 출석률과 같은 기준 — "출석 인정" 사유(학교 자체 프로그램 등)로 빠진 날은
         // 학생 잘못이 아니므로 매달 공지되는 연속 자습 기록을 끊지 않는다.
         periodMaxStreak:   _maxPresentStreak(periodRecsForRate),
