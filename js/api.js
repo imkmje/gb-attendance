@@ -13,7 +13,9 @@ const API = (() => {
   // 타임아웃 시 사용자가 이해할 수 있는 메시지로 잘라서 던진다.
   const REQUEST_TIMEOUT_MS = 20000;
 
-  async function _req(method, path, body = null, extra = {}) {
+  // 응답 객체(Response)까지 필요한 경우용 — 헤더(Content-Range 등)를 봐야
+  // 하는 _getAll에서 쓰고, 일반 호출은 아래 _req가 본문만 파싱해서 돌려준다.
+  async function _fetch(method, path, body = null, extra = {}) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     let res;
@@ -42,6 +44,11 @@ const API = (() => {
       const msg = await res.text();
       throw new Error(`[API] ${method} ${path} → ${res.status}: ${msg}`);
     }
+    return res;
+  }
+
+  async function _req(method, path, body = null, extra = {}) {
+    const res = await _fetch(method, path, body, extra);
     if (res.status === 204) return null;
     const text = await res.text();
     return text ? JSON.parse(text) : null;
@@ -51,6 +58,52 @@ const API = (() => {
   const _post = (p, b)  => _req('POST',  p, b);
   const _patch = (p, b) => _req('PATCH', p, b, { Prefer: 'return=minimal' });
   const _del  = p       => _req('DELETE', p, null, { Prefer: 'return=minimal' });
+
+  // 테이블 전체(또는 대량) 조회용 — Supabase(PostgREST)는 한 요청에 최대
+  // 1000행(max-rows)만 돌려주고 나머지는 에러 없이 조용히 잘라버린다.
+  // 출석 기록처럼 학기 내내 쌓이는 테이블을 _get 한 번으로 받으면 초기
+  // 1000행만 와서 누적 자습 시간·연속 자습·결석 횟수가 어느 시점 이후로
+  // 멈춰 보이는 문제가 있었다.
+  //
+  // 기록은 해마다 계속 늘어나므로 페이지를 하나씩 순서대로 받으면 요청
+  // 수만큼 대기 시간이 쌓인다. 그래서 첫 페이지를 받을 때 전체 행 수
+  // (Prefer: count=exact → Content-Range 헤더)를 같이 받아두고, 나머지
+  // 페이지는 _PAGE_CONCURRENCY개씩 동시에 받는다. 페이지 크기는 첫 응답의
+  // 실제 행 수로 정한다 — 서버 max-rows가 1000보다 작게 설정돼 있어도 구멍
+  // 없이 이어지도록. 행 수 헤더를 못 받으면(구버전 서버·목 등) 빈 응답이 올
+  // 때까지 순서대로 받는 방식으로 되돌아간다. id 순 정렬로 페이지 경계를 고정.
+  const _PAGE_SIZE = 1000;
+  const _PAGE_CONCURRENCY = 6;
+  async function _getAll(p) {
+    const sep = p.includes('?') ? '&' : '?';
+    const page = (offset, size) => `${p}${sep}order=id&limit=${size}&offset=${offset}`;
+
+    const firstRes = await _fetch('GET', page(0, _PAGE_SIZE), null, { Prefer: 'count=exact' });
+    const first = (await firstRes.json()) ?? [];
+    const total = parseInt((firstRes.headers.get('Content-Range') || '').split('/')[1], 10);
+    const pageSize = first.length;
+    if (!pageSize) return first;
+
+    if (Number.isFinite(total)) {
+      const offsets = [];
+      for (let o = pageSize; o < total; o += pageSize) offsets.push(o);
+      const pages = [];
+      for (let i = 0; i < offsets.length; i += _PAGE_CONCURRENCY) {
+        const batch = offsets.slice(i, i + _PAGE_CONCURRENCY);
+        pages.push(...await Promise.all(batch.map(o => _get(page(o, pageSize)))));
+      }
+      return first.concat(...pages);
+    }
+
+    const out = [...first];
+    for (let offset = pageSize; ; ) {
+      const rows = await _get(page(offset, pageSize));
+      if (!rows?.length) break;
+      out.push(...rows);
+      offset += rows.length;
+    }
+    return out;
+  }
 
   // ─── 세션 관련 상수 ───────────────────────
   // GAS colIdx → schedule JSON 키·배열 인덱스 매핑
@@ -328,7 +381,7 @@ const API = (() => {
     if (studentIds.length > 0) {
       const idList = studentIds.join(',');
       const [allAtt, recurringRules] = await Promise.all([
-        _get(`attendance?student_id=in.(${idList})&select=student_id,record_date,session,status,no_count`),
+        _getAll(`attendance?student_id=in.(${idList})&select=student_id,record_date,session,status,no_count`),
         _get(`recurring_early_leave?day_of_week=eq.${dayOfWeek}&session=eq.${encodeURIComponent(sessionName)}&student_id=in.(${idList})&select=student_id,early_leave_mins`)
           .catch(() => []),
       ]);
@@ -597,7 +650,7 @@ const API = (() => {
   async function calculateStats(presentReasonNames = []) {
     const [students, attendance] = await Promise.all([
       _get('students?order=study_room,class_num,student_num'),
-      _get('attendance?select=student_id,session,status,record_date,no_count,early_leave_mins,late_mins'),
+      _getAll('attendance?select=student_id,session,status,record_date,no_count,early_leave_mins,late_mins,study_excluded,reason'),
     ]);
 
     const attByStudent = {};
@@ -609,14 +662,8 @@ const API = (() => {
 
       // 자습 누적 시간은 실제로 자습한 세션만 반영 — 아래 "출석 인정" 재분류와 무관하게
       // 원본 status 그대로 계산한다(학교 프로그램 참여 시간은 자습 시간이 아니므로).
-      let total = 0;
-      for (const r of recs) {
-        if (r.status === '출석') {
-          const weight    = SESSION_WEIGHTS[r.session] ?? 0;
-          const deduction = ((r.early_leave_mins ?? 0) + (r.late_mins ?? 0)) / 60;
-          total += Math.max(0, weight - deduction);
-        }
-      }
+      // 기간 결산과 같은 _calcStudyHours를 써야 "자습 시간 제외" 처리가 양쪽에 똑같이 반영된다.
+      const total = _calcStudyHours(recs);
 
       // 출석률·결석 카운트용 — 개발자 메뉴에서 "출석 인정"으로 설정된 사유의
       // 결석은 출석으로 쳐준다.
@@ -1009,12 +1056,12 @@ const API = (() => {
 
   // 날짜별 결석 여부 — _calcAbsentCounts(_forEachDayRepresentative)와 동일한
   // 규칙으로 "그 날 결석으로 칠지"를 판정한다. 연속 결석/출석 스트릭 계산에 재사용.
-  // 평일은 하루 대표 세션 1개(심야>야간>오후 우선순위)로 항목 1개, 토요일은
-  // 오전/오후를 서로 독립된 건으로 쳐서 항목을 여러 개 낼 수 있다 — 예전엔
-  // 토요일 레코드를 전부 OR로 묶어 하루 1개로만 냈었는데, 그러면 오전만
-  // 결석·오후는 출석이어도 그날 전체가 결석으로 잡혀 스트릭이 결석 카운트
-  // (오전/오후 독립 집계)와 어긋났다. 세션명 오름차순 정렬(오전→오후1→오후2)로
-  // 항상 시간 순으로 스트릭에 반영되게 한다.
+  // 평일은 하루 대표 세션 1개(심야>야간>오후 우선순위)로 항목 1개. 토요일도
+  // 스트릭은 "일" 단위로 표시되므로 하루 1개로 낸다 — 예전(v3.3.1~)엔 오전/
+  // 오후를 독립 항목으로 내서 토요일 하루가 스트릭을 2~3일씩 늘렸다. 기록은
+  // 그 학생이 신청한 세션에만 생기므로, "그날 기록된 토요일 세션 중 (노카운트
+  // 아닌) 결석이 하나라도 있으면 결석"으로 판정하면 오전만 하는 학생은
+  // 오전만, 오후까지 하는 학생은 오후까지 출석해야 이어지게 된다.
   function _dailyAbsentFlags(records) {
     const byDate = {};
     for (const r of records) {
@@ -1029,10 +1076,7 @@ const API = (() => {
       const dayOfWeek = new Date(+parts[0], +parts[1] - 1, +parts[2]).getDay();
       const isSat = dayOfWeek === 6;
       if (isSat) {
-        const sorted = [...recs].sort((a, b) => a.session.localeCompare(b.session));
-        for (const r of sorted) {
-          out.push({ date, isAbsent: r.status === '결석' && !r.no_count });
-        }
+        out.push({ date, isAbsent: recs.some(r => r.status === '결석' && !r.no_count) });
       } else {
         for (const sess of WEEKDAY_PRIORITY) {
           const rec = recs.find(r => r.session === sess);
@@ -1212,7 +1256,7 @@ const API = (() => {
   async function getPeriodSummary(startDate, endDate, presentReasonNames = []) {
     const [students, attendance, violations] = await Promise.all([
       _get('students?select=id,class_num,student_num,name,study_room&order=study_room,class_num,student_num'),
-      _get('attendance?select=student_id,session,status,record_date,no_count,early_leave_mins,late_mins,study_excluded'),
+      _getAll('attendance?select=student_id,session,status,record_date,no_count,early_leave_mins,late_mins,study_excluded,reason'),
       _get('violations?select=student_id,action,paid').catch(() => []),
     ]);
     const attByStudent = {};
@@ -1245,7 +1289,9 @@ const API = (() => {
         absentCount:       countedAbsent,             // 기간 중 결석
         totalAbsentCount:  _calcAbsentCounts(_applyPresentEquivalentReasons(allRecs, presentReasonNames)), // 누적(전체) 결석
         totalStudyHours:   _calcStudyHours(allRecs),   // 누적(전체) 자습 시간 — 재분류 미적용(실제 자습 시간 그대로)
-        periodMaxStreak:   _maxPresentStreak(periodRecs), // 연속 스트릭은 이번 재분류 범위 밖(원본 기준 유지)
+        // 출석률과 같은 기준 — "출석 인정" 사유(학교 자체 프로그램 등)로 빠진 날은
+        // 학생 잘못이 아니므로 매달 공지되는 연속 자습 기록을 끊지 않는다.
+        periodMaxStreak:   _maxPresentStreak(periodRecsForRate),
         lateCount:         periodRecs.filter(r => (r.late_mins ?? 0) > 0).length,        // 기간 중 지각
         earlyCount:        periodRecs.filter(r => (r.early_leave_mins ?? 0) > 0).length, // 기간 중 조퇴
         violationCount:    studentViolations.length, // 누적(전체) 위반

@@ -4,6 +4,9 @@
 // PostgREST 쿼리스트링(eq./in./select=)을 아주 단순하게 흉내내는
 // 인메모리 스토어이며, 이 앱이 실제로 쓰는 패턴만 지원한다(전체 스펙 X).
 
+// PostgREST max-rows(Supabase 기본값 1000)
+const MAX_ROWS = 1000;
+
 const DEFAULT_STUDENTS = [
   {
     id: 'stu-1', class_num: 2, student_num: 6, name: '김민준', study_room: '청운반',
@@ -38,14 +41,17 @@ function _parsePostgrestQuery(search) {
   const params = new URLSearchParams(search);
   const filters = [];
   let selectFields = null;
+  let limit = null, offset = 0;
   for (const [key, value] of params.entries()) {
     if (key === 'select') { selectFields = value.split(','); continue; }
-    if (['order', 'limit', 'offset'].includes(key)) continue;
+    if (key === 'limit') { limit = parseInt(value, 10); continue; }
+    if (key === 'offset') { offset = parseInt(value, 10); continue; }
+    if (key === 'order') continue;
     const m = value.match(/^(eq|neq|gt|gte|lt|lte|in)\.(.*)$/);
     if (!m) continue;
     filters.push({ field: key, op: m[1], raw: decodeURIComponent(m[2]) });
   }
-  return { filters, selectFields };
+  return { filters, selectFields, limit, offset };
 }
 
 function _applyFilters(rows, filters) {
@@ -94,11 +100,23 @@ async function installSupabaseMock(page, overrides = {}) {
     if (!table || !(table in store)) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
     }
-    const { filters, selectFields } = _parsePostgrestQuery(url.search);
+    const { filters, selectFields, limit, offset } = _parsePostgrestQuery(url.search);
 
     if (method === 'GET') {
-      const rows = _applyFilters(store[table], filters).map(r => _pick(r, selectFields));
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(rows) });
+      // 실제 Supabase처럼 한 요청에 최대 MAX_ROWS행만 돌려준다 — 전체 조회를
+      // 페이지 단위로 끝까지 받는지(_getAll) 테스트에서도 드러나게 하기 위함.
+      const size = Math.min(limit ?? MAX_ROWS, MAX_ROWS);
+      const matched = _applyFilters(store[table], filters);
+      const rows = matched.slice(offset, offset + size).map(r => _pick(r, selectFields));
+      // Prefer: count=exact면 실제 PostgREST처럼 Content-Range("0-999/1200")로 전체 행 수를 알려준다.
+      const headers = {};
+      if ((req.headers().prefer || '').includes('count=exact')) {
+        const end = rows.length ? offset + rows.length - 1 : offset;
+        headers['content-range'] = `${rows.length ? offset : '*'}${rows.length ? '-' + end : ''}/${matched.length}`;
+        headers['access-control-expose-headers'] = 'Content-Range';
+        headers['access-control-allow-origin'] = '*';
+      }
+      return route.fulfill({ status: 200, contentType: 'application/json', headers, body: JSON.stringify(rows) });
     }
     if (method === 'POST') {
       let body;
